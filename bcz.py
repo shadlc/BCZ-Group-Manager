@@ -42,8 +42,8 @@ class Config:
             open(self.config_file)
         except:
             json.dump(self.default_config_dict, open(self.config_file, 'w'), ensure_ascii=False, indent=2)
-            print('初次启动，已生成配置文件，请修改配置后再次启动，程序会在3秒后自动退出')
-            time.sleep(3)
+            print('初次启动，已在当前执行目录生成配置文件，请修改配置后再次启动，程序会在5秒后自动退出')
+            time.sleep(5)
             sys.exit(0)
 
     # 获取指定配置
@@ -54,8 +54,8 @@ class Config:
                 json_data = json.load(open(self.config_file)).get(key)
             return json_data
         except Exception as e:
-            print(f'配置文件读取异常: {e}，程序会在3秒后自动退出')
-            time.sleep(3)
+            print(f'配置文件读取异常: {e}，程序会在5秒后自动退出')
+            time.sleep(5)
             sys.exit(0)
 
     # 保存指定配置文件
@@ -131,7 +131,7 @@ class BCZ:
         url = f'{self.user_info_url}?uniqueId={user_id}'
         headers = {'Cookie': f'access_token="{self.unauthorized_token}"'}
         response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code != 200:
+        if response.status_code != 200 or response.json().get('code') == -1:
             print(f'获取用户信息失败！是否正确设置token？{response.text}')
             return
         user_info = response.json()['data']
@@ -146,18 +146,21 @@ class BCZ:
         url = f'{self.group_list_url}?uniqueId={user_id}'
         headers = {'Cookie': f'access_token="{self.unauthorized_token}"'}
         response = requests.get(url, headers=headers, timeout=5)
-        if response.status_code != 200:
+        if response.status_code != 200 or response.json().get('code') == -1:
             print(f'获取我的小班信息失败！是否正确设置token？{response.text}')
             return
-        group_list = response.json()['data'].get('list')
+        group_info = response.json()['data']
+        group_list = group_info.get('list') if group_info else []
         group_dict = {}
         data_time = time.strftime('%Y-%m-%d %H:%M', time.localtime())
         for group in group_list:
             if self.only_own_group and group['leader'] != True:
                 continue
             id = group['id']
-            group_name = re.sub(r'[\000-\010]|[\013-\014]|[\016-\037]', '', group['name'])
-            introduction = re.sub(r'[\000-\010]|[\013-\014]|[\016-\037]', '', group['introduction'])
+            group_name = group['name'] if group['name'] else ''
+            group_name = re.sub(r'[\000-\010]|[\013-\014]|[\016-\037]', '', group_name)
+            introduction = group['introduction'] if group['introduction'] else ''
+            introduction = re.sub(r'[\000-\010]|[\013-\014]|[\016-\037]', '', introduction)
             group_dict[id] = {
                 'name': group_name,
                 'shareKey': group['shareKey'],
@@ -178,12 +181,12 @@ class BCZ:
         unauthorized_response = requests.get(url, headers=headers, timeout=5)
         headers = {'Cookie': f'access_token="{self.authorized_token}"'}
         authorized_response = requests.get(url, headers=headers, timeout=5)
-        if unauthorized_response.status_code != 200:
+        if unauthorized_response.status_code != 200 or unauthorized_response.json().get('code') == -1:
             print(f'分享码为{share_key}的小班信息为空')
             return
         data_time = time.strftime('%Y-%m-%d %H:%M', time.localtime())
-        today_date = unauthorized_response.json()['data'].get('todayDate')
         unauthorized_data = unauthorized_response.json()['data']
+        today_date = unauthorized_data.get('todayDate') if unauthorized_data else ''
         unauthorized_member_list = unauthorized_data.get('members') if unauthorized_data else []
         member_dict = {}
         for member in unauthorized_member_list:
@@ -230,6 +233,8 @@ class BCZ:
     # 获取指定用户按星期记录的文件名
     def getWeekFileName(self, file_path: str, user_id: str = None) -> str:
         user_info = self.getUserInfo(user_id)
+        if not user_info:
+            return
         user_name = user_info['name']
         current_year = time.strftime('%Y', time.localtime())
         current_week = int(time.strftime('%U', time.localtime())) + 1
@@ -246,6 +251,8 @@ class BCZ:
         elif not user_id:
             user_id = self.user_id
         user_info = self.getUserInfo(user_id)
+        if not user_info:
+            return
         user_name = user_info['name']
         data = time.strftime('%Y%m%d', time.localtime(time.time() - (60 * 60 * 24)))
         temp_file = file_path.split('.')
@@ -305,6 +312,7 @@ class Xlsx:
                     for cell in column_cells[1:]:
                         if cell.value == '是':
                             cell.fill = styles.PatternFill(start_color='FF0000', end_color='FF0000', fill_type='solid')
+            self.wb.active = 0
             self.wb.save(file_path)
             return True
         except PermissionError as e:
@@ -459,8 +467,13 @@ class Schedule:
                         now.tm_mon in self.cron[3] and
                         now.tm_wday in self.cron[4]):
                     now_str = time.strftime('%Y-%m-%d %H:%M', now)
-                    print(f'[{now_str}] 执行计划[{self.crontab_expr}]，获取数据中...')
-                    self.exec(*args, **kwargs)
+                    print(f'[{now_str}] 执行计划[{self.crontab_expr}]')
+                    threading.Thread(
+                        target=self.exec,
+                        args=args,
+                        kwargs=kwargs,
+                        daemon=True,
+                    ).start()
                 time.sleep(60)
             except:
                 traceback.print_exc()
@@ -497,8 +510,10 @@ def saveInfo(config: Config, bcz: BCZ, xlsx: Xlsx) -> None:
         print(f'获取小班《{group["name"]}》的打卡信息中...')
         member_dict = bcz.getMemberInfo(group['shareKey'])
         xlsx.saveMemberInfo(group['name'], member_dict)
-    print(f'数据获取完成，保存路径为{os.path.abspath(config.output_file)}')
-    
+    if os.path.exists(config.output_file):
+        print(f'数据获取完成，保存路径为{os.path.abspath(config.output_file)}')
+    else:
+        print(f'执行完毕，但未获取到该用户的小班信息')
 
 if __name__ == '__main__':
     config = Config()

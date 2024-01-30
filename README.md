@@ -2,11 +2,11 @@
 
 ### A small group management tool for Chinese vocabulary software which  called [Bai Ci Zhan](https://www.baicizhan.com/), depends on [Flask](https://github.com/pallets/flask).
 
+[![GitHub All Releases](https://img.shields.io/github/downloads/shadlc/BCZ-Group-Manager/total)](../../releases)
 ![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/shadlc/BCZ-Group-Manager)
 ![Scc Count Badge](https://sloc.xyz/github/shadlc/BCZ-Group-Manager)
 ![GitHub repo size](https://img.shields.io/github/repo-size/shadlc/BCZ-Group-Manager)
 ![GitHub - License](https://img.shields.io/github/license/shadlc/BCZ-Group-Manager)
-![platform](https://img.shields.io/badge/platform-linux-blue)
 ![GitHub last commit](https://img.shields.io/github/last-commit/shadlc/BCZ-Group-Manager)
 
 ## 💬 简介
@@ -52,6 +52,7 @@
 - **`only_own_group`决定了是否只获取`user_id`为班长的小班数据，默认为`true`**
 - **`output_file`是程序输出Excel文件的指定目录和默认文件名，默认为`xlsx/百词斩小班数据.xlsx`**
 - **`schedules`是以`Crontab`语法记录的用以自动记录小班数据的时间段列表，填写多个可识别的`Crontab`参数，将按指定时间获取`user_id`填写的用户小班数据，默认为`["59 23 * * *"]`**
+- **`server`这个配置参数可以手动添加，如果为`true`则无需添加参数即可以服务模式运行**
 
 
 ## 🔌 API

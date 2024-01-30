@@ -10,8 +10,8 @@ xlsx =  Xlsx(config)
 
 if not config.server and ('-s' not in sys.argv and '--server' not in sys.argv):
     saveInfo(config, bcz, xlsx)
-    print('程序会在3秒后自动退出')
-    time.sleep(3)
+    print('程序会在5秒后自动退出')
+    time.sleep(5)
     sys.exit(0)
 
 
