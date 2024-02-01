@@ -20,7 +20,8 @@ class Config:
             'user_id': '',
             'only_own_group': True,
             'output_file': 'xlsx/百词斩小班数据.xlsx',
-            'schedules': ['59 23 * * *'],
+            'daily_recording': True,
+            'schedules': [],
         }
         self.initConfig()
         self.raw = self.read()
@@ -31,6 +32,7 @@ class Config:
         self.user_id = self.raw.get('user_id')
         self.only_own_group = self.raw.get('only_own_group')
         self.output_file = self.raw.get('output_file')
+        self.daily_recording = self.raw.get('daily_recording')
         self.schedules = self.raw.get('schedules')
         self.server = self.raw.get('server')
         self.verify()
@@ -105,6 +107,11 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.output_file = value
+        if self.daily_recording is None:
+            key = 'daily_recording'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.daily_recording = value
         if self.schedules is None:
             key = 'schedules'
             value = self.default_config_dict[key]
@@ -254,11 +261,15 @@ class BCZ:
         if not user_info:
             return
         user_name = user_info['name']
-        data = time.strftime('%Y%m%d', time.localtime(time.time() - (60 * 60 * 24)))
-        temp_file = file_path.split('.')
+        yesterday = time.localtime(time.time() - (60 * 60 * 24))
+        year = time.strftime('%Y', yesterday)
+        data = time.strftime('%Y%m%d', yesterday)
+        dir = os.path.dirname(file_path)
+        temp_file = os.path.basename(file_path).split('.')
         if len(temp_file) == 1:
             temp_file.append('')
-        file_path = f'{temp_file[0]}_{user_name}_{data}.{temp_file[1]}'
+        file_path = f'{dir}/{year}/{temp_file[0]}_{user_name}_{data}.{temp_file[1]}'
+        print(file_path)
         return file_path
 
 # 表格数据操作类
@@ -292,6 +303,7 @@ class Xlsx:
                     ws.delete_rows(1, ws.max_row)
             else:
                 ws = self.wb.create_sheet(sheet_name)
+            ws.freeze_panes = 'A2'
             if ws.max_row != 1:
                 data = data[1:]
                 rows_to_delete = []
@@ -418,21 +430,26 @@ class Xlsx:
         temp_file = self.file_path.split('.')
         if len(temp_file) == 1:
             temp_file.append('')
-        excel_file = f'{temp_file[0]}_{user_name}_{current_year}年第{current_week}周.{temp_file[1]}'
-        self.saveGroupInfo(user_info['group_dict'], excel_file)
+        file_path = f'{temp_file[0]}_{user_name}_{current_year}年第{current_week}周.{temp_file[1]}'
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
+        self.saveGroupInfo(user_info['group_dict'], file_path)
         for group in user_info['group_dict'].values():
-            self.saveMemberInfo(group['name'], group['member_dict'], excel_file)
+            self.saveMemberInfo(group['name'], group['member_dict'], file_path)
 
     # 按天记录数据
     def saveDayInfo(self, user_info: dict) -> None:
         if not user_info:
             return
         user_name = user_info['name']
-        data = time.strftime('%Y%m%d', time.localtime())
-        temp_file = self.file_path.split('.')
+        today = time.localtime()
+        year = time.strftime('%Y', today)
+        data = time.strftime('%Y%m%d', today)
+        dir = os.path.dirname(file_path)
+        temp_file = os.path.basename(file_path).split('.')
         if len(temp_file) == 1:
             temp_file.append('')
-        file_path = f'{temp_file[0]}_{user_name}_{data}.{temp_file[1]}'
+        file_path = f'{dir}/{year}/{temp_file[0]}_{user_name}_{data}.{temp_file[1]}'
+        os.makedirs(os.path.dirname(file_path), exist_ok=True)
         self.saveGroupInfo(user_info['group_dict'], file_path)
         for group in user_info['group_dict'].values():
             self.saveMemberInfo(group['name'], group['member_dict'], file_path)

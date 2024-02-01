@@ -87,6 +87,8 @@ def recordDayInfo(bcz: BCZ, xlsx: Xlsx):
 
 if __name__ == '__main__':
     print(' * BCZ-Group-Manger 服务模式启动')
+    if config.daily_recording:
+        Schedule('59 23 * * *', lambda: recordDayInfo(bcz, xlsx))
     for schedule in config.schedules:
         Schedule(schedule, lambda: recordWeekInfo(bcz, xlsx))
     app.run(config.host, config.port)
