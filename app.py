@@ -45,12 +45,11 @@ def download():
             file_name = config.output_file
             user_info = bcz.getUserAllInfo()
             xlsx.saveInfo(user_info)
-            return send_file(file_name, as_attachment=True)
         except:
             return restful(500, '获取最新数据发生错误')
     if not os.path.exists(file_name):
         return restful(404, '该用户当前没有这种类型的记录')
-    return send_file(file_name, as_attachment=True)
+    return send_file(file_name)
 
 @app.route('/get_user_info', methods=['GET'])
 def get_user_info():

@@ -117,6 +117,11 @@
       .btn:active {
         transform: scale(0.9);
       }
+      .btn.disabled {
+        opacity: 0.6;
+        transform: none !important;
+        cursor: not-allowed;
+      }
 
       /* 提示弹窗 */
       #notify_container {
@@ -288,8 +293,8 @@
           <span id="user_id"></span>
         </div>
         <div class="btn-group">
-          <a class="btn capsule" href="download" onclick="disableLink(this)">下载最新数据</a>
-          <a class="btn capsule" href="download?type=week" onclick="disableLink(this)">下载本周数据</a>
+          <a class="btn capsule" onclick="downloadData(this, 'latest')">下载最新数据</a>
+          <a class="btn capsule" onclick="downloadData(this, 'week')">下载本周数据</a>
         </div>
       </div>
       <span id="load_text">
@@ -356,23 +361,38 @@
         load_text.innerHTML = '请求错误:' + error;
       });
     }
-    function disableLink(link) {
-      setTimeout(()=>{
-        let link_url = link.href;
-        if(!link_url) {
-          notify('点太快了，休息一下吧~');
-          return; 
+    function downloadData(element, type) {
+      if(element.classList.contains('disabled')) {
+        notify('点太快了，休息一下吧~');
+        return;
+      }
+      element.classList.add('disabled');
+      notify('正在下载中...请稍后...');
+      fetch('download?type=' + type)
+      .then(response => {
+        const contentType = response.headers.get("Content-Type");
+        if (contentType.includes("application/json")) {
+          return response.json().then(data => {
+            notify(data?.msg);
+          });
         } else {
-          notify('正在下载数据，请稍后...');
+          return response.blob().then(data => {
+            const link = document.createElement('a');
+            const dispositionHeader = response.headers.get('Content-Disposition');
+            const filename = decodeURIComponent(dispositionHeader.split("UTF-8''").pop());
+            link.href = URL.createObjectURL(data);
+            link.download = filename;
+            link.click();
+          });
         }
-        document.querySelectorAll('a.btn').forEach((e)=>{
-          let link_url = e.href;
-          e.removeAttribute('href');
-          setTimeout(()=>{
-            e.setAttribute('href', link_url);
-          }, 5000);
-        });
-      }, 1);
+      })
+      .catch(error => {
+        notify('下载出错！返回为：' + error);
+        console.error(error);
+      })
+      .finally(() => {
+        element.classList.remove('disabled');
+      });
     }
     function notify(content) {
       const container = document.getElementById('notify_container');
