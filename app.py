@@ -35,10 +35,10 @@ def download():
     if processing:
         return restful(400, '请求过于频繁，请稍后再试')
     processing = True
-    file_type = request.args.get('type', '')
-    if file_type == 'week':
+    period = request.args.get('period', '')
+    if period == 'week':
         file_name = bcz.getWeekFileName(config.output_file)
-    elif file_type == 'yesterday':
+    elif period == 'yesterday':
         file_name = bcz.getYesterdayFileName(config.output_file)
     else:
         try:
@@ -54,7 +54,7 @@ def download():
 @app.route('/get_user_info', methods=['GET'])
 def get_user_info():
     info_type = request.args.get('type', '')
-    user_id = request.args.get('id', None)
+    user_id = request.args.get('id')
     if info_type == 'all':
         user_info = bcz.getUserAllInfo(user_id)
     else:

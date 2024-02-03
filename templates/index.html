@@ -101,6 +101,8 @@
         display: flex;
         margin: 0.2rem;
         justify-content: space-around;
+        flex-direction: row;
+        flex-wrap: wrap;
       }
       .btn {
         color: fieldtext;
@@ -293,8 +295,9 @@
           <span id="user_id"></span>
         </div>
         <div class="btn-group">
-          <a class="btn capsule" onclick="downloadData(this, 'latest')">下载最新数据</a>
+          <a class="btn capsule" onclick="downloadData(this, 'yesterday')">下载昨日数据</a>
           <a class="btn capsule" onclick="downloadData(this, 'week')">下载本周数据</a>
+          <a class="btn capsule" onclick="downloadData(this, 'latest')">下载最新数据</a>
         </div>
       </div>
       <span id="load_text">
@@ -361,14 +364,14 @@
         load_text.innerHTML = '请求错误:' + error;
       });
     }
-    function downloadData(element, type) {
+    function downloadData(element, period) {
       if(element.classList.contains('disabled')) {
         notify('点太快了，休息一下吧~');
         return;
       }
       element.classList.add('disabled');
       notify('正在下载中...请稍后...');
-      fetch('download?type=' + type)
+      fetch('download?period=' + period)
       .then(response => {
         const contentType = response.headers.get("Content-Type");
         if (contentType.includes("application/json")) {

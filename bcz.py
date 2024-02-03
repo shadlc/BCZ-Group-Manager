@@ -238,11 +238,12 @@ class BCZ:
         return user_info
 
     # 获取指定用户按星期记录的文件名
-    def getWeekFileName(self, file_path: str, user_id: str = None) -> str:
-        user_info = self.getUserInfo(user_id)
-        if not user_info:
-            return
-        user_name = user_info['name']
+    def getWeekFileName(self, file_path: str, user_id: str = None, user_name: str = None) -> str:
+        if not user_name:
+            user_info = self.getUserInfo(user_id)
+            if not user_info:
+                return
+            user_name = user_info['name']
         current_year = time.strftime('%Y', time.localtime())
         current_week = int(time.strftime('%U', time.localtime())) + 1
         temp_file = file_path.split('.')
@@ -252,15 +253,12 @@ class BCZ:
         return file_path
 
     # 获取指定用户按天记录的文件名
-    def getYesterdayFileName(self, file_path: str, user_id: str = None) -> str:
-        if not self.user_id and user_id:
-            return
-        elif not user_id:
-            user_id = self.user_id
-        user_info = self.getUserInfo(user_id)
-        if not user_info:
-            return
-        user_name = user_info['name']
+    def getYesterdayFileName(self, file_path: str, user_id: str = None, user_name: str = None) -> str:
+        if not user_name:
+            user_info = self.getUserInfo(user_id)
+            if not user_info:
+                return
+            user_name = user_info['name']
         yesterday = time.localtime(time.time() - (60 * 60 * 24))
         year = time.strftime('%Y', yesterday)
         data = time.strftime('%Y%m%d', yesterday)
@@ -444,8 +442,8 @@ class Xlsx:
         today = time.localtime()
         year = time.strftime('%Y', today)
         data = time.strftime('%Y%m%d', today)
-        dir = os.path.dirname(file_path)
-        temp_file = os.path.basename(file_path).split('.')
+        dir = os.path.dirname(self.file_path)
+        temp_file = os.path.basename(self.file_path).split('.')
         if len(temp_file) == 1:
             temp_file.append('')
         file_path = f'{dir}/{year}/{temp_file[0]}_{user_name}_{data}.{temp_file[1]}'
