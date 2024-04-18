@@ -160,4 +160,5 @@ if __name__ == '__main__':
     if config.daily_record:
         print(f' * BCZ-Group-Manger 每日记录已开启 {config.daily_record}')
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
-    app.run(config.host, config.port, debug=True)
+    # app.run(config.host, config.port, debug=True)
+    app.run(config.host, config.port)

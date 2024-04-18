@@ -157,10 +157,8 @@ class BCZ:
         
     def getUserInfo(self, user_id: str = None) -> dict | None:
         '''获取指定用户信息'''
-        if not self.user_id and user_id:
+        if not user_id:
             return
-        elif not user_id:
-            user_id = self.user_id
         url = f'{self.user_info_url}?uniqueId={user_id}'
         headers = {'Cookie': f'access_token="{self.main_token}"'}
         response = requests.get(url, headers=headers, timeout=5)
@@ -173,10 +171,8 @@ class BCZ:
 
     def getUserGroupInfo(self, user_id: str = None) -> dict | None:
         '''获取我的小班信息'''
-        if not self.user_id and user_id:
+        if not user_id:
             return
-        elif not user_id:
-            user_id = self.user_id
         url = f'{self.group_list_url}?uniqueId={user_id}'
         headers = {'Cookie': f'access_token="{self.main_token}"'}
         response = requests.get(url, headers=headers, timeout=5)
