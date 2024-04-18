@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="zh-CN" >
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>小班数据管理</title>
+    <link rel="shortcut icon" href="../favicon.ico" />
+    <link rel="apple-touch-icon" href="../favicon.ico" />
+    <link rel="stylesheet" href="../lib/style.css">
+    <style>
+      .inside-bg {
+        background-color: rgb(255, 245, 216);
+      }
+    </style>
+  </head>
+
+  <body class="inside-bg">
+    <main>
+      <div class="blackboard">
+        <span class="gloss"></span>
+        <span class="eraser"></span>
+        <div class="group brief transparent">
+          <div class="info-table">
+            <div class="avatar">
+              <img src/>
+              <img src/>
+            </div>
+            <div class="group-info">
+              <span>测试小班</span>
+            </div>
+            <div class="group-detail">
+              <span>人数</span>
+              <span>简介</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="paper">
+        <span class="loading-text">
+          <div class="loader">
+            <span></span>
+            <span></span>
+            <span></span>
+          </div>
+          数据获取中，请稍后...
+        </span>
+      </div>
+      <div class="footer">
+        <footer>
+          <div class="info">
+            <input type="checkbox">
+            <span></span>
+            <span></span>
+            <span></span>
+            <div>
+              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </main>
+    <div id="notify_container"></div>
+    <div id="scroll_top_btn" title="回到顶部" onclick="scrollToTop()">▲</div>
+    <div class="corner-btn btn" onclick="backToHome()">返回主页</div>
+  </body>
+  <script>
+    function backToHome() {
+      window.location.href = '../';
+    }
+  </script>
+</html>

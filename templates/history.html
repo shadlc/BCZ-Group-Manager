@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="zh-CN" >
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>小班数据管理</title>
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.ico" />
+    <link rel="stylesheet" href="lib/style.css">
+  </head>
+
+  <body class="outside-bg">
+    <div class="bg-items">
+      <span class="high-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="high-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <div id="cloud_container"></div>
+    </div>
+    <main>
+      <div class="wall">
+        <div class="eaves">
+          <div class="gloss"></div>
+          <div class="eaves-container">
+            <a href="group">我的小班</a>
+            <a class="active">历史查询</a>
+            <a href="setting">系统设置</a>
+          </div>
+        </div>
+        <div class="wall-container">
+          <span class="loading-text">
+            <div class="loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            数据获取中，请稍后...
+          </span>
+          <div class="blackboard hide">
+            <span class="gloss"></span>
+            <span class="eraser"></span>
+            <span id="status_text">
+            </span>
+          </div>
+          <div class="data-container hide">
+            <div class="input-group">
+              <div class="input">
+                <label for="group_id_select">小班ID</label>
+                <select id="group_id_select" onkeyup="eventSearch(event)">
+                  <option value="">任意小班</option>
+                </select>
+              </div>
+              <div class="input">
+                <label for="group_name_input">小班名称</label>
+                <input id="group_name_input" type="text" onkeyup="eventSearch(event)" />
+              </div>
+              <div class="input">
+                <label for="sdate_select">开始日期</label>
+                <input id="sdate_select" type="date" onkeyup="eventSearch(event)" />
+              </div>
+              <div class="input">
+                <label for="edate_select">结束日期</label>
+                <input id="edate_select" type="date" onkeyup="eventSearch(event)" />
+              </div>
+              <div class="input">
+                <label for="cheat_select">是否作弊</label>
+                <select id="cheat_select" onkeyup="eventSearch(event)">
+                  <option value="">任意</option>
+                  <option value="true">是</option>
+                  <option value="false">否</option>
+                </select>
+              </div>
+              <div class="input">
+                <label for="completed_select">完成打卡</label>
+                <select id="completed_select" onkeyup="eventSearch(event)">
+                  <option value="">任意</option>
+                  <option value="true">是</option>
+                  <option value="false">否</option>
+                </select>
+              </div>
+              <div class="input">
+                <label for="completed_time_select">打卡时间晚于</label>
+                <input id="completed_time_select" type="time" onkeyup="eventSearch(event)" />
+              </div>
+              <div class="input">
+                <label for="user_id_input">用户ID</label>
+                <input id="user_id_input" type="number" onkeyup="eventSearch(event)" />
+              </div>
+              <div class="input">
+                <label for="nickname_input">昵称</label>
+                <input id="nickname_input" type="text" onkeyup="eventSearch(event)" />
+              </div>
+              <div class="btn-group">
+                <div id="reset_btn" class="btn" onclick="resetSearch()">重置</div>
+                <div id="search_btn" class="btn" onclick="searchMemberTable()">查询</div>
+                <div id="download_btn" class="btn" onclick="downloadMemberTable(event)">下载</div>
+              </div>
+            </div>
+            <div class="table">
+              <div class="table-page">
+                <div class="page-button">
+                  <div class="btn" onclick="searchMemberTable('1')">&lt;&lt;</div>
+                  <div class="btn" onclick="searchMemberTable('-')">&lt;</div>
+                  <div class="page-count">0/0</div>
+                  <div class="btn" onclick="searchMemberTable('+')">&gt;</div>
+                  <div class="btn" onclick="searchMemberTable('-1')">&gt;&gt;</div>
+                </div>
+                <select id="page_count">
+                  <option value="20">20条/页</option>
+                  <option value="50">50条/页</option>
+                  <option value="100">100条/页</option>
+                  <option value="200">200条/页</option>
+                  <option value="500">500条/页</option>
+                  <option value="2000">2000条/页</option>
+                  <option value="unlimited">无限制</option>
+                </select>
+              </div>
+              <div class="table-content">
+                <table id="user_info_table">
+                </table>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="footer">
+        <footer>
+          <div class="info">
+            <input type="checkbox">
+            <span></span>
+            <span></span>
+            <span></span>
+            <div>
+              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </main>
+    <div id="notify_container"></div>
+    <div id="scroll_top_btn" title="回到顶部" onclick="scrollToTop()">▲</div>
+  </body>
+  <script src="lib/script.js"></script>
+  <script type="text/javascript">
+    let page_num = 0
+    let page_max = 0
+
+    window.onload = ()=>{
+      initCloud(10);
+      getInfo().then((result)=>{
+        if (!result) return;
+        document.querySelectorAll('.loading-text').forEach((e)=>{
+          e.classList.add('hide');
+        });
+        document.querySelectorAll('.blackboard').forEach((e)=>{
+          e.classList.remove('hide');
+        });
+        document.querySelectorAll('.data-container').forEach((e)=>{
+          e.classList.remove('hide');
+        });
+        getSearchOption();
+        searchMemberTable();
+      });
+      // let yesterday = new Date();
+      // yesterday.setDate(new Date().getDate() - 1);
+      // yesterday = yesterday.toISOString().split('T')[0];
+      // document.getElementById('sdate_select').value = yesterday;
+      // document.getElementById('edate_select').value = yesterday;
+    }
+    let container = document.querySelector('.wall-container');
+    container.onscroll = () => {
+      if (container.scrollTop > container.clientHeight * 1.5) {
+        document.getElementById("scroll_top_btn").classList.add('show');
+      } else {
+        document.getElementById("scroll_top_btn").classList.remove('show');
+      }
+    }
+    function scrollToTop() {
+      container.scrollIntoView({ behavior: "smooth" });
+      container.scrollTop = 0;
+    }
+
+    function getInfo() {
+      // 获取运行信息
+      return fetch('get_info')
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let info = data.data;
+        let status_text = document.querySelector('#status_text');
+        let status_content = '';
+        if (info.token_valid) {
+          status_content = `
+            <line>运行状况: 已持续记录`+info.running_days+`天</line>
+            <line>数据统计: 记录数据共`+info.count+`条</line>
+            <line>授权用户: `+info.name+`(`+info.uid+`)</line>
+            <line>监控小班: `+info.groups.length+`个 <a href="./">[回到首页]</a></line>
+          `;
+        } else {
+          status_content = `
+            <line>运行状况: 已持续记录`+info.running_days+`天</line>
+            <line>授权用户: 授权失效啦! 请及时处理，否则无法正常记录!</line>
+          `;
+        }
+        status_text.innerHTML = status_content;
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+        let status_text = document.querySelector('#status_text');
+        status_text.innerHTML = '';
+      });
+    }
+
+    function getSearchOption() {
+      // 获取筛选选项
+      return fetch('get_search_option')
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let groups = data.data.groups;
+        let group_id_select = document.querySelector('#group_id_select');
+        for(let item in groups) {
+          let option = document.createElement('option');
+          option.value = groups[item][0];
+          option.text = groups[item][1];
+          group_id_select.add(option);
+        }
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
+
+    function buildPayload(page=true) {
+      // 通过内容生成请求体
+      let group_id = document.getElementById('group_id_select').value;
+      let group_name = document.getElementById('group_name_input').value;
+      let sdate = document.getElementById('sdate_select').value;
+      let edate = document.getElementById('edate_select').value;
+      let cheat = document.getElementById('cheat_select').value;
+      let completed = document.getElementById('completed_select').value;
+      let completed_time = document.getElementById('completed_time_select').value;
+      let user_id = document.getElementById('user_id_input').value;
+      let nickname = document.getElementById('nickname_input').value;
+      let payload = {
+        'group_id': group_id,
+        'group_name': group_name,
+        'sdate': sdate,
+        'edate': edate,
+        'cheat': cheat,
+        'completed': completed,
+        'completed_time': completed_time,
+        'user_id': user_id,
+        'nickname': nickname,
+      }
+      if (page) {
+        let page_count = document.getElementById('page_count').value;
+        payload.page_num = page_num
+        payload.page_count = parseInt(page_count)
+      }
+      return payload
+    }
+
+    function resetSearch() {
+      // 重置搜索条件
+      document.getElementById('group_id_select').value = '';
+      document.getElementById('group_name_input').value = '';
+      document.getElementById('sdate_select').value = '';
+      document.getElementById('edate_select').value = '';
+      document.getElementById('cheat_select').value = '';
+      document.getElementById('completed_select').value = '';
+      document.getElementById('completed_time_select').value = '';
+      document.getElementById('user_id_input').value = '';
+      document.getElementById('nickname_input').value = '';
+    }
+
+    function eventSearch(event) {
+      // 事件触发搜索
+      if (event.key === "Enter" || event.type === 'blur') {
+        searchMemberTable(event?.target?.value);
+      }
+    }
+
+    function searchMemberTable(option=null) {
+      // 用户信息表查询
+      if (option === '') {
+        return;
+      } else if (option == '-') {
+        page_num --;
+      } else if (option == '+') {
+        page_num ++;
+      } else if (option !== null && !isNaN(option)) {
+        if (option < 0) {
+          page_num = page_max + 1 + parseInt(option);
+        } else {
+          page_num = parseInt(option);
+        }
+      }
+      let payload = buildPayload()
+      return fetch('search_member_table', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => {
+        return response.json();
+      })
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let result = data.data;
+        let count = result[1];
+        page_max = result[2]
+        page_num = result[3]
+        document.querySelectorAll('.page-count').forEach((e)=>{
+          e.innerHTML = `
+            <input type="text" value= "${page_num}"
+              style="margin-right: 0.2rem; width: ${(page_num.toString().length * 8) + 'px'}"
+              oninput="this.style.width = (this.value.length * 8) + 'px'"
+              onkeypress="eventSearch(event)"
+              onblur="eventSearch(event)"
+            />/${page_max}
+          `
+        });
+        let table_data = result[0];
+        let table = document.getElementById("user_info_table");
+        table.innerHTML = `
+          <tr>
+            <th>用户ID</th>
+            <th>用户昵称</th>
+            <th>班内昵称</th>
+            <th>打卡时间</th>
+            <th>记录日期</th>
+            <th>今日词数</th>
+            <th>是否作弊</th>
+            <th>打卡天数</th>
+            <th>入班天数</th>
+            <th>学习词书</th>
+            <th>小班ID</th>
+            <th>小班名称</th>
+            <th>采集时间</th>
+          </tr>
+        `;
+        document.querySelectorAll('th').forEach((th)=>{
+          th.style.cursor = 'pointer';
+          th.onclick = (e)=>{
+            sortTable(e.target);
+          }
+        });
+        for (let i = 0; i < table_data.length; i++) {
+          let row = table.insertRow(-1);
+          for (let j = 0; j < table_data[i].length; j++) {
+            let cell = row.insertCell(j);
+            cell.innerHTML = table_data[i][j];
+          }
+        }
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
+
+    function downloadMemberTable(event) {
+      // 下载数据
+      let element = event.target;
+      if (element.classList.contains('disabled')) {
+        notify('点太快了，休息一下吧~');
+        return;
+      }
+      element.classList.add('disabled');
+      notify('正在下载中...请稍后...');
+      payload = buildPayload(page=false)
+      fetch('download', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => {
+        const contentType = response.headers.get("Content-Type");
+        if (contentType.includes("application/json")) {
+          return response.json().then(data => {
+            notify(data?.msg);
+          });
+        } else {
+          return response.blob().then(data => {
+            const link = document.createElement('a');
+            const dispositionHeader = response.headers.get('Content-Disposition');
+            const filename = decodeURIComponent(dispositionHeader.split("UTF-8''").pop());
+            link.href = URL.createObjectURL(data);
+            link.download = filename;
+            link.click();
+          });
+        }
+      })
+      .catch(error => {
+        notify('下载出错! ' + error);
+        console.error(error);
+      })
+      .finally(() => {
+        element.classList.remove('disabled');
+      });
+    }
+
+  </script>
+</html>

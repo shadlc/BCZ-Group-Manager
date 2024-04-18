@@ -28,7 +28,7 @@ exe = EXE(
     a.zipfiles,
     a.datas,
     [],
-    name='百词斩小班数据提取器',
+    name='百词斩小班数据管理器',
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
