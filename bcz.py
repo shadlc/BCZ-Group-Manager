@@ -112,7 +112,9 @@ class Config:
     def getInfo(self) -> dict:
         '''获取配置文件相关状态信息'''
         return {
-            'daily_record': self.daily_record
+            'main_token': self.main_token,
+            'output_file': self.output_file,
+            'daily_record': self.daily_record,
         }
 
 class BCZ:
@@ -193,20 +195,20 @@ class BCZ:
             avatar_frame = group['avatarFrame']['frame'] if group.get('avatarFrame') else ''
             group_dict[group_id] = {
                 'name': group_name,
-                'shareKey': group['shareKey'],
+                'share_key': group['shareKey'],
                 'introduction': introduction,
                 'leader': '',
-                'leaderId': '',
-                'memberCount': group['memberCount'],
-                'countLimit': group['countLimit'],
-                'todayDakaCount': group['todayDakaCount'],
-                'finishingRate': group['finishingRate'],
-                'createdTime': group['createdTime'],
+                'leader_id': '',
+                'member_count': group['memberCount'],
+                'count_limit': group['countLimit'],
+                'today_daka_count': group['todayDakaCount'],
+                'finishing_rate': group['finishingRate'],
+                'created_time': group['createdTime'],
                 'rank': group['rank'],
                 'type': group['type'],
                 'avatar': group['avatar'],
-                'avatarFrame': avatar_frame,
-                'dataTime': self.data_time,
+                'avatar_frame': avatar_frame,
+                'data_time': self.data_time,
             }
         return group_dict
 
@@ -234,21 +236,21 @@ class BCZ:
         info = {
             'id': group_id,
             'name': group_name,
-            'shareKey': group_info['shareKey'],
+            'share_key': group_info['shareKey'],
             'introduction': introduction,
             'leader': '',
-            'leaderId': '',
-            'memberCount': group_info['memberCount'],
-            'countLimit': group_info['countLimit'],
-            'todayDakaCount': group_info['todayDakaCount'],
-            'finishingRate': group_info['finishingRate'],
-            'createdTime': group_info['createdTime'],
+            'leader_id': '',
+            'member_count': group_info['memberCount'],
+            'count_limit': group_info['countLimit'],
+            'today_daka_count': group_info['todayDakaCount'],
+            'finishing_rate': group_info['finishingRate'],
+            'created_time': group_info['createdTime'],
             'rank': group_info['rank'],
             'type': group_info['type'],
             'avatar': group_info['avatar'],
-            'avatarFrame': avatar_frame,
+            'avatar_frame': avatar_frame,
             'notice': notice,
-            'dataTime': self.data_time,
+            'data_time': self.data_time,
         }
 
         today_date = main_data.get('todayDate') if main_data else ''
@@ -258,27 +260,27 @@ class BCZ:
         for member in main_member_list:
             member_id = member['uniqueId']
             nickname = re.sub(self.invalid_pattern, '', member['nickname'])
-            completedTime = ''
+            completed_time = ''
             if member['completedTime']:
                 today_daka_count += 1
-                completedTime = time.strftime('%H:%M:%S', time.localtime(member['completedTime']))
+                completed_time = time.strftime('%H:%M:%S', time.localtime(member['completedTime']))
             member_dict[member_id] = {
                 'group_id': group_id,
                 'group_name': group_name,
                 'nickname': nickname,
                 'group_nickname': '',
-                'bookName': member['bookName'],
-                'todayWordCount': member['todayWordCount'],
-                'completedTimes': member['completedTimes'],
-                'completedTime': completedTime,
-                'durationDays': member['durationDays'],
-                'todayStudyCheat': '是' if member['todayStudyCheat'] else '否',
-                'todayDate': today_date,
-                'dataTime': self.data_time,
+                'book_name': member['bookName'],
+                'today_word_count': member['todayWordCount'],
+                'completed_times': member['completedTimes'],
+                'completed_time': completed_time,
+                'duration_days': member['durationDays'],
+                'today_study_cheat': '是' if member['todayStudyCheat'] else '否',
+                'today_date': today_date,
+                'data_time': self.data_time,
             }
             if member['leader']:
                 info['leader'] = member['nickname']
-                info['leaderId'] = member_id
+                info['leader_id'] = member_id
 
         auth_data = auth_response.json()['data']
         auth_member_list = auth_data.get('members') if auth_data else []
@@ -290,18 +292,20 @@ class BCZ:
             else:
                 member_dict[member_id]['group_nickname'] = ''
         if today_daka_count != 0:
-            info['todayDakaCount'] = today_daka_count
+            info['today_daka_count'] = today_daka_count
         info['members'] = member_dict
 
         return info
 
-    def updateGroupInfo(self, group_list: list[dict]) -> list:
+    def updateGroupInfo(self, group_list: list[dict], full_info: bool = False) -> list:
         with ThreadPoolExecutor() as executor:
             share_keys = []
             for group_info in group_list:
-                share_keys.append(group_info['shareKey'])
+                share_keys.append(group_info['share_key'])
             results = executor.map(self.getGroupInfo, share_keys)
         for result in results:
+            if not full_info:
+                result.pop('members')
             for group_info in group_list:
                 if group_info['id'] == result['id']:
                      group_info.update(result)
@@ -315,7 +319,7 @@ class BCZ:
         user_group_dict = self.getUserGroupInfo(user_id)
         group_dict = {}
         for group_id, group in user_group_dict.items():
-            group_dict[group_id] = self.getGroupInfo(group['shareKey'])
+            group_dict[group_id] = self.getGroupInfo(group['share_key'])
         user_info['group_dict'] = group_dict
         return user_info
 
@@ -441,24 +445,24 @@ class SQLite:
                 (
                     group_info['id'],
                     group_info['name'],
-                    group_info['shareKey'],
+                    group_info['share_key'],
                     group_info['introduction'],
                     group_info['leader'],
-                    group_info['leaderId'],
-                    group_info['memberCount'],
-                    group_info['countLimit'],
-                    group_info['todayDakaCount'],
-                    group_info['finishingRate'],
-                    group_info['createdTime'],
+                    group_info['leader_id'],
+                    group_info['member_count'],
+                    group_info['count_limit'],
+                    group_info['today_daka_count'],
+                    group_info['finishing_rate'],
+                    group_info['created_time'],
                     group_info['rank'],
                     group_info['type'],
                     group_info['avatar'],
-                    group_info['avatarFrame'],
-                    group_info['dataTime'],
+                    group_info['avatar_frame'],
+                    group_info['data_time'],
                 )
             )
-        conn.commit()
-        self.saveMemberInfo(group_info['members'])
+            conn.commit()
+            self.saveMemberInfo(group_info['members'])
 
     def saveMemberInfo(self, member_dict: dict) -> None:
         '''仅保存成员详情'''
@@ -471,16 +475,16 @@ class SQLite:
                     id,
                     member['nickname'],
                     member['group_nickname'],
-                    member['completedTime'],
-                    member['todayDate'],
-                    member['todayWordCount'],
-                    member['todayStudyCheat'],
-                    member['completedTimes'],
-                    member['durationDays'],
-                    member['bookName'],
+                    member['completed_time'],
+                    member['today_date'],
+                    member['today_word_count'],
+                    member['today_study_cheat'],
+                    member['completed_times'],
+                    member['duration_days'],
+                    member['book_name'],
                     member['group_id'],
                     member['group_name'],
-                    member['dataTime'],
+                    member['data_time'],
                 )
             )
         conn.commit()
@@ -497,19 +501,19 @@ class SQLite:
                 (
                     group_info.get('id', 0),
                     group_info.get('name', ''),
-                    group_info.get('shareKey', ''),
+                    group_info.get('share_key', ''),
                     group_info.get('introduction', ''),
                     group_info.get('leader', ''),
-                    group_info.get('leaderId', ''),
-                    group_info.get('memberCount', 0),
-                    group_info.get('countLimit', 0),
-                    group_info.get('todayDakaCount', 0),
-                    group_info.get('finishingRate', 0),
-                    group_info.get('createdTime', ''),
+                    group_info.get('leader_id', ''),
+                    group_info.get('member_count', 0),
+                    group_info.get('count_limit', 0),
+                    group_info.get('today_daka_count', 0),
+                    group_info.get('finishing_rate', 0),
+                    group_info.get('created_time', ''),
                     group_info.get('rank', 1),
                     group_info.get('type', 0),
                     group_info.get('avatar', ''),
-                    group_info.get('avatarFrame', ''),
+                    group_info.get('avatar_frame', ''),
                     group_info.get('notice', ''),
                     group_info.get('daily_record', 1),
                     group_info.get('late_daka_time', ''),
@@ -558,19 +562,19 @@ class SQLite:
                 (
                     group_info['id'],
                     group_info['name'],
-                    group_info['shareKey'],
+                    group_info['share_key'],
                     group_info['introduction'],
                     group_info['leader'],
-                    group_info['leaderId'],
-                    group_info['memberCount'],
-                    group_info['countLimit'],
-                    group_info['todayDakaCount'],
-                    group_info['finishingRate'],
-                    group_info['createdTime'],
+                    group_info['leader_id'],
+                    group_info['member_count'],
+                    group_info['count_limit'],
+                    group_info['today_daka_count'],
+                    group_info['finishing_rate'],
+                    group_info['created_time'],
                     group_info['rank'],
                     group_info['type'],
                     group_info['avatar'],
-                    group_info['avatarFrame'],
+                    group_info['avatar_frame'],
                     group_info['notice'],
                     group_info['id'],
                 )
@@ -582,26 +586,26 @@ class SQLite:
         if group_id:
             result = self.read(
                 f'SELECT * FROM OBSERVED_GROUPS WHERE GROUP_ID = ? ORDER BY GROUP_ID ASC',
-                group_id,
+                [group_id],
             )
         else:
             result = self.read(f'SELECT * FROM OBSERVED_GROUPS ORDER BY GROUP_ID ASC')
         result_keys = [
             'id',
             'name',
-            'shareKey',
+            'share_key',
             'introduction',
             'leader',
-            'leaderId',
-            'memberCount',
-            'countLimit',
-            'todayDakaCount',
-            'finishingRate',
-            'createdTime',
+            'leader_id',
+            'member_count',
+            'count_limit',
+            'today_daka_count',
+            'finishing_rate',
+            'created_time',
             'rank',
             'type',
             'avatar',
-            'avatarFrame',
+            'avatar_frame',
             'notice',
             'daily_record',
             'late_daka_time',
@@ -625,10 +629,18 @@ class SQLite:
 
     def getInfo(self) -> dict:
         '''获取数据库相关状态信息'''
+        groups = [
+            {
+                'id': group['id'],
+                'name': group['name'],
+                'daily_record': group['daily_record'],
+            }
+            for group in self.queryObserveGroupInfo()
+        ]
         return {
             'count': self.getMemberDataCount(),
-            'groups': self.getDistinctGroupName(),
-            'running_days': self.getDays()
+            'running_days': self.getDays(),
+            'groups': groups,
         }
 
     def getGroupInfo(self) -> dict:
@@ -651,19 +663,19 @@ class SQLite:
         result_keys = [
             'id',
             'name',
-            'shareKey',
+            'share_key',
             'introduction',
             'leader',
-            'leaderId',
-            'memberCount',
-            'countLimit',
-            'todayDakaCount',
-            'finishingRate',
-            'createdTime',
+            'leader_id',
+            'member_count',
+            'count_limit',
+            'today_daka_count',
+            'finishing_rate',
+            'created_time',
             'rank',
             'type',
             'avatar',
-            'avatarFrame'
+            'avatar_frame'
         ]
         group_info = []
         for item in result:
@@ -929,8 +941,9 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
     '''记录用户信息'''
     group_info_list = []
     for group_info in sqlite.queryObserveGroupInfo():
-        group_info_list.append(bcz.getGroupInfo(group_info['shareKey']))
-        logging.info(f'正在记录小班[{group_info["name"]}]的数据')
+        if group_info['daily_record']:
+            logging.info(f'正在获取小班[{group_info["name"]}({group_info["id"]})]的数据')
+            group_info_list.append(bcz.getGroupInfo(group_info['share_key']))
     sqlite.saveGroupInfo(group_info_list)
 
 

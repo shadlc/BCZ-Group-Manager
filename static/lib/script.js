@@ -118,6 +118,48 @@ function sortTable(element) {
   }
 }
 
+function sway(event) {
+  // 给元素添加摇摆动画
+  let element = event.target;
+  if (element.classList.contains("sway")) {
+    return;
+  }
+  setTimeout(()=>{
+    element.classList.add('sway');
+  },1)
+  setTimeout(()=>{
+    element.classList.remove('sway');
+  },1000)
+}
+
+function rotate(event) {
+  // 给元素添加旋转动画
+  let element = event.target;
+  if (element.classList.contains("rotate")) {
+    return;
+  }
+  setTimeout(()=>{
+    element.classList.add('rotate');
+  },1)
+  setTimeout(()=>{
+    element.classList.remove('rotate');
+  },1000)
+}
+
+function slideLeft(event) {
+  // 给元素添加左滑动画
+  let element = event.target;
+  if (element.classList.contains("slideLeft")) {
+    return;
+  }
+  setTimeout(()=>{
+    element.classList.add('slideLeft');
+  },1)
+  setTimeout(()=>{
+    element.classList.remove('slideLeft');
+  },1000)
+}
+
 function notify(content) {
   // 弹窗提示
   const container = document?.getElementById("notify_container");

@@ -47,7 +47,7 @@
           </span>
           <div class="blackboard hide">
             <span class="gloss"></span>
-            <span class="eraser"></span>
+            <span class="eraser" onclick="slideLeft(event)"></span>
             <span id="status_text">
             </span>
           </div>
@@ -140,7 +140,7 @@
             <span></span>
             <span></span>
             <div>
-              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+              <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made By Shadlc</span>
             </div>
           </div>
         </footer>
@@ -190,8 +190,8 @@
     }
 
     function getInfo() {
-      // 获取运行信息
-      return fetch('get_info')
+      // 获取历史查询信息
+      return fetch('get_history_info')
       .then(response => response.json())
       .then(data => {
         if (data.retcode != 0) {
@@ -202,16 +202,22 @@
         let status_text = document.querySelector('#status_text');
         let status_content = '';
         if (info.token_valid) {
+          let observe_group_count = 0;
+          for (let i in info.groups) {
+            if (info.groups[i].daily_record) {
+              observe_group_count += 1
+            }
+          }
           status_content = `
             <line>运行状况: 已持续记录`+info.running_days+`天</line>
             <line>数据统计: 记录数据共`+info.count+`条</line>
             <line>授权用户: `+info.name+`(`+info.uid+`)</line>
-            <line>监控小班: `+info.groups.length+`个 <a href="./">[回到首页]</a></line>
+            <line>监控小班: `+observe_group_count+`个</line>
           `;
         } else {
           status_content = `
             <line>运行状况: 已持续记录`+info.running_days+`天</line>
-            <line>授权用户: 授权失效啦! 请及时处理，否则无法正常记录!</line>
+            <line>授权用户: 授权失效! 请及时处理, 否则无法正常记录!</line>
           `;
         }
         status_text.innerHTML = status_content;

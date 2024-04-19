@@ -17,26 +17,41 @@
 
   <body class="inside-bg">
     <main>
-      <div class="blackboard">
-        <span class="gloss"></span>
-        <span class="eraser"></span>
-        <div class="group brief transparent">
-          <div class="info-table">
-            <div class="avatar">
-              <img src/>
-              <img src/>
-            </div>
-            <div class="group-info">
-              <span>测试小班</span>
-            </div>
-            <div class="group-detail">
-              <span>人数</span>
-              <span>简介</span>
-            </div>
+      <div class="group-container"></div>
+      <div class="paper">
+        <div class="input-group">
+          <div class="input">
+            <label for="cheat_select">是否晚卡</label>
+            <select id="cheat_select" onkeyup="eventSearch(event)">
+              <option value="">任意</option>
+              <option value="true" selected>是</option>
+              <option value="false">否</option>
+            </select>
+          </div>
+          <div class="input">
+            <label for="completed_select">是否缺卡</label>
+            <select id="completed_select" onkeyup="eventSearch(event)">
+              <option value="">任意</option>
+              <option value="true" selected>是</option>
+              <option value="false">否</option>
+            </select>
+          </div>
+          <div class="input">
+            <label for="user_id_input">用户ID</label>
+            <input id="user_id_input" type="number" onkeyup="eventSearch(event)" />
+          </div>
+          <div class="input">
+            <label for="nickname_input">昵称</label>
+            <input id="nickname_input" type="text" onkeyup="eventSearch(event)" />
+          </div>
+          <div class="btn-group">
+            <div id="reset_btn" class="btn" onclick="resetSearch()">重置</div>
+            <div id="search_btn" class="btn" onclick="searchMemberTable()">查询</div>
+            <div id="download_btn" class="btn" onclick="downloadMemberTable(event)">下载</div>
           </div>
         </div>
-      </div>
-      <div class="paper">
+        <div class="data-container">
+        </div>
         <span class="loading-text">
           <div class="loader">
             <span></span>
@@ -54,7 +69,7 @@
             <span></span>
             <span></span>
             <div>
-              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+              <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made By Shadlc</span>
             </div>
           </div>
         </footer>
@@ -62,11 +77,125 @@
     </main>
     <div id="notify_container"></div>
     <div id="scroll_top_btn" title="回到顶部" onclick="scrollToTop()">▲</div>
-    <div class="corner-btn btn" onclick="backToHome()">返回主页</div>
+    <div class="corner-btn btn" onclick="backToHome()">回主页</div>
   </body>
+  <script src="../lib/script.js"></script>
   <script>
+    window.onload = ()=>{
+      var href = window.location.href;
+      var group_id = href.substring(href.lastIndexOf('/') + 1);
+      getGroupInfo(group_id)
+    }
+
     function backToHome() {
+      // 返回主页
       window.location.href = '../';
     }
+
+    function toggleNoticeModal(event) {
+      // 关闭公告模态框
+      if (event?.target) {
+        if (event?.target.id != 'notice_modal') {
+          return;
+        }
+      }
+      let modal = document.getElementById('notice_modal');
+      let modal_content = modal.children[0];
+      let status = modal.getAttribute('data-status');
+      modal.setAttribute('data-status', '');
+      if (status == 'show') {
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal.classList.add('hide');
+          modal.setAttribute('data-status', 'hidden');
+        }, 500);
+      } else if (status == 'hidden') {
+        modal.classList.remove('hide');
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal_content.style.transform = 'scale(1)';
+          modal.style.opacity = 1;
+        }, 1);
+        setTimeout(()=>{
+          modal.setAttribute('data-status', 'show');
+        }, 500);
+      }
+    }
+
+    function getGroupInfo(group_id) {
+      // 获取小班信息
+      return fetch('../observe_group?id=' + group_id)
+      .then(response => response.json())
+      .then(data => {
+        let loading_text = document.querySelector('.loading-text');
+        if (data.retcode != 0) {
+          loading_text.innerHTML = data.msg;
+          notify(data.msg);
+          return;
+        }
+        let group = data.data[0];
+        loading_text.innerHTML = '';
+        setGroupInfo(group);
+        setMemberInfo(group);
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+        let loading_text = document.querySelector('.loading-text');
+        loading_text.innerHTML = error;
+      });
+    }
+
+    function setGroupInfo(group) {
+      // 通过数据设置展示小班信息
+      let container = document.querySelector('.group-container');
+      let group_content = `
+        <span class="gloss"></span>
+        <span class="eraser" onclick="slideLeft(event)"></span>
+        <div class="group brief transparent">
+          <div class="info-table">
+            <div class="avatar" onclick="rotate(event)">
+              <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
+              <img src="`+group.avatar_frame+`" />
+            </div>
+            <div class="group-info">
+            <span>`+group.name+`</span>
+            </div>
+            <div class="group-detail">
+              <span>班长: `+group.leader+`(`+group.leader_id+`)</span>
+              <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`+Math.round(group.finishing_rate * 100)+`%</span>
+              <span>`+group.introduction+`</span>
+            </div>
+          </div>
+        </div>
+        <img class="rank-flag" src="../img/s`+group.rank+`.png" onclick="sway(event)" />
+        <div class="tiny-notice" onclick="toggleNoticeModal()">
+          <span>公告</span>
+        </div>
+        <div id="notice_modal" class="modal hide" data-status="hidden" onclick="toggleNoticeModal(event)">
+          <div class="modal-content notice">
+            <span class="modal-close-btn" onclick="toggleNoticeModal()"></span>
+            <div class="modal-title">小班公告</div>
+            <div class="modal-body">
+              <div class="modal-text">`+group.notice+`</div>
+            </div>
+          </div>
+        </div>
+      `;
+      let info_div = document.createElement('div');
+      info_div.className = 'blackboard';
+      info_div.innerHTML = group_content;
+      container.insertBefore(info_div, container.firstChild);
+    }
+
+    function setMemberInfo(group) {
+      // 通过数据设置展示成员信息
+      let container = document.querySelector('.paper');
+
+    }
+
   </script>
 </html>

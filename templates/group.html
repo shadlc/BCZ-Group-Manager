@@ -58,7 +58,7 @@
             <span></span>
             <span></span>
             <div>
-              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+              <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made By Shadlc</span>
             </div>
           </div>
         </footer>
@@ -69,7 +69,7 @@
         <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>
         <div class="modal-title">添加小班</div>
         <div class="modal-body">
-          <div id="group_search" class="search_input">
+          <div id="group_search" class="main-search-input">
             <input type="text" id="group_search_input" placeholder="班长ID或16位小班分享码(非6位邀请码)" onkeydown="eventSearch(event)" />
             <span class="btn" onclick="searchGroups()">搜索</span>
           </div>
@@ -115,11 +115,11 @@
             <div class="info-table">
               <div class="avatar">
                 <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
-                <img src="`+group.avatarFrame+`" />
+                <img src="`+group.avatar_frame+`" />
               </div>
               <div class="group-info">
                 <span>`+group.name+`</span>
-                <span>`+group.todayDakaCount+`/`+group.memberCount+`已打卡</span>
+                <span>`+group.today_daka_count+`/`+group.member_count+`已打卡</span>
               </div>
             </div>
             <div class="door">
@@ -185,7 +185,7 @@
       let result_span = document.querySelector('#group_result>span');
       let url = 'search_group';
       if (isNaN(search_text) && search_text.length == 16) {
-        url += '?shareKey=' + search_text;
+        url += '?share_key=' + search_text;
       } else if (search_text.length) {
         url += '?uid=' + search_text;
       } else {
@@ -220,13 +220,13 @@
             <div class="info-table">
               <div class="avatar">
                 <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
-                <img src="`+group.avatarFrame+`" />
+                <img src="`+group.avatar_frame+`" />
               </div>
               <div class="group-info">
                 <span>`+group.name+`</span>
               </div>
               <div class="group-detail">
-                <span>人数`+group.memberCount+`/`+group.countLimit+`,完成率`+Math.round(group.finishingRate)+`%</span>
+                <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`+Math.round(group.finishing_rate * 100)+`%</span>
                 <span>`+group.introduction+`</span>
               </div>
             </div>
@@ -235,7 +235,7 @@
           group_div.className = 'group brief';
           group_div.innerHTML = group_content;
           group_div.addEventListener('click', ()=>{
-            addObserveGroup(group.shareKey);
+            addObserveGroup(group.share_key);
           });
           container.appendChild(group_div);
         }
@@ -260,7 +260,7 @@
 
     function addObserveGroup(share_key) {
       // 添加关注小班
-      payload = {'shareKey': share_key}
+      payload = {'share_key': share_key}
       fetch('observe_group', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
