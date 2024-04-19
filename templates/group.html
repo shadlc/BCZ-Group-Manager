@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="zh-CN" >
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>小班数据管理</title>
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.ico" />
+    <link rel="stylesheet" href="lib/style.css">
+  </head>
+
+  <body class="outside-bg">
+    <div class="bg-items">
+      <span class="high-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="high-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <div id="cloud_container"></div>
+    </div>
+    <main>
+      <div class="wall">
+        <div class="eaves">
+          <div class="gloss"></div>
+          <div class="eaves-container">
+            <a id="my_class" class="active">我的小班</a>
+            <a href="history">历史查询</a>
+            <a href="setting">系统设置</a>
+          </div>
+        </div>
+        <div class="wall-container">
+          <span class="loading-text">
+            <div class="loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            数据获取中，请稍后...
+          </span>
+          <div class="group empty-group hide" onclick="toggleGroupSearchModal()">
+          </div>
+        </div>
+        </div>
+      </div>
+      <div class="footer">
+        <footer>
+          <div class="info">
+            <input type="checkbox">
+            <span></span>
+            <span></span>
+            <span></span>
+            <div>
+              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </main>
+    <div id="group_search_modal" class="modal hide" data-status="hidden" onclick="toggleGroupSearchModal(event)">
+      <div class="modal-content notice">
+        <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>
+        <div class="modal-title">添加小班</div>
+        <div class="modal-body">
+          <div id="group_search" class="search_input">
+            <input type="text" id="group_search_input" placeholder="班长ID或16位小班分享码(非6位邀请码)" onkeydown="eventSearch(event)" />
+            <span class="btn" onclick="searchGroups()">搜索</span>
+          </div>
+          <div id="group_result">
+            <span>空空如也~</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <div id="notify_container"></div>
+  </body>
+  <script src="lib/script.js"></script>
+  <script>
+    onload = ()=>{
+      initCloud(10);
+      getGroupList().then((result)=>{
+        document.querySelectorAll('.loading-text').forEach((e)=>{
+          e.classList.add('hide');
+        });
+        if (!result) return;
+        document.querySelectorAll('.group').forEach((e)=>{
+          e.classList.remove('hide');
+        });
+      });
+    }
+
+    function getGroupList() {
+      // 获取小班信息
+      return fetch('observe_group')
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let groups = data.data;
+        document.getElementById('my_class').innerText = '我的小班(' + groups.length + ')';
+        let container = document.querySelector('.wall-container');
+        let empty_group = document.querySelector('.empty-group');
+        for (let i in groups) {
+          let group = groups[i];
+          let group_content = `
+            <div class="info-table">
+              <div class="avatar">
+                <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
+                <img src="`+group.avatarFrame+`" />
+              </div>
+              <div class="group-info">
+                <span>`+group.name+`</span>
+                <span>`+group.todayDakaCount+`/`+group.memberCount+`已打卡</span>
+              </div>
+            </div>
+            <div class="door">
+              <div class="door-glass"></div>
+              <div class="door-knob"></div>
+              <img class="rank-flag" src="img/s`+group.rank+`.png"/>
+            </div>
+          `
+          let group_div = document.createElement('div');
+          group_div.className = 'group';
+          group_div.innerHTML = group_content;
+          group_div.addEventListener('click', (e)=>{
+            window.location.href = 'group/' + group.id;
+          });
+          container.insertBefore(group_div, empty_group);
+        }
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+        let status_text = document.querySelector('#status_text');
+        status_text.innerHTML = '';
+      });
+    }
+
+    function toggleGroupSearchModal(event) {
+      // 关闭小班搜索模态框
+      if (event?.target) {
+        if (event?.target.id != 'group_search_modal') {
+          return;
+        }
+      }
+      let modal = document.getElementById('group_search_modal');
+      let modal_content = modal.children[0];
+      let status = modal.getAttribute('data-status');
+      modal.setAttribute('data-status', '');
+      if (status == 'show') {
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal.classList.add('hide');
+          modal.setAttribute('data-status', 'hidden');
+        }, 500);
+      } else if (status == 'hidden') {
+        modal.classList.remove('hide');
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal_content.style.transform = 'scale(1)';
+          modal.style.opacity = 1;
+        }, 1);
+        setTimeout(()=>{
+          modal.setAttribute('data-status', 'show');
+        }, 500);
+      }
+    }
+
+    function searchGroups() {
+      // 搜索小班
+      let search_text = document.getElementById('group_search_input').value;
+      let container = document.getElementById('group_result');
+      let result_span = document.querySelector('#group_result>span');
+      let url = 'search_group';
+      if (isNaN(search_text) && search_text.length == 16) {
+        url += '?shareKey=' + search_text;
+      } else if (search_text.length) {
+        url += '?uid=' + search_text;
+      } else {
+        notify('搜索条件不能为空(*/ω＼*)');
+        return;
+      }
+      container.innerHTML = 
+        `
+          <span class="loading-text">
+            <div class="loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            数据获取中，请稍后...
+          </span>
+        `;
+      fetch(url)
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          container.innerHTML = '<span>空空如也~</span>';
+          notify(data.msg);
+          return;
+        }
+        document.querySelector('#group_result>span')?.remove();
+        let groups = data.data;
+        container.innerHTML = '';
+        for (let i in groups) {
+          let group = groups[i];
+          let group_content = `
+            <div class="info-table">
+              <div class="avatar">
+                <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
+                <img src="`+group.avatarFrame+`" />
+              </div>
+              <div class="group-info">
+                <span>`+group.name+`</span>
+              </div>
+              <div class="group-detail">
+                <span>人数`+group.memberCount+`/`+group.countLimit+`,完成率`+Math.round(group.finishingRate)+`%</span>
+                <span>`+group.introduction+`</span>
+              </div>
+            </div>
+          `
+          let group_div = document.createElement('div');
+          group_div.className = 'group brief';
+          group_div.innerHTML = group_content;
+          group_div.addEventListener('click', ()=>{
+            addObserveGroup(group.shareKey);
+          });
+          container.appendChild(group_div);
+        }
+        if (container.innerHTML == '') {
+          container.innerHTML = '<span>空空如也~</span>';
+        }
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+        container.innerHTML = '<span>空空如也~</span>';
+      });
+    }
+
+    function eventSearch(event) {
+      // 事件触发搜索
+      if (event.key === "Enter") {
+        searchGroups(event?.target?.value);
+      }
+    }
+
+    function addObserveGroup(share_key) {
+      // 添加关注小班
+      payload = {'shareKey': share_key}
+      fetch('observe_group', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => {
+        return response.json();
+      })
+      .then(data => {
+        notify(data.msg);
+      });
+    }
+
+</script>
+</html>

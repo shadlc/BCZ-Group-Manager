@@ -1,0 +1,73 @@
+<!DOCTYPE html>
+<html dir="ltr" lang="zh-CN" >
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>小班数据管理</title>
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.ico" />
+    <link rel="stylesheet" href="lib/style.css">
+  </head>
+
+  <body class="outside-bg">
+    <div class="bg-items">
+      <span class="high-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="high-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <div id="cloud_container"></div>
+    </div>
+    <main>
+      <div class="wall">
+        <div class="eaves">
+          <div class="gloss"></div>
+          <div class="eaves-container">
+            <a href="group">我的小班</a>
+            <a href="history">历史查询</a>
+            <a class="active">系统设置</a>
+          </div>
+        </div>
+        <div class="wall-container">
+          <span class="loading-text">
+            暂未开放
+          </span>
+        </div>
+      </div>
+      <div class="footer">
+        <footer>
+          <div class="info">
+            <input type="checkbox">
+            <span></span>
+            <span></span>
+            <span></span>
+            <div>
+              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+            </div>
+          </div>
+        </footer>
+      </div>
+    </main>
+    <div id="notify_container"></div>
+  </body>
+  <script src="lib/script.js"></script>
+  <script>
+    onload = ()=>{
+      initCloud(10);
+      document.querySelectorAll('.wall-container').forEach((e)=>{
+        e.addEventListener('click', ()=>{
+          notify('暂未开启此功能');
+        })
+      });
+    }
+
+  </script>
+</html>

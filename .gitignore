@@ -1,7 +1,11 @@
 __pycache__
 .vscode
-*.json
 xlsx
 build
 dist
 *.txt
+*.json
+*.db
+*.xlsx
+*.sql
+*.bak
