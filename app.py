@@ -81,7 +81,7 @@ def get_user_group():
 def observe_group():
     if request.method == 'GET':
         '''获取关注小班列表'''
-        try:
+        try: 
             group_list = sqlite.queryObserveGroupInfo()
             group_list = bcz.updateGroupInfo(group_list)
             sqlite.updateObserveGroupInfo(group_list)
