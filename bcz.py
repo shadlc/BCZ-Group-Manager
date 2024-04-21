@@ -9,6 +9,7 @@ import sqlite3
 import requests
 import threading
 import traceback
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl import Workbook, load_workbook, styles
 from openpyxl.utils import get_column_letter
@@ -25,6 +26,7 @@ class Config:
             'auth_token': '',
             'output_file': './小班数据.xlsx',
             'daily_record': '59 23 * * *',
+            'cache_second': 60,
         }
         self.initConfig()
         self.raw = self.read()
@@ -35,6 +37,7 @@ class Config:
         self.auth_token = self.raw.get('auth_token', '')
         self.output_file = self.raw.get('output_file', '')
         self.daily_record = self.raw.get('daily_record', '')
+        self.cache_second = self.raw.get('cache_second', '')
         self.verify()
 
     def initConfig(self):
@@ -108,6 +111,11 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.daily_record = value
+        if self.cache_second == '':
+            key = 'cache_second'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.cache_second = value
 
     def getInfo(self) -> dict:
         '''获取配置文件相关状态信息'''
@@ -115,6 +123,7 @@ class Config:
             'main_token': self.main_token,
             'output_file': self.output_file,
             'daily_record': self.daily_record,
+            'cache_second': self.cache_second,
         }
 
 class BCZ:
@@ -224,9 +233,13 @@ class BCZ:
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
             logging.error(f'{msg}\n{main_response.text}')
-            raise Exception(msg)
-        main_data = main_response.json()['data']
+            # raise Exception(msg)
+            return {
+                'share_key': share_key,
+                'exception': main_response.text,
+            }
 
+        main_data = main_response.json()['data']
         group_info = main_data.get('groupInfo') if main_data else []
         group_id = group_info['id']
         group_name = re.sub(self.invalid_pattern, '', group_info['name']) if group_info['name'] else ''
@@ -298,16 +311,19 @@ class BCZ:
         return info
 
     def updateGroupInfo(self, group_list: list[dict], full_info: bool = False) -> list:
+        '''获取最新信息并刷新小班信息列表'''
         with ThreadPoolExecutor() as executor:
             share_keys = []
             for group_info in group_list:
                 share_keys.append(group_info['share_key'])
             results = executor.map(self.getGroupInfo, share_keys)
         for result in results:
-            if not full_info:
+            if not full_info and 'members' in result:
                 result.pop('members')
             for group_info in group_list:
-                if group_info['id'] == result['id']:
+                if group_info['id'] == result.get('id'):
+                     group_info.update(result)
+                elif group_info['share_key'] == result.get('share_key'):
                      group_info.update(result)
         return group_list
 
@@ -327,67 +343,78 @@ class SQLite:
     def __init__(self, config: Config) -> None:
         '''数据库类'''
         self.db_path = config.database_path
-        self.groups_table_sql = '''
-        CREATE TABLE IF NOT EXISTS GROUPS (                   -- 小班表
-            GROUP_ID INTEGER,                   -- 小班ID
-            NAME TEXT,                          -- 小班名称
-            SHARE_KEY TEXT,                     -- 小班分享码
-            INTRO TEXT,                         -- 小班简介
-            LEADER TEXT,                        -- 小班班长
-            LEADER_ID TEXT,                     -- 班长ID
-            MEMBER_COUNT INTEGER,               -- 当前人数
-            COUNT_LIMIT INTEGER,                -- 人数上限
-            TODAY_DAKA INTEGER,                 -- 今日打卡数
-            FINISHING_RATE REAL,                -- 打卡率
-            CREATED_TIME TEXT,                  -- 建立时间
-            RANK INTEGER,                       -- 段位排行
-            GROUP_TYPE INTEGER,                 -- 小班类型
-            AVATAR TEXT,                        -- 小班头像
-            AVATAR_FRAME TEXT,                  -- 小班像框
-            DATA_TIME TEXT                      -- 采集时间
-        );
-        '''
-        self.members_table_sql = '''
-        CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表
-            USER_ID INTEGER,                    -- 用户ID
-            NICKNAME TEXT,                      -- 用户昵称
-            GROUP_NICKNAME TEXT,                -- 班内昵称
-            COMPLETED_TIME TEXT,                -- 打卡时间
-            TODAY_DATE TEXT,                    -- 记录日期
-            WORD_COUNT INTEGER,                 -- 今日词数
-            STUDY_CHEAT INTEGER,                -- 是否作弊
-            COMPLETED_TIMES INTEGER,            -- 打卡天数
-            DURATION_DAYS INTEGER,              -- 入班天数
-            BOOK_NAME TEXT,                     -- 学习词书
-            GROUP_ID INTEGER,                   -- 小班ID
-            GROUP_NAME TEXT,                    -- 小班昵称
-            DATA_TIME TEXT                      -- 采集时间
-        );
-        '''
-        self.observed_groups_table_sql = '''
-        CREATE TABLE IF NOT EXISTS OBSERVED_GROUPS (                   -- 关注小班表
-            GROUP_ID INTEGER,                   -- 小班ID
-            NAME TEXT,                          -- 小班名称
-            SHARE_KEY TEXT,                     -- 小班分享码
-            INTRO TEXT,                         -- 小班简介
-            LEADER TEXT,                        -- 小班班长
-            LEADER_ID TEXT,                     -- 班长ID
-            MEMBER_COUNT INTEGER,               -- 当前人数
-            COUNT_LIMIT INTEGER,                -- 人数上限
-            TODAY_DAKA INTEGER,                 -- 今日打卡数
-            FINISHING_RATE REAL,                -- 打卡率
-            CREATED_TIME TEXT,                  -- 建立时间
-            RANK INTEGER,                       -- 段位排行
-            GROUP_TYPE INTEGER,                 -- 小班类型
-            AVATAR TEXT,                        -- 小班头像
-            AVATAR_FRAME TEXT,                  -- 小班像框
-            NOTICE TEXT,                        -- 小班公告
-            DAILY_RECORD INTEGER,               -- 每日记录
-            LATE_DAKA_TIME TEXT,                -- 晚打卡时间
-            WEEKLY_ABSENCE INTEGER,             -- 每周缺卡上限
-            AUTH_TOKEN TEXT                     -- 主授权令牌
-        );
-        '''
+        self.init_sql = [
+            '''CREATE TABLE IF NOT EXISTS GROUPS (                   -- 小班表
+                GROUP_ID INTEGER,                   -- 小班ID
+                NAME TEXT,                          -- 小班名称
+                SHARE_KEY TEXT,                     -- 小班分享码
+                INTRO TEXT,                         -- 小班简介
+                LEADER TEXT,                        -- 小班班长
+                LEADER_ID TEXT,                     -- 班长ID
+                MEMBER_COUNT INTEGER,               -- 当前人数
+                COUNT_LIMIT INTEGER,                -- 人数上限
+                TODAY_DAKA INTEGER,                 -- 今日打卡数
+                FINISHING_RATE REAL,                -- 打卡率
+                CREATED_TIME TEXT,                  -- 建立时间
+                RANK INTEGER,                       -- 段位排行
+                GROUP_TYPE INTEGER,                 -- 小班类型
+                AVATAR TEXT,                        -- 小班头像
+                AVATAR_FRAME TEXT,                  -- 小班像框
+                DATA_TIME TEXT                      -- 采集时间
+            );''',
+            '''CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表
+                USER_ID INTEGER,                    -- 用户ID
+                NICKNAME TEXT,                      -- 用户昵称
+                GROUP_NICKNAME TEXT,                -- 班内昵称
+                COMPLETED_TIME TEXT,                -- 打卡时间
+                TODAY_DATE TEXT,                    -- 记录日期
+                WORD_COUNT INTEGER,                 -- 今日词数
+                STUDY_CHEAT INTEGER,                -- 是否作弊
+                COMPLETED_TIMES INTEGER,            -- 打卡天数
+                DURATION_DAYS INTEGER,              -- 入班天数
+                BOOK_NAME TEXT,                     -- 学习词书
+                GROUP_ID INTEGER,                   -- 小班ID
+                GROUP_NAME TEXT,                    -- 小班昵称
+                DATA_TIME TEXT                      -- 采集时间
+            );''',
+            '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
+                USER_ID INTEGER,                    -- 用户ID
+                NICKNAME TEXT,                      -- 用户昵称
+                GROUP_NICKNAME TEXT,                -- 班内昵称
+                COMPLETED_TIME TEXT,                -- 打卡时间
+                TODAY_DATE TEXT,                    -- 记录日期
+                WORD_COUNT INTEGER,                 -- 今日词数
+                STUDY_CHEAT INTEGER,                -- 是否作弊
+                COMPLETED_TIMES INTEGER,            -- 打卡天数
+                DURATION_DAYS INTEGER,              -- 入班天数
+                BOOK_NAME TEXT,                     -- 学习词书
+                GROUP_ID INTEGER,                   -- 小班ID
+                GROUP_NAME TEXT,                    -- 小班昵称
+                DATA_TIME TEXT                      -- 采集时间
+            );''',
+            '''CREATE TABLE IF NOT EXISTS OBSERVED_GROUPS (                   -- 关注小班表
+                GROUP_ID INTEGER,                   -- 小班ID
+                NAME TEXT,                          -- 小班名称
+                SHARE_KEY TEXT,                     -- 小班分享码
+                INTRO TEXT,                         -- 小班简介
+                LEADER TEXT,                        -- 小班班长
+                LEADER_ID TEXT,                     -- 班长ID
+                MEMBER_COUNT INTEGER,               -- 当前人数
+                COUNT_LIMIT INTEGER,                -- 人数上限
+                TODAY_DAKA INTEGER,                 -- 今日打卡数
+                FINISHING_RATE REAL,                -- 打卡率
+                CREATED_TIME TEXT,                  -- 建立时间
+                RANK INTEGER,                       -- 段位排行
+                GROUP_TYPE INTEGER,                 -- 小班类型
+                AVATAR TEXT,                        -- 小班头像
+                AVATAR_FRAME TEXT,                  -- 小班像框
+                NOTICE TEXT,                        -- 小班公告
+                DAILY_RECORD INTEGER,               -- 每日记录
+                LATE_DAKA_TIME TEXT,                -- 晚打卡时间
+                WEEKLY_ABSENCE INTEGER,             -- 每周缺卡上限
+                AUTH_TOKEN TEXT                     -- 主授权令牌
+            );'''
+        ]
         self.init()
 
     def connect(self, db_path) -> sqlite3.Connection:
@@ -407,10 +434,9 @@ class SQLite:
         '''初始化不存在的库'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute(self.groups_table_sql)
-        cursor.execute(self.members_table_sql)
-        cursor.execute(self.observed_groups_table_sql)
-        conn.commit()
+        for sql in self.init_sql:
+            cursor.execute(sql)
+            conn.commit()
 
     def read(self, sql: str, param: list | tuple = ()) -> list:
         '''SQL执行读数据操作'''
@@ -435,13 +461,21 @@ class SQLite:
             logging.error(f'写入数据库{self.db_path}出错: {e}')
         return False
 
-    def saveGroupInfo(self, group_list: list[dict]) -> None:
-        '''仅保存小班详情'''
+    def saveGroupInfo(self, group_list: list[dict], temp: bool = False) -> None:
+        '''保存小班数据'''
+        if temp:
+            for group_info in group_list:
+                if group_info.get('exception'):
+                    continue
+                self.saveMemberInfo(group_info['members'], temp)
+            return
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         for group_info in group_list:
+            if group_info.get('exception'):
+                return
             cursor.execute(
-                'INSERT OR IGNORE INTO GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                f'INSERT OR IGNORE INTO GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
                     group_info['id'],
                     group_info['name'],
@@ -464,13 +498,16 @@ class SQLite:
             conn.commit()
             self.saveMemberInfo(group_info['members'])
 
-    def saveMemberInfo(self, member_dict: dict) -> None:
+    def saveMemberInfo(self, member_dict: dict, temp: bool = False) -> None:
         '''仅保存成员详情'''
+        table_name = 'MEMBERS'
+        if temp:
+            table_name = 'T_' + table_name
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         for id, member in member_dict.items():
             cursor.execute(
-                'INSERT OR IGNORE INTO MEMBERS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                f'INSERT OR IGNORE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
                     id,
                     member['nickname'],
@@ -711,7 +748,7 @@ class SQLite:
             f'SELECT COUNT(*) FROM MEMBERS'
         )[0][0]
 
-    def searchMemberTable(self, payload: dict, header: bool = False) -> list:
+    def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> list:
         '''查询用户信息表
 
         Args:
@@ -728,12 +765,17 @@ class SQLite:
                 'user_id': 用户ID
                 'nickname': 用户昵称
             }
+            header (str): 是否添加表头
+            temp (str): 是否临时表
 
         Returns:
             list: 用户信息表
-        '''        
-        count_sql = 'SELECT COUNT(*) FROM MEMBERS WHERE 1=1'
-        search_sql = 'SELECT * FROM MEMBERS WHERE 1=1'
+        '''   
+        count_sql = f'SELECT COUNT(*) FROM MEMBERS WHERE 1=1'
+        search_sql = f'SELECT * FROM MEMBERS WHERE 1=1'
+        if union_temp:  
+            count_sql = f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS) WHERE 1=1'
+            search_sql = f'SELECT * FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS) WHERE 1=1'
         sql = ''
         param = []
         user_id = payload.get('user_id', '')
@@ -743,7 +785,6 @@ class SQLite:
         sdate = payload.get('sdate', '')
         edate = payload.get('edate', '')
         cheat = payload.get('cheat', '')
-        completed = payload.get('completed', '')
         completed_time = payload.get('completed_time', '')
         if user_id != '':
             sql += ' AND USER_ID LIKE ?'
@@ -767,11 +808,6 @@ class SQLite:
         if cheat in ['true', 'false']:
             sql += ' AND STUDY_CHEAT = ?'
             param.append('是' if cheat == 'true' else '否')
-        if completed in ['true', 'false']:
-            if completed == 'true':
-                sql += ' AND COMPLETED_TIME <> \'\''
-            else:
-                sql += ' AND COMPLETED_TIME = \'\''
         if completed_time != '':
             sql += ' AND (COMPLETED_TIME = \'\' OR COMPLETED_TIME > ?)'
             param.append(completed_time)
@@ -791,7 +827,7 @@ class SQLite:
             page_max = math.ceil(int(count) / int(page_count))
             page_num = page_num if int(page_num) > 0 else 1
             page_num = page_num if int(page_num) < page_max else page_max
-            sql += ' LIMIT ? OFFSET (? - 1) * ?'
+            sql += ' ORDER BY GROUP_ID ASC, DATA_TIME DESC LIMIT ? OFFSET (? - 1) * ?'
             param.append(page_count)
             param.append(page_num)
             param.append(page_count)
@@ -813,8 +849,31 @@ class SQLite:
                 '小班名称',
                 '采集时间',
             ]] + result
-        return [result, count, page_max, page_num, page_count]
+        return {
+            'data': result,
+            'count': count,
+            'page_max': page_max,
+            'page_num': page_num,
+            'page_count': page_count,
+        }
 
+    def queryTempMemberCacheTime(self) -> list:
+        '''获取成员临时表的最新缓存数据时间'''
+        result = self.read(
+            f'SELECT DATA_TIME FROM T_MEMBERS ORDER BY DATA_TIME DESC LIMIT 1'
+        )
+        data_time = 0
+        if result:
+            data_time = int(datetime.strptime(result[0][0], "%Y-%m-%d %H:%M:%S").timestamp())
+        return data_time
+
+    def truncateTempMemberTable(self) -> None:
+        '''清除成员临时表数据'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM T_MEMBERS')
+        conn.commit()
+        
 
 class Xlsx:
     def __init__(self, config: Config) -> None:
@@ -887,6 +946,7 @@ class Schedule:
             daemon=True,
         )
         logging.info(f'启动计划 [{self.crontab_expr}]')
+        self.thread.setName(f'Schedule: {crontab}')
         self.thread.start()
 
     def run(self, *args, **kwargs) -> None:

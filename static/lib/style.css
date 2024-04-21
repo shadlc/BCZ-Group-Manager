@@ -33,9 +33,10 @@ html {
 }
 body {
   display: flex;
+  align-items: stretch;
   height: 100%;
   margin: 0;
-  align-items: stretch;
+  overflow: hidden;
 }
 main {
   position: relative;
@@ -120,6 +121,23 @@ img[src=""] {
 .title {
   text-align: center;
 }
+.invalid {
+  background: gray !important;
+}
+.invalid>* {
+  position: relative;
+  filter: grayscale(100%) brightness(50%);
+}
+.invalid::after {
+  content: '无效';
+  position: absolute;
+  font-weight: bold;
+  font-size: 2rem;
+  color: white;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+}
 .data-container{
   width: 100%;
 }
@@ -191,7 +209,7 @@ img[src=""] {
   transform: none !important;
   cursor: not-allowed;
 }
-.corner-btn {
+.left-corner-btn {
   z-index: 10;
   position: absolute;
   bottom: 0.75rem;
@@ -225,7 +243,7 @@ img[src=""] {
   font-weight: bold;
   font-size: larger;
   text-align: center;
-  margin-bottom: 0.5rem;
+  margin: 0 2rem 0.5rem 2rem;
 }
 .modal-close-btn {
   position: absolute;
@@ -495,7 +513,12 @@ img[src=""] {
 .input-group>.input {
   margin: 0.2rem;
   flex-grow: 1;
-  flex-basis: 32%;
+  flex-basis: 24%;
+}
+@media (max-width: 740px) {
+  .input-group>.input {
+    flex-basis: 45%;
+  }
 }
 .input {
   display: flex;
@@ -1155,6 +1178,7 @@ img[src=""] {
   position: relative;
   background: rgba(255,255,255,0.9);
   box-shadow: 0 0 0.5rem 0.2rem white;
+  white-space: pre-wrap;
   border: solid 0.1rem gray;
   border-radius: 0.5rem;
   font-weight: bold;

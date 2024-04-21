@@ -19,9 +19,9 @@
     <main>
       <div class="group-container"></div>
       <div class="paper">
-        <div class="input-group">
+        <div class="input-group hide">
           <div class="input">
-            <label for="cheat_select">是否晚卡</label>
+            <label for="cheat_select">晚卡时间</label>
             <select id="cheat_select" onkeyup="eventSearch(event)">
               <option value="">任意</option>
               <option value="true" selected>是</option>
@@ -29,7 +29,7 @@
             </select>
           </div>
           <div class="input">
-            <label for="completed_select">是否缺卡</label>
+            <label for="completed_select">缺卡次数</label>
             <select id="completed_select" onkeyup="eventSearch(event)">
               <option value="">任意</option>
               <option value="true" selected>是</option>
@@ -46,7 +46,7 @@
           </div>
           <div class="btn-group">
             <div id="reset_btn" class="btn" onclick="resetSearch()">重置</div>
-            <div id="search_btn" class="btn" onclick="searchMemberTable()">查询</div>
+            <div id="search_btn" class="btn" onclick="queryMemberTable()">查询</div>
             <div id="download_btn" class="btn" onclick="downloadMemberTable(event)">下载</div>
           </div>
         </div>
@@ -75,25 +75,30 @@
         </footer>
       </div>
     </main>
-    <div id="notify_container"></div>
-    <div id="scroll_top_btn" title="回到顶部" onclick="scrollToTop()">▲</div>
-    <div class="corner-btn btn" onclick="backToHome()">回主页</div>
+    <div class="left-corner-btn btn" onclick="backToHome()">回主页</div>
   </body>
   <script src="../lib/script.js"></script>
   <script>
     window.onload = ()=>{
       var href = window.location.href;
       var group_id = href.substring(href.lastIndexOf('/') + 1);
-      getGroupInfo(group_id)
+      getGroupInfo(group_id).then((result)=>{
+        if (result) {          
+          let loading_text = document.querySelector('.loading-text');
+          loading_text.innerHTML = '';
+          document.querySelector('.input-group').classList.remove('hide');
+        }
+      }
+      )
     }
 
+    // 返回主页
     function backToHome() {
-      // 返回主页
       window.location.href = '../';
     }
 
+    // 打开关闭公告模态框
     function toggleNoticeModal(event) {
-      // 关闭公告模态框
       if (event?.target) {
         if (event?.target.id != 'notice_modal') {
           return;
@@ -124,19 +129,18 @@
       }
     }
 
+    // 获取小班信息
     function getGroupInfo(group_id) {
-      // 获取小班信息
+      let loading_text = document.querySelector('.loading-text');
       return fetch('../observe_group?id=' + group_id)
       .then(response => response.json())
       .then(data => {
-        let loading_text = document.querySelector('.loading-text');
         if (data.retcode != 0) {
           loading_text.innerHTML = data.msg;
           notify(data.msg);
           return;
         }
         let group = data.data[0];
-        loading_text.innerHTML = '';
         setGroupInfo(group);
         setMemberInfo(group);
         return true;
@@ -144,13 +148,12 @@
       .catch(error => {
         console.error('请求错误:', error);
         notify('请求错误:' + error);
-        let loading_text = document.querySelector('.loading-text');
         loading_text.innerHTML = error;
       });
     }
 
+    // 通过数据设置展示小班信息
     function setGroupInfo(group) {
-      // 通过数据设置展示小班信息
       let container = document.querySelector('.group-container');
       let group_content = `
         <span class="gloss"></span>
@@ -191,8 +194,8 @@
       container.insertBefore(info_div, container.firstChild);
     }
 
+    // 通过数据设置展示成员信息
     function setMemberInfo(group) {
-      // 通过数据设置展示成员信息
       let container = document.querySelector('.paper');
 
     }

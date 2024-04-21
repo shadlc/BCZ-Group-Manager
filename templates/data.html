@@ -32,7 +32,7 @@
           <div class="gloss"></div>
           <div class="eaves-container">
             <a href="group">我的小班</a>
-            <a class="active">历史查询</a>
+            <a class="active">数据查询</a>
             <a href="setting">系统设置</a>
           </div>
         </div>
@@ -80,15 +80,7 @@
                 </select>
               </div>
               <div class="input">
-                <label for="completed_select">完成打卡</label>
-                <select id="completed_select" onkeyup="eventSearch(event)">
-                  <option value="">任意</option>
-                  <option value="true">是</option>
-                  <option value="false">否</option>
-                </select>
-              </div>
-              <div class="input">
-                <label for="completed_time_select">打卡时间晚于</label>
+                <label for="completed_time_select">打卡晚于</label>
                 <input id="completed_time_select" type="time" onkeyup="eventSearch(event)" />
               </div>
               <div class="input">
@@ -96,23 +88,23 @@
                 <input id="user_id_input" type="number" onkeyup="eventSearch(event)" />
               </div>
               <div class="input">
-                <label for="nickname_input">昵称</label>
+                <label for="nickname_input">用户昵称</label>
                 <input id="nickname_input" type="text" onkeyup="eventSearch(event)" />
               </div>
               <div class="btn-group">
                 <div id="reset_btn" class="btn" onclick="resetSearch()">重置</div>
-                <div id="search_btn" class="btn" onclick="searchMemberTable()">查询</div>
+                <div id="search_btn" class="btn" onclick="queryMemberTable()">查询</div>
                 <div id="download_btn" class="btn" onclick="downloadMemberTable(event)">下载</div>
               </div>
             </div>
             <div class="table">
               <div class="table-page">
                 <div class="page-button">
-                  <div class="btn" onclick="searchMemberTable('1')">&lt;&lt;</div>
-                  <div class="btn" onclick="searchMemberTable('-')">&lt;</div>
+                  <div class="btn" onclick="queryMemberTable('1')">&lt;&lt;</div>
+                  <div class="btn" onclick="queryMemberTable('-')">&lt;</div>
                   <div class="page-count">0/0</div>
-                  <div class="btn" onclick="searchMemberTable('+')">&gt;</div>
-                  <div class="btn" onclick="searchMemberTable('-1')">&gt;&gt;</div>
+                  <div class="btn" onclick="queryMemberTable('+')">&gt;</div>
+                  <div class="btn" onclick="queryMemberTable('-1')">&gt;&gt;</div>
                 </div>
                 <select id="page_count">
                   <option value="20">20条/页</option>
@@ -146,13 +138,13 @@
         </footer>
       </div>
     </main>
-    <div id="notify_container"></div>
     <div id="scroll_top_btn" title="回到顶部" onclick="scrollToTop()">▲</div>
   </body>
   <script src="lib/script.js"></script>
   <script type="text/javascript">
     let page_num = 0
     let page_max = 0
+    let observe_groups = [];
 
     window.onload = ()=>{
       initCloud(10);
@@ -168,7 +160,7 @@
           e.classList.remove('hide');
         });
         getSearchOption();
-        searchMemberTable();
+        queryMemberTable();
       });
       // let yesterday = new Date();
       // yesterday.setDate(new Date().getDate() - 1);
@@ -187,11 +179,11 @@
     function scrollToTop() {
       container.scrollIntoView({ behavior: "smooth" });
       container.scrollTop = 0;
-    }
+    };
 
+    // 获取数据查询信息
     function getInfo() {
-      // 获取历史查询信息
-      return fetch('get_history_info')
+      return fetch('get_data_info')
       .then(response => response.json())
       .then(data => {
         if (data.retcode != 0) {
@@ -208,11 +200,12 @@
               observe_group_count += 1
             }
           }
+          observe_groups = info.groups;
           status_content = `
             <line>运行状况: 已持续记录`+info.running_days+`天</line>
             <line>数据统计: 记录数据共`+info.count+`条</line>
             <line>授权用户: `+info.name+`(`+info.uid+`)</line>
-            <line>监控小班: `+observe_group_count+`个</line>
+            <line>监控小班: `+observe_group_count+`个<u onclick="show_observe_groups()">[详情]</u></line>
           `;
         } else {
           status_content = `
@@ -231,8 +224,25 @@
       });
     }
 
+    // 展示关注小班
+    function show_observe_groups() {
+      let content =  '<div style="text-align:start">';
+      for (let i in observe_groups) {
+        let group = observe_groups[i];
+        content += ' <line><a href="../group/'+group.id+'">'+group.name+'</a>'
+        if (group.daily_record) {
+          content += '<b style="float:right;padding-left:1rem;">已开启</b>';
+        } else {
+          content += '<b style="float:right;padding-left:1rem;">未开启</b>';
+        }
+        content += '</line>';
+      }
+        content += '</div>';
+      showModal(content, '每日记录状态');
+    }
+
+    // 获取筛选选项
     function getSearchOption() {
-      // 获取筛选选项
       return fetch('get_search_option')
       .then(response => response.json())
       .then(data => {
@@ -255,14 +265,13 @@
       });
     }
 
+    // 通过内容生成请求体
     function buildPayload(page=true) {
-      // 通过内容生成请求体
       let group_id = document.getElementById('group_id_select').value;
       let group_name = document.getElementById('group_name_input').value;
       let sdate = document.getElementById('sdate_select').value;
       let edate = document.getElementById('edate_select').value;
       let cheat = document.getElementById('cheat_select').value;
-      let completed = document.getElementById('completed_select').value;
       let completed_time = document.getElementById('completed_time_select').value;
       let user_id = document.getElementById('user_id_input').value;
       let nickname = document.getElementById('nickname_input').value;
@@ -272,7 +281,6 @@
         'sdate': sdate,
         'edate': edate,
         'cheat': cheat,
-        'completed': completed,
         'completed_time': completed_time,
         'user_id': user_id,
         'nickname': nickname,
@@ -285,28 +293,27 @@
       return payload
     }
 
+    // 重置搜索条件
     function resetSearch() {
-      // 重置搜索条件
       document.getElementById('group_id_select').value = '';
       document.getElementById('group_name_input').value = '';
       document.getElementById('sdate_select').value = '';
       document.getElementById('edate_select').value = '';
       document.getElementById('cheat_select').value = '';
-      document.getElementById('completed_select').value = '';
       document.getElementById('completed_time_select').value = '';
       document.getElementById('user_id_input').value = '';
       document.getElementById('nickname_input').value = '';
     }
 
+    // 事件触发搜索
     function eventSearch(event) {
-      // 事件触发搜索
       if (event.key === "Enter" || event.type === 'blur') {
-        searchMemberTable(event?.target?.value);
+        queryMemberTable(event?.target?.value);
       }
     }
 
-    function searchMemberTable(option=null) {
-      // 用户信息表查询
+    // 用户信息表查询
+    function queryMemberTable(option=null) {
       if (option === '') {
         return;
       } else if (option == '-') {
@@ -321,7 +328,7 @@
         }
       }
       let payload = buildPayload()
-      return fetch('search_member_table', {
+      return fetch('query_member_table', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload)
@@ -335,9 +342,9 @@
           return;
         }
         let result = data.data;
-        let count = result[1];
-        page_max = result[2]
-        page_num = result[3]
+        let count = result.count;
+        page_max = result.page_max;
+        page_num = result.page_num;
         document.querySelectorAll('.page-count').forEach((e)=>{
           e.innerHTML = `
             <input type="text" value= "${page_num}"
@@ -348,38 +355,10 @@
             />/${page_max}
           `
         });
-        let table_data = result[0];
+        let table_data = result.data;
         let table = document.getElementById("user_info_table");
-        table.innerHTML = `
-          <tr>
-            <th>用户ID</th>
-            <th>用户昵称</th>
-            <th>班内昵称</th>
-            <th>打卡时间</th>
-            <th>记录日期</th>
-            <th>今日词数</th>
-            <th>是否作弊</th>
-            <th>打卡天数</th>
-            <th>入班天数</th>
-            <th>学习词书</th>
-            <th>小班ID</th>
-            <th>小班名称</th>
-            <th>采集时间</th>
-          </tr>
-        `;
-        document.querySelectorAll('th').forEach((th)=>{
-          th.style.cursor = 'pointer';
-          th.onclick = (e)=>{
-            sortTable(e.target);
-          }
-        });
-        for (let i = 0; i < table_data.length; i++) {
-          let row = table.insertRow(-1);
-          for (let j = 0; j < table_data[i].length; j++) {
-            let cell = row.insertCell(j);
-            cell.innerHTML = table_data[i][j];
-          }
-        }
+        table.innerHTML = '';
+        fillDataToTable(table_data, table);
       })
       .catch(error => {
         console.error('请求错误:', error);
@@ -387,8 +366,8 @@
       });
     }
 
+    // 下载数据
     function downloadMemberTable(event) {
-      // 下载数据
       let element = event.target;
       if (element.classList.contains('disabled')) {
         notify('点太快了，休息一下吧~');

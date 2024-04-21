@@ -1,6 +1,7 @@
 import sys
 import time
 import logging
+from datetime import datetime
 
 from flask import Flask, render_template, send_file, jsonify, request
 
@@ -36,9 +37,9 @@ def details(id=None):
 def search():
     return render_template('search.html')
 
-@app.route('/history', methods=['GET'])
-def history():
-    return render_template('history.html')
+@app.route('/data', methods=['GET'])
+def data():
+    return render_template('data.html')
 
 @app.route('/setting', methods=['GET'])
 def setting():
@@ -51,7 +52,7 @@ def download():
         return restful(403, '有正在处理的下载，请稍后再试 (ᗜ ˰ ᗜ)"')
     processing = True
     try:
-        result = sqlite.searchMemberTable(request.json, header=True)
+        result = sqlite.queryMemberTable(request.json)
         xlsx = Xlsx(config)
         xlsx.write('用户信息', result[0])
         xlsx.save()
@@ -61,8 +62,8 @@ def download():
         processing = False
     return send_file(config.output_file)
 
-@app.route('/get_history_info', methods=['GET'])
-def get_history_info():
+@app.route('/get_data_info', methods=['GET'])
+def get_data_info():
     info = bcz.getInfo()
     info.update(sqlite.getInfo())
     return restful(200, '', info)
@@ -122,10 +123,17 @@ def get_search_option():
     option = sqlite.getSearchOption()
     return restful(200, '', option)
 
-@app.route('/search_member_table', methods=['POST'])
-def search_member_table():
+@app.route('/query_member_table', methods=['POST'])
+def query_member_table():
     try:
-        result = sqlite.searchMemberTable(request.json)
+        data_time = sqlite.queryTempMemberCacheTime()
+        if int(time.time()) - data_time > config.cache_second:
+            group_list = sqlite.queryObserveGroupInfo()
+            group_list = bcz.updateGroupInfo(group_list, full_info=True)
+            sqlite.truncateTempMemberTable()
+            sqlite.saveGroupInfo(group_list, temp=True)
+
+        result = sqlite.queryMemberTable(request.json, header=True, union_temp=True)
         return restful(200, '', result)
     except Exception as e:
         return restful(500, f'{e}')

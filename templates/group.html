@@ -32,7 +32,7 @@
           <div class="gloss"></div>
           <div class="eaves-container">
             <a id="my_class" class="active">我的小班</a>
-            <a href="history">历史查询</a>
+            <a href="data">数据查询</a>
             <a href="setting">系统设置</a>
           </div>
         </div>
@@ -79,7 +79,6 @@
         </div>
       </div>
     </div>
-    <div id="notify_container"></div>
   </body>
   <script src="lib/script.js"></script>
   <script>
@@ -96,8 +95,8 @@
       });
     }
 
+    // 获取小班信息
     function getGroupList() {
-      // 获取小班信息
       return fetch('observe_group')
       .then(response => response.json())
       .then(data => {
@@ -130,6 +129,10 @@
           `
           let group_div = document.createElement('div');
           group_div.className = 'group';
+          if (group.exception) {
+            notify('小班'+group.name+'的数据获取失败! \n原因为: '+group.exception);
+            group_div.className += ' invalid';
+          }
           group_div.innerHTML = group_content;
           group_div.addEventListener('click', (e)=>{
             window.location.href = 'group/' + group.id;
@@ -146,8 +149,8 @@
       });
     }
 
+    // 关闭小班搜索模态框
     function toggleGroupSearchModal(event) {
-      // 关闭小班搜索模态框
       if (event?.target) {
         if (event?.target.id != 'group_search_modal') {
           return;
@@ -178,8 +181,8 @@
       }
     }
 
+    // 搜索小班
     function searchGroups() {
-      // 搜索小班
       let search_text = document.getElementById('group_search_input').value;
       let container = document.getElementById('group_result');
       let result_span = document.querySelector('#group_result>span');
@@ -251,15 +254,15 @@
       });
     }
 
+    // 事件触发搜索
     function eventSearch(event) {
-      // 事件触发搜索
       if (event.key === "Enter") {
         searchGroups(event?.target?.value);
       }
     }
 
+    // 添加关注小班
     function addObserveGroup(share_key) {
-      // 添加关注小班
       payload = {'share_key': share_key}
       fetch('observe_group', {
         method: 'POST',

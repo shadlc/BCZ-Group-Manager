@@ -1,5 +1,5 @@
+// 初始化云层
 function initCloud(cloud_num) {
-  // 初始化云层
   const cloud_array = Array.from({ length: cloud_num }, () =>
     generateCloud(Math.round(Math.random()))
   );
@@ -30,8 +30,8 @@ function initCloud(cloud_num) {
   });
 }
 
+// 生成单个云朵
 function generateCloud(cloud_type) {
-  // 生成单个云朵
   let cloud_content = `
     <span class="cloud-border">
     <span></span><span></span><span></span><span></span><span></span>
@@ -50,10 +50,40 @@ function generateCloud(cloud_type) {
   return cloud;
 }
 
+// 把数据插入到表中
+function fillDataToTable(table_data, table) {
+  let thead = table.createTHead();
+  var row = thead.insertRow();
+  for (var i = 0; i < table_data[0].length; i++) {
+    var th = document.createElement("th");
+    th.innerHTML = table_data[0][i];
+    row.appendChild(th);
+  }
+  table.appendChild(thead);
+
+  document.querySelectorAll('th').forEach((th)=>{
+    th.style.cursor = 'pointer';
+    th.onclick = (e)=>{
+      sortTable(e.target);
+    }
+  });
+
+  let tbody = document.createElement("tbody");
+  for (let i = 1; i < table_data.length; i++) {
+    let row = tbody.insertRow(-1);
+    for (let j = 0; j < table_data[i].length; j++) {
+      let cell = row.insertCell(j);
+      cell.innerHTML = table_data[i][j];
+    }
+  }
+  table.appendChild(tbody);
+}
+
+// 输入表格的一个表头元素,以这个表头对表进行排序
 function sortTable(element) {
-  // 输入表格的一个表头元素,以这个表头对表进行排序
   let index = Array.from(element.parentNode.children).indexOf(element);
-  let table = element.parentNode.parentNode;
+  let table = element.parentNode.parentNode.parentNode;
+  let tbody = table.children[1];
   let order = "asc";
 
   if (element.classList.contains("desc")) {
@@ -67,7 +97,7 @@ function sortTable(element) {
     order = "desc";
     element.innerHTML = element.innerHTML.replace("▼", "▲");
   } else {
-    Array.from(table.children[1].children).forEach((e) => {
+    Array.from(tbody.children[0].children).forEach((e) => {
       if (e.tagName === "TH") {
         e.classList.remove("asc");
         e.classList.remove("desc");
@@ -79,9 +109,9 @@ function sortTable(element) {
   }
 
   let td_arr = [];
-  let row_count = table.rows.length;
-  for (let i = 1; i < row_count; i++) {
-    let cell = table.rows[i].cells[index].innerHTML;
+  let row_count = tbody.rows.length;
+  for (let i = 0; i < row_count; i++) {
+    let cell = tbody.rows[i].cells[index].innerHTML;
     td_arr.push(cell);
   }
 
@@ -90,8 +120,8 @@ function sortTable(element) {
     td_arr = td_arr.map((str) => Number(str));
   }
 
-  for (let i = 0; i < row_count - 2; i++) {
-    for (let j = 0; j < row_count - 2 - i; j++) {
+  for (let i = 0; i < row_count - 1; i++) {
+    for (let j = 0; j < row_count - 1 - i; j++) {
       if (order == "asc") {
         if (td_arr[j] < td_arr[j + 1]) {
           let temp = td_arr[j];
@@ -110,16 +140,16 @@ function sortTable(element) {
 
   for (let item in td_arr) {
     for (let i = item; i < row_count; i++) {
-      if (table.rows[i].cells[index].innerHTML == td_arr[item]) {
-        table.insertBefore(table.rows[i], table.rows[parseInt(item) + 1]);
+      if (tbody.rows[i].cells[index].innerHTML == td_arr[item]) {
+        tbody.insertBefore(tbody.rows[i], tbody.rows[parseInt(item)]);
         continue;
       }
     }
   }
 }
 
+// 给元素添加摇摆动画
 function sway(event) {
-  // 给元素添加摇摆动画
   let element = event.target;
   if (element.classList.contains("sway")) {
     return;
@@ -132,8 +162,8 @@ function sway(event) {
   },1000)
 }
 
+// 给元素添加旋转动画
 function rotate(event) {
-  // 给元素添加旋转动画
   let element = event.target;
   if (element.classList.contains("rotate")) {
     return;
@@ -146,8 +176,8 @@ function rotate(event) {
   },1000)
 }
 
+// 给元素添加左滑动画
 function slideLeft(event) {
-  // 给元素添加左滑动画
   let element = event.target;
   if (element.classList.contains("slideLeft")) {
     return;
@@ -160,8 +190,13 @@ function slideLeft(event) {
   },1000)
 }
 
+// 弹窗提示
 function notify(content) {
-  // 弹窗提示
+  if (!document.getElementById('notify_container')) {
+    let notify_container = document.createElement('div');
+    notify_container.id = 'notify_container';
+    document.body.appendChild(notify_container, document.body.lastChild);
+  }
   const container = document?.getElementById("notify_container");
   if (!container) {
     alert(content);
@@ -178,4 +213,63 @@ function notify(content) {
       container.removeChild(notification);
     }, 800);
   }, 3000);
+}
+
+// 展示模态框
+function showModal(content='', title='') {
+  document.querySelectorAll('.modal').forEach((modal)=>{
+    if (modal.id == '') {
+      modal.remove();
+    }
+  });
+  let modal_content = `
+    <div class="modal-content notice">
+      <span class="modal-close-btn" onclick="toggleModal()"></span>
+      <div class="modal-title">`+title+`</div>
+      <div class="modal-body">`+content+`</div>
+    </div>
+  `
+  let modal = document.createElement('div');
+  modal.className = 'modal hide';
+  modal.setAttribute('data-status', 'hidden');
+  modal.onclick = (event) =>{toggleModal(event)};
+  modal.innerHTML = modal_content;
+  document.body.appendChild(modal, document.body.lastChild);
+  toggleModal();
+}
+
+// 打开关闭模态框
+function toggleModal(event) {
+  if (event?.target) {
+    if (!event?.target.classList.contains('modal')) {
+      return;
+    }
+  }
+  document.querySelectorAll('.modal').forEach((modal)=>{
+    if (modal.id != '') {
+      return;
+    }
+    let modal_content = modal.children[0];
+    let status = modal.getAttribute('data-status');
+    modal.setAttribute('data-status', '');
+    if (status == 'show') {
+      modal_content.style.transform = 'scale(0.9)';
+      modal.style.opacity = 0;
+      setTimeout(()=>{
+        modal.classList.add('hide');
+        modal.setAttribute('data-status', 'hidden');
+      }, 500);
+    } else if (status == 'hidden') {
+      modal.classList.remove('hide');
+      modal_content.style.transform = 'scale(0.9)';
+      modal.style.opacity = 0;
+      setTimeout(()=>{
+        modal_content.style.transform = 'scale(1)';
+        modal.style.opacity = 1;
+      }, 1);
+      setTimeout(()=>{
+        modal.setAttribute('data-status', 'show');
+      }, 500);
+    }
+  })
 }
