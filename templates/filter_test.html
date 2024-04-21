@@ -1,0 +1,251 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Layout</title>
+
+    <!-- background: url('https://gd-hbimg.huaban.com/12cb5733c7538d2b13a823c7ba4c40953e0575effe811-PbmtTv_fw1200') no-repeat center center fixed;   -->
+    <!-- background-size: cover;  -->
+
+
+
+    <!-- 总体大框架样式，只有card有背景色，其他元素都没有 -->
+    <!-- frame和tag可以反复嵌套，其中frame是垂直，tag是水平，实现不同层级的样式控制 -->
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 4000px;
+            overflow-y: auto;
+
+            display: flex;
+            flex-direction: column;
+
+        }
+
+        body {
+            background: rgba(41, 226, 255, 0.7)
+        }
+
+        .container {
+            padding-top: 150px;
+            display: inline-flex;
+            flex-wrap: nowrap;
+            justify-content: space-between;
+            max-width: 1000px;
+            min-width: 400px;
+            width: 90%;
+            margin:0 auto
+        }
+
+        .column {
+            background: rgba(255, 255, 255, 0);
+            padding: 5px;
+        }
+
+        .left-column {
+            width: 30%;
+        }
+
+        .right-column {
+            width: 60%;
+        }
+
+        .column-gap {
+            width: 20px;
+        }
+
+        .card {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.7);
+            margin-bottom: 10px;
+            padding: 10px;
+
+            display: flex;
+            flex-direction: column;
+        }
+
+        .frame {
+            display: inline-flex;
+            flex-direction: column;
+            flex-grow:1;
+        }
+
+        .center-frame {
+            display: inline-flex;
+            flex-direction: column;
+            flex-grow:1;
+            justify-content: center;
+            align-items: center;
+        }
+
+
+        .tag {
+            display: flex;
+            width: 100%;
+            flex-grow:1;
+            flex-direction: row;
+        }
+
+        .center-tag {
+            display: flex;
+            flex-direction: row;
+            flex-grow:1;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+    </style>
+    <!-- 头像、标签、按钮、图表样式 -->
+    <style>
+        .avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #ccc;
+            margin: 2px;
+            display: inline-block;
+        }
+
+        .graph {
+            width: 100%;
+            padding-top: 30%;
+            background-color: #eee;
+            margin: 2px;
+            display: inline-block;
+        }
+
+
+        .checkbox {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 10px 20px;
+            background-color: #00000000;
+            color: black;
+            text-decoration: none;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+
+        .button:hover {
+            background-color: #00000030;
+        }
+        .separator {
+            border-bottom: 1px solid rgb(0, 0, 0);
+            width: 95%;
+            margin: auto;
+        }
+        .box-separator {
+
+            
+            height: 100%;
+            width: 1px;
+            background-color: black;
+            margin:0 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <div class="left-column column">
+            <div class="card">
+                <div class="tag" id="userInfo" style="justify-content:start">
+                    <div class="avatar" id="avatar"></div>
+                    <div class="center-frame">
+                        <div class="center-tag">
+                            <div class="tag" id="name">Username</div>
+                            <div class="checkbox" id="checked"></div>
+                        </div>
+                        <div class="center-tag">
+                            <div class="tag" id="district">District</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="grade">Grade</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="book">Book</div>
+                        </div>
+                        <div class="center-tag">
+                            <div class="tag" id="todayWords">Words</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="totalDakaDays">Checks</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="totalDays">Days</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="frame">
+                    <div class="center-tag button "id ="account">账号管理</div>
+                    <div class="center-tag button "id= "export">导出日志</div>
+                </div>
+
+            </div>
+            <div class="card">
+                <div class="frame" id="operations">
+                        <div class="center-tag button">返回</div>
+                        <!-- 动态添加其他操作项 -->
+                </div>
+            </div>
+            <div class="card">
+                <div class="frame" id="notifications">
+                    <!-- 通知栏内容，动态添加 --> 
+                    
+                </div>
+                
+            </div>
+        </div>
+
+
+        <div class="column-gap"></div>
+
+
+        <div class="right-column column">
+            <!-- 班级卡片循环开始 -->
+            <div class="card">
+                <div class="frame">
+                    <div class="tag" name="classinfo">
+                        <div class="avatar"></div>
+                        <div class="frame">
+                            <div class="tag">
+                                <div id="name">班名</div>
+                                <div class="box-separator"></div>
+                                <div id="leader">班长</div>
+                            </div>
+                            <div class="tag">
+                                <div  id="students">学生人数</div>
+                                <div class="box-separator"></div>
+                                <div  id="todayDakaCounts">打卡人数</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="graph" id = "graph"></div>
+                    <div class="class-status" id="status">状态</div>
+                    <div class="separator"></div>
+                    <div class="tag center">
+                        <div class="tag button" id="strata">策略</div>
+                        <div class="box-separator"></div>
+                        <div class="tag button" id="members">成员</div>
+                        <div class="box-separator"></div>
+                        <div class="tag button" id="notice">公告</div>
+                        <div class="box-separator"></div>
+                        <div class="tag button" id="log">日志</div>
+                    </div>
+                </div>
+            </div>
+            <!-- 班级卡片循环结束，根据后台数据重复添加 -->
+        </div>
+
+    </div>
+</body>
+
+</html>
