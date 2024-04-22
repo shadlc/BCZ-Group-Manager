@@ -4,7 +4,12 @@
 
     <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.5.1/jquery.min.js">//swal2需要</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.all.min.js"></script>
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js">//折线图绘制</script> */
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js">//折线图绘制</script> 
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js">//日期处理</script>  
+
+
+
+*/
 
 
 
@@ -13,9 +18,17 @@
 
 //初始化部分
 
+
+//初始化数据，从服务器获取
 var initData = null;
-// Establish WebSocket connection
+
+
+//全局服务器地址
 const url = 'ws://192.168.1.101:8080';
+
+
+
+// Establish WebSocket connection
 var socket = new WebSocket(`${url}/filter/a/`);
 socket.onmessage = function (event) {
     if (event.data) {
@@ -60,21 +73,20 @@ function setHeader(xhr) {
 function init(initData) {
     //主初始化函数
     // Load user information
-    var accessToken = initData.accountCount;
-    if (accountCount == 0) swal2.fire("错误", "没有可用的账号，请先创建账号", "error");
+    if (initData.accountCount == 0) swal2.fire("错误", "没有可用的账号，请先创建账号", "error");
     setCookie(main_access_token);
-    var xhr = new XMLHttpRequest();
+    // var xhr = new XMLHttpRequest();
 
-    xhr.open('GET', 'https://social.baicizhan.com/api/deskmate/home_page', true);
-    setHeader(xhr);
+    // xhr.open('GET', 'https://social.baicizhan.com/api/deskmate/home_page', true);
+    // setHeader(xhr);
 
-    xhr.onload = function () {
-        if (xhr.status === 200) {
-            var userData = JSON.parse(xhr.responseText);
-            loadUserAvatar(userData.avatarUrl);
-        }
-    };
-    xhr.send();
+    // xhr.onload = function () {
+    // if (xhr.status === 200) {
+    // var userData = JSON.parse(xhr.responseText);
+    document.getElementById('useravatar').src = initData.avatarUrl;
+    // }
+    // };
+    // xhr.send();
 
     // Load sub-class information
     var groupCount = initData.groupCount;
@@ -86,10 +98,6 @@ function init(initData) {
         //前面已经创建了div，这里只需要填充折线图
         drawChart(initData.times[i], initData.rank[i], initData.dakaCounts[i])
     }
-}
-function loadUserAvatar(avatarUrl) {
-    var img = document.getElementById('useravatar');
-    img.src = avatarUrl;
 }
 function loadGroupInfo(shareKey, status, xhr) {
 
@@ -249,7 +257,7 @@ document.getElementById('account').addEventListener('click', function () {
                 confirmButtonText: 'Yes, switch it!'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    sendRequest({"uniqueId": uniqueId, 'action':'switch' },'switch');
+                    sendRequest({ "uniqueId": uniqueId, 'action': 'switch' }, 'switch');
                 }
             });
         });
@@ -267,7 +275,7 @@ document.getElementById('account').addEventListener('click', function () {
                 confirmButtonText: 'Yes, delete it!'
             }).then((result) => {
                 if (result.isConfirmed) {
-                    sendRequest({"uniqueId": uniqueId, 'action': 'delete' }, 'delete');
+                    sendRequest({ "uniqueId": uniqueId, 'action': 'delete' }, 'delete');
                 }
             });
         });
@@ -293,7 +301,7 @@ document.getElementById('account').addEventListener('click', function () {
             if (result.isConfirmed) {
                 var uniqueId = document.getElementById('unique-id').value;
                 var accessToken = document.getElementById('access-token').value;
-                sendRequest({ "uniqueId":uniqueId, "accessToken":accessToken, "action":"add" }, 'add');
+                sendRequest({ "uniqueId": uniqueId, "accessToken": accessToken, "action": "add" }, 'add');
             }
         });
     });
@@ -318,4 +326,113 @@ document.getElementById('account').addEventListener('click', function () {
         // xhr.send(JSON.stringify(data));
     }
 });
+
+
+//导出日志按钮
+
+
+
+
+document.getElementById('export').addEventListener('click', function () {
+    // 获取本周一和今天的日期  
+    const startDate = moment().startOf('week').format('YYYY-MM-DD');
+    const endDate = moment().format('YYYY-MM-DD');
+
+    Swal.fire({
+        title: '请选择日期范围',
+        html: `  
+                <input type="text" id="swal-input-start" class="swal2-input" value="${startDate}">  
+                <input type="text" id="swal-input-end" class="swal2-input" value="${endDate}">  
+            `,
+        focusConfirm: false,
+        preConfirm: () => {
+            const start = document.getElementById('swal-input-start').value || '-1';
+            const end = document.getElementById('swal-input-end').value || '-1';
+
+            return {
+                startDate: start,
+                endDate: end
+            };
+        },
+        showCancelButton: true,
+        confirmButtonText: '导出运行日志',
+        cancelButtonText: '取消',
+        showLoaderOnConfirm: true,
+        didOpen: () => {
+            Swal.getHtmlContainer().querySelector('#swal2-confirm').addEventListener('click', () => {
+                const type = 'run'; // 运行日志  
+                exportLog(type);
+            });
+
+            const notifyBtn = Swal.getHtmlContainer().insertAdjacentHTML
+                ('beforeend', '<button class="swal2-confirm swal2-styled" style="display:inline-block;margin-left:10px;">导出通知日志</button>');
+            notifyBtn.addEventListener('click', () => {
+                const type = 'notify'; // 通知日志  
+                exportLog(type);
+            });
+        }
+    }).then((result) => {
+        if (result.isConfirmed) {
+            Swal.close();
+        }
+    });
+});
+
+function exportLog(type) {//导出某物并且下载
+    const { startDate, endDate } = Swal.getPopup().preConfirm();
+
+    const data = {
+        type: type,
+        startDate: startDate,
+        endDate: endDate
+    };
+
+    // 发送POST请求到服务器  
+    fetch(`${url}/filter/a/${type}`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Network response was not ok');
+            }
+            // 假设服务器返回的是blob文件  
+            return response.blob();
+        })
+        .then(blob => {
+            // 创建一个用于下载文件的链接  
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            // 设置下载文件名  
+            a.download = 'export.csv';
+            document.body.appendChild(a);
+            a.click();
+            window.URL.revokeObjectURL(url);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            Swal.fire('Error', 'An error occurred while exporting the log.', 'error');
+        });
+
+}
+
+
+//好了，到这里就结束了，可以愉快的玩耍了。———— fittencode
+
+//下一个，策略管理
+//动画切换函数
+function FadeAndShow(cardShow,cardHide){
+    var cardA = document.getElementById(`${cardHide}`);
+    var cardB = document.getElementById(`${cardShow}`);
+    cardA.style.animation = 'Fade 0.8s forwards';
+    cardB.style.animation = 'Show 0.8s forwards';
+    
+}
+
+//策略按钮点击事件
 

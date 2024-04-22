@@ -38,7 +38,7 @@
             max-width: 1000px;
             min-width: 400px;
             width: 90%;
-            margin:0 auto
+            margin: 0 auto
         }
 
         .column {
@@ -71,13 +71,13 @@
         .frame {
             display: inline-flex;
             flex-direction: column;
-            flex-grow:1;
+            flex-grow: 1;
         }
 
         .center-frame {
             display: inline-flex;
             flex-direction: column;
-            flex-grow:1;
+            flex-grow: 1;
             justify-content: center;
             align-items: center;
         }
@@ -86,18 +86,58 @@
         .tag {
             display: flex;
             width: 100%;
-            flex-grow:1;
+            flex-grow: 1;
             flex-direction: row;
         }
 
         .center-tag {
             display: flex;
             flex-direction: row;
-            flex-grow:1;
+            flex-grow: 1;
             justify-content: center;
             align-items: center;
             height: 100%;
         }
+    </style>
+    <!-- 动画 -->
+    <style>
+        @keyframes Fade {
+          0% {
+            opacity: 1;
+            transform: translateX(-300px);
+          }
+          20%{
+            opacity:1;
+            transform: translateX(-275px);
+          }
+          90%{
+            opacity: 0;
+            transform: translateX(-625px);
+          }
+          100% {
+            opacity: 0;
+            transform: translateX(0px);
+          }
+        }
+        @keyframes Show {
+          0% {
+            opacity: 0;
+            transform: translateX(0px);
+          }
+          20% {
+            opacity: 0;
+            transform: translateX(50px);
+          }
+          90% {
+            opacity: 1;
+            transform: translateX(-300px);
+          }
+          100% {
+            opacity: 1;
+            transform: translateX(-300px);
+          }
+        }
+    
     </style>
     <!-- 头像、标签、按钮、图表样式 -->
     <style>
@@ -127,31 +167,56 @@
         }
 
         .button {
-            display: inline-block;
+            /* onclick: "createMask(event)" */
+            position: relative;
             padding: 10px 20px;
             background-color: #00000000;
             color: black;
-            text-decoration: none;
             border: none;
             border-radius: 5px;
+            overflow: hidden;
             cursor: pointer;
         }
 
+        .button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 0;
+            height: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            opacity: 0;
+            transition: width 0.5s ease, height 0.5s ease, opacity 0.5s ease;
+            pointer-events: none;
+        }
+
+        .button:active::after {
+            width: 500px;
+            height: 500px;
+            opacity: 1;
+        }
+    </style>
+    <style>
         .button:hover {
             background-color: #00000030;
         }
+
         .separator {
             border-bottom: 1px solid rgb(0, 0, 0);
             width: 95%;
             margin: auto;
         }
+
         .box-separator {
 
-            
+
             height: 100%;
             width: 1px;
             background-color: black;
-            margin:0 5px;
+            margin: 0 5px;
         }
     </style>
 </head>
@@ -162,7 +227,7 @@
         <div class="left-column column">
             <div class="card">
                 <div class="tag" id="userInfo" style="justify-content:start">
-                    <div class="avatar" id="avatar"></div>
+                    <div class="avatar" id="useravatar"></div>
                     <div class="center-frame">
                         <div class="center-tag">
                             <div class="tag" id="name">Username</div>
@@ -185,23 +250,23 @@
                     </div>
                 </div>
                 <div class="frame">
-                    <div class="center-tag button "id ="account">账号管理</div>
-                    <div class="center-tag button "id= "export">导出日志</div>
+                    <div class="center-tag button " id="account">管理账号</div>
+                    <div class="center-tag button " id="export">导出日志</div>
                 </div>
 
             </div>
             <div class="card">
                 <div class="frame" id="operations">
-                        <div class="center-tag button">返回</div>
-                        <!-- 动态添加其他操作项 -->
+                    <div class="center-tag button">返回</div>
+                    <!-- 动态添加其他操作项 -->
                 </div>
             </div>
             <div class="card">
                 <div class="frame" id="notifications">
-                    <!-- 通知栏内容，动态添加 --> 
-                    
+                    <!-- 通知栏内容，动态添加 -->
+
                 </div>
-                
+
             </div>
         </div>
 
@@ -211,41 +276,15 @@
 
         <div class="right-column column">
             <!-- 班级卡片循环开始 -->
-            <div class="card">
-                <div class="frame">
-                    <div class="tag" name="classinfo">
-                        <div class="avatar"></div>
-                        <div class="frame">
-                            <div class="tag">
-                                <div id="name">班名</div>
-                                <div class="box-separator"></div>
-                                <div id="leader">班长</div>
-                            </div>
-                            <div class="tag">
-                                <div  id="students">学生人数</div>
-                                <div class="box-separator"></div>
-                                <div  id="todayDakaCounts">打卡人数</div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="graph" id = "graph"></div>
-                    <div class="class-status" id="status">状态</div>
-                    <div class="separator"></div>
-                    <div class="tag center">
-                        <div class="tag button" id="strata">策略</div>
-                        <div class="box-separator"></div>
-                        <div class="tag button" id="members">成员</div>
-                        <div class="box-separator"></div>
-                        <div class="tag button" id="notice">公告</div>
-                        <div class="box-separator"></div>
-                        <div class="tag button" id="log">日志</div>
-                    </div>
-                </div>
-            </div>
+
             <!-- 班级卡片循环结束，根据后台数据重复添加 -->
         </div>
 
     </div>
 </body>
+
+<script>
+    
+</script>
 
 </html>
