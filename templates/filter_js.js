@@ -426,13 +426,481 @@ function exportLog(type) {//导出某物并且下载
 
 //下一个，策略管理
 //动画切换函数
-function FadeAndShow(cardShow,cardHide){
-    var cardA = document.getElementById(`${cardHide}`);
-    var cardB = document.getElementById(`${cardShow}`);
-    cardA.style.animation = 'Fade 0.8s forwards';
-    cardB.style.animation = 'Show 0.8s forwards';
-    
+function Fade(element) {
+    element.style.animation = 'Fade 0.8s forwards';
+}
+function Show(element) {
+    element.style.animation = 'Show 0.8s forwards';
 }
 
 //策略按钮点击事件
 
+
+
+// 假设HideandShow函数已经定义好  
+
+
+// 假设服务器响应的JSON结构如下  
+const mockServerResponse = {
+    totalStrategies: 3,
+    strategies: [
+        {
+            name: "策略一",
+            weekDays: ["周一", "周三"],
+            times: ["09:00-10:00"],
+            minPeople: 5,
+            subItemsCount: 2,
+            subItems: [
+                {
+                    name: "子条目1",
+                    operation: "接受",
+                    validity: "本周",
+                    conditionsCount: 3,
+                    conditions: [
+                        { name: "同桌天数", value: 5, operator: ">", equalTo: false },
+                        // ... 其他条件  
+                    ]
+                },
+                // ... 其他子条目  
+            ]
+        },
+        // ... 其他策略  
+    ]
+};
+
+// 模拟从服务器获取JSON的异步操作  
+function fetchStrategyData() {
+    return new Promise((resolve) => {
+        setTimeout(() => {
+            resolve(mockServerResponse);
+        }, 500); // 模拟网络延迟  
+    });
+}
+
+// 更新策略按钮并显示第一个策略信息  
+function updateStrategyButtonsAndInfo(data) {
+    const operationCard = document.getElementById('operation');
+    //   const column = document.getElementById('column');  
+    operationCard.innerHTML = ''; // 清空operation内容 ，删除现有所有按钮  
+
+
+    // 添加额外按钮：保存并返回、不保存、新建  
+    ['保存并返回', '不保存', '新建'].forEach((text, index) => {
+        const btn = document.createElement('div');
+        btn.classList.add('center-tag button');
+        btn.textContent = text;
+        if (text === '新建') {
+            btn.addEventListener('click', () => {
+                // 点击时新建策略（此处省略实现细节）  
+                createNewStrategy();
+            });
+        }
+        operationCard.appendChild(btn);
+    });
+
+    // 分割线
+    const separator = document.createElement('div');
+    separator.classList.add('separator');
+    operationCard.appendChild(separator);
+
+
+    // 创建并添加策略按钮  
+    data.strategies.forEach((strategy, index) => {
+        const btn = document.createElement('div');
+        btn.classList.add('center-tag button');
+        btn.textContent = strategy.name;
+        btn.addEventListener('click', () => {
+            // 点击时更新页面显示该策略信息（此处省略实现细节）  
+            showStrategyInfo(strategy);
+            // 切换按钮样式  
+
+            strategyButtons = operationCard.querySelectorAll('.center-tag');
+            // 先清除所有按钮的active样式
+            strategyButtons.forEach(btn => btn.classList.remove('active'));
+            btn.classList.add('active');
+        });
+        if (index === 0) {
+            btn.classList.add('active'); // 默认选中第一个策略按钮  
+        }
+        operationCard.appendChild(btn);
+    });
+
+
+
+    // 显示第一个策略的信息  
+    showStrategyInfo(data.strategies[0]);
+}
+
+// 显示策略信息  
+function showStrategyInfo(strategy) {
+    const column = document.getElementById('column');
+    column.innerHTML = ''; // 清空column内容  
+
+    // 创建并添加策略名的card  
+    const strategyCard = document.createElement('div');
+    strategyCard.classList.add('card');
+    strategyCard.id = strategy.name;
+
+
+    //4.23进度到这里
+
+    const strategyNameInput = document.createElement('input');
+    strategyNameInput.value = strategy.name;
+    strategyCard.appendChild(strategyNameInput);
+    // 添加子条目、复制、删除按钮（此处省略实现细节）  
+    column.appendChild(strategyCard);
+
+    // 创建并添加每个子条目的card  
+    strategy.subItems.forEach((subItem) => {
+
+        // 添加子条目名称（单独卡片）
+        const subItemNameCard = document.createElement('div');
+        subItemNameCard.classList.add('card subItemName');
+        subItemNameCard.id = subItem.name;
+        
+        const subItemNameInput = document.createElement('input');
+        subItemNameInput.value = subItem.name;
+        subItemNameCard.appendChild(subItemNameInput);
+        // 添加条件、复制、删除按钮
+        const actionButtonsDiv = document.createElement('div');
+        actionButtonsDiv.classList.add('tag actions');
+        const addConditionButton = document.createElement('div');
+        addConditionButton.classList.add('center-tag button');
+        addConditionButton.textContent = '添加条件';
+        addConditionButton.addEventListener('click', () => {
+            // 添加条件的逻辑  
+            const newCondition = ```
+                    <div class="tag condition">
+                        <div class="tag name">
+                            <select>
+                                <option>同桌天数</option>
+                                <option>总榜最长天数</option>
+                                <option>今日已打卡0/1</option>
+                                <option>作弊0/1</option>
+                                <option>总榜最高完成率</option>
+                                <option>小队头像框</option>
+                                <option>上周打卡天数</option>
+                                <option>本周打卡天数</option>
+                                <option>加入天数</option>
+                                <option>上周晚卡天数</option>
+                                <option>本周晚卡天数</option>
+                            </select>
+                        </div>
+                        <div class="tag operator">
+                            <select>
+                                <option>大于</option>
+                                <option>小于</option>
+                            </select>
+                        </div>
+                        <div class="tag value">
+                            <input type="number">
+                        </div>
+                        <div class="tag equality">
+                            <select>
+                                <option>包含</option>
+                                <option>不包含</option>
+                            </select>
+                        </div>
+                        <div class="tag actions">
+                            <button>复制</button>
+                            <button>删除</button>
+                        </div>
+                    </div>
+            ```
+            document.getElementById(subItem.name).appendChild(newCondition);
+        });
+
+
+        subItem.Conditions.forEach((Condition) => {
+            // 创建卡片元素  
+            const ConditionTag = document.createElement('div');
+            ConditionTag.id = Condition.name;
+            ConditionTag.classList.add('tag');
+
+            // 创建子条目名称  
+            const nameDiv = document.createElement('div');
+            nameDiv.classList.add('tag name');
+            const nameInput = document.createElement('input');
+            nameInput.type = 'text';
+            nameInput.value = Condition.name; // 初始化为子条目的名称  
+            nameDiv.appendChild(nameInput);
+
+            // 添加添加条件、复制和删除按钮  
+            // const actionButtonsDiv = document.createElement('div');
+            // actionButtonsDiv.classList.add('tag actions');
+            // const addConditionButton = document.createElement('div');
+            // addConditionButton.classList.add('center-tag button');
+            // addConditionButton.textContent = '添加条件';
+            // addConditionButton.addEventListener('click', () => {
+            //     // 添加条件的逻辑  
+            //     addConditionTag(ConditionTag);
+            // });
+            const copyButton = document.createElement('div');
+            copyButton.classList.add('center-tag button');
+            copyButton.textContent = '复制';
+            copyButton.addEventListener('click', () => {
+                // 复制子条目的逻辑
+                const elementToCopy = document.getElementById(Condition.name);
+                // 创建一个新的元素，并将要复制的元素的innerHTML赋值给新元素
+                const copiedElement = document.createElement('div');
+                copiedElement.innerHTML = elementToCopy.innerHTML;
+                // 将新创建的元素插入到目标位置
+                document.getElementById(subItem.name).appendChild(copiedElement);
+            });
+            const deleteButton = document.createElement('div');
+            deleteButton.textContent = '删除';
+            deleteButton.addEventListener('click', () => {
+                // 删除子条目的逻辑  
+                // ...  
+                ConditionTag.remove();
+            });
+            actionButtonsDiv.appendChild(addConditionButton);
+            actionButtonsDiv.appendChild(copyButton);
+            actionButtonsDiv.appendChild(deleteButton);
+
+            nameDiv.appendChild(actionButtonsDiv);
+            ConditionTag.appendChild(nameDiv);
+
+            // 创建子条目操作下拉框  
+            const actionDiv = document.createElement('div');
+            actionDiv.classList.add('card-action');
+            const actionSelect = document.createElement('select');
+            const actionOptions = ['接受', '移出'];
+            actionOptions.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.textContent = option;
+                actionSelect.appendChild(optionElement);
+            });
+            actionSelect.value = Condition.action; // 初始化为子条目的操作  
+            actionDiv.appendChild(actionSelect);
+            ConditionTag.appendChild(actionDiv);
+
+            // 创建子条目操作有效期下拉框  
+            const validityDiv = document.createElement('div');
+            validityDiv.classList.add('card-validity');
+            const validitySelect = document.createElement('select');
+            const validityOptions = ['本次', '今天', '本周'];
+            validityOptions.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.textContent = option;
+                validitySelect.appendChild(optionElement);
+            });
+            validitySelect.value = Condition.validity; // 初始化为子条目的有效期  
+            validityDiv.appendChild(validitySelect);
+            ConditionTag.appendChild(validityDiv);
+
+            // 添加条件的frame  
+            Condition.conditions.forEach(condition => {
+                addConditionTag(ConditionTag, condition);
+            });
+
+            // 将卡片添加到容器  
+            column.appendChild(ConditionTag);
+        });
+
+        // 辅助函数：添加条件的frame到卡片中  
+        function addConditionTag(card, condition = {}) {
+            // 创建条件frame的容器  
+            const ConditionTag = document.createElement('div');
+            ConditionTag.classList.add('card-condition');
+
+            // 创建条件名下拉框  
+            const conditionNameDiv = document.createElement('div');
+            const conditionNameSelect = document.createElement('select');
+            const conditionNameOptions = [
+                '同桌天数', '总榜最长天数', '今日已打卡0/1', '作弊0/1', '总榜最高完成率',
+                '小队头像框', '上周打卡天数', '本周打卡天数', '加入天数', '上周晚卡天数', '本周晚卡天数'
+            ];
+            conditionNameOptions.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.textContent = option;
+                conditionNameSelect.appendChild(optionElement);
+            });
+            conditionNameSelect.value
+
+            conditionNameSelect.value = condition.name || conditionNameOptions[0]; // 初始化为条件名或默认选项
+            conditionNameDiv.appendChild(conditionNameSelect);
+
+            // 添加复制和删除按钮到条件名右侧
+            const conditionButtonsDiv = document.createElement('div');
+            conditionButtonsDiv.classList.add('condition-actions');
+            const copyConditionButton = document.createElement('div');
+            copyConditionButton.textContent = '复制';
+            copyConditionButton.addEventListener('click', () => {
+                // 复制条件的逻辑
+                // ...
+            });
+            const deleteConditionButton = document.createElement('div');
+            deleteConditionButton.textContent = '删除';
+            deleteConditionButton.addEventListener('click', () => {
+                // 删除条件的逻辑
+                // ...
+                ConditionTag.remove();
+            });
+            conditionButtonsDiv.appendChild(copyConditionButton);
+            conditionButtonsDiv.appendChild(deleteConditionButton);
+            conditionNameDiv.appendChild(conditionButtonsDiv);
+
+            // 添加条件的其他部分
+            const operatorDiv = document.createElement('div');
+            const operatorSelect = document.createElement('select');
+            const operatorOptions = ['大于', '小于'];
+            operatorOptions.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.textContent = option;
+                operatorSelect.appendChild(optionElement);
+            });
+            operatorSelect.value = condition.operator || operatorOptions[0]; // 初始化为条件操作符或默认选项
+            operatorDiv.appendChild(operatorSelect);
+            ConditionTag.appendChild(operatorDiv);
+
+            const valueInput = document.createElement('input');
+            valueInput.type = 'number';
+            valueInput.value = condition.value || ''; // 初始化为条件值或空字符串
+            ConditionTag.appendChild(valueInput);
+
+            const equalityDiv = document.createElement('div');
+            const equalitySelect = document.createElement('select');
+            const equalityOptions = ['包含', '不包含'];
+            equalityOptions.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.textContent = option;
+                equalitySelect.appendChild(optionElement);
+            });
+            equalitySelect.value = condition.equality || equalityOptions[0]; // 初始化为相等性选项或默认选项
+            equalityDiv.appendChild(equalitySelect);
+            ConditionTag.appendChild(equalityDiv);
+
+            // 将条件frame添加到卡片中
+            card.appendChild(ConditionTag);
+        }
+
+        // 注意：这里的代码只是框架性的示例，实际开发中还需要考虑事件绑定、状态管理、数据验证等多个方面。
+        // 另外，对于删除和复制按钮的操作，需要根据实际的应用逻辑来编写相应的函数。
+
+        // 假设 column 是卡片应该被添加到的列容器元素
+        // column.appendChild(ConditionTag); // 最后，将卡片添加到列容器中
+
+
+
+
+        column.appendChild(ConditionTag);
+    });
+}
+
+// 新建策略  
+function createNewStrategy() {
+    // 实现新建策略逻辑（此处省略实现细节）  
+    const newStrategy = { name: '未命名', /* ... 其他初始化属性 */ };
+    // 假设我们有一个函数用于在页面上显示新策略
+    showNewStrategy(newStrategy);
+    // 假设我们有一个函数用于将新策略添加到我们的数据结构中
+    addStrategyToData(newStrategy);
+    // 更新按钮并显示新策略信息
+    updateStrategyButtonsAndInfo(/* 获取或更新后的数据 */);
+}
+
+// 显示新建策略
+function showNewStrategy(newStrategy) {
+    // 在这里添加逻辑来在页面上显示新建的策略信息
+    // 这通常包括清空当前显示的策略信息，并填充新策略的信息
+}
+
+// 将新策略添加到数据结构
+function addStrategyToData(newStrategy) {
+    // 在这里添加逻辑来更新你的数据结构以包含新策略
+    // 这可能涉及到修改一个数组或对象来存储所有策略
+}
+
+// 处理保存并返回按钮点击事件
+function handleSaveAndReturn() {
+    // 读取页面上输入框、下拉框的信息
+    const formData = collectFormData();
+    // 打包成JSON
+    const jsonData = JSON.stringify(formData);
+    // 发送POST请求到服务器
+    fetch('/filter/a/strategy', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: jsonData
+    })
+        .then(response => response.json())
+        .then(data => {
+            // 处理服务器响应
+            console.log('Saved successfully:', data);
+            // 可能需要更新页面上的信息或执行其他操作
+        })
+        .catch(error => {
+            console.error('Error saving data:', error);
+        });
+}
+
+// 收集表单数据
+function collectFormData() {
+    // 遍历页面上的输入框、下拉框等元素，收集它们的值
+    // 并返回一个对象，其中包含所有需要保存的数据
+    const formData = {};
+    // 假设你有一些逻辑来填充这个对象
+    return formData;
+}
+
+// 监听浏览器的后退事件
+window.onpopstate = function (event) {
+    // 弹出swal2弹窗询问是否保存
+    swal2.fire({
+        title: '离开前确认',
+        text: '你是否要保存当前的更改？',
+        showCancelButton: true,
+        confirmButtonColor: '#3085d6',
+        cancelButtonColor: '#d33',
+        confirmButtonText: '是',
+        cancelButtonText: '否'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            // 用户点击了“是”，执行保存操作
+            handleSaveAndReturn();
+        } else if (result.isDenied) {
+            // 用户点击了“否”，可以执行其他操作或什么都不做
+        }
+    });
+};
+
+// 监听页面关闭事件
+window.addEventListener('beforeunload', function (e) {
+    // 取消事件的默认动作
+    e.preventDefault();
+    // Chrome 需要返回值来显示自定义消息
+    e.returnValue = '';
+});
+
+// 初始化页面时，从服务器获取数据并更新页面内容
+fetchStrategyData()
+    .then(data => {
+        updateStrategyButtonsAndInfo(data);
+    })
+    .catch(error => {
+        console.error('Error fetching data:', error);
+    });
+
+// 为类名含有strategy的按钮添加点击事件监听器
+document.querySelectorAll('.strategy').forEach(button => {
+    button.addEventListener('click', function () {
+        // 调用HideandShow函数来替换元素
+        const hideElement = document.querySelector('#hideElement');
+        const showElement = document.querySelector('#showElement');
+        HideandShow(hideElement, showElement);
+
+        // 发送GET请求到服务器  
+        fetch('/filter/a/strategy')
+            .then(response => response.json())
+            .then(data => {
+                // 处理服务器响应的JSON数据  
+                // ...  
+            })
+            .catch(error => {
+                console.error('Error fetching data:', error);
+            });
+    });
+});
