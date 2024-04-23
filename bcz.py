@@ -9,7 +9,7 @@ import sqlite3
 import requests
 import threading
 import traceback
-from datetime import datetime
+from datetime import datetime, timedelta, date
 from concurrent.futures import ThreadPoolExecutor
 from openpyxl import Workbook, load_workbook, styles
 from openpyxl.utils import get_column_letter
@@ -23,7 +23,6 @@ class Config:
             'port': 8840,
             'database_path': './data.db',
             'main_token': '',
-            'auth_token': '',
             'output_file': './小班数据.xlsx',
             'daily_record': '59 23 * * *',
             'cache_second': 60,
@@ -34,7 +33,6 @@ class Config:
         self.port = self.raw.get('port', '')
         self.database_path = self.raw.get('database_path', '')
         self.main_token = self.raw.get('main_token', '')
-        self.auth_token = self.raw.get('auth_token', '')
         self.output_file = self.raw.get('output_file', '')
         self.daily_record = self.raw.get('daily_record', '')
         self.cache_second = self.raw.get('cache_second', '')
@@ -96,11 +94,6 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.main_token = value
-        if self.auth_token == '':
-            key = 'auth_token'
-            value = self.default_config_dict[key]
-            self.save(key, value)
-            self.auth_token = value
         if self.output_file == '':
             key = 'output_file'
             value = self.default_config_dict[key]
@@ -126,11 +119,11 @@ class Config:
             'cache_second': self.cache_second,
         }
 
+
 class BCZ:
     def __init__(self, config: Config) -> None:
         '''小班解析类'''
         self.main_token = config.main_token
-        self.auth_token = config.auth_token
         self.invalid_pattern = r'[\000-\010]|[\013-\014]|[\016-\037]'
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
@@ -193,8 +186,11 @@ class BCZ:
             raise Exception(msg)
         group_info = response.json()['data']
         group_list = group_info.get('list') if group_info else []
-        group_dict = {}
-        self.data_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        groups = []
+        leader_name = ''
+        if user := self.getUserInfo(user_id):
+            leader_name = user.get('name', '')
+        self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         for group in group_list:
             group_id = group['id']
             group_name = group['name'] if group['name'] else ''
@@ -202,12 +198,13 @@ class BCZ:
             introduction = group['introduction'] if group['introduction'] else ''
             introduction = re.sub(self.invalid_pattern, '', introduction)
             avatar_frame = group['avatarFrame']['frame'] if group.get('avatarFrame') else ''
-            group_dict[group_id] = {
+            groups.append({
+                'id': group_id,
                 'name': group_name,
                 'share_key': group['shareKey'],
                 'introduction': introduction,
-                'leader': '',
-                'leader_id': '',
+                'leader': leader_name,
+                'leader_id': user_id,
                 'member_count': group['memberCount'],
                 'count_limit': group['countLimit'],
                 'today_daka_count': group['todayDakaCount'],
@@ -218,18 +215,19 @@ class BCZ:
                 'avatar': group['avatar'],
                 'avatar_frame': avatar_frame,
                 'data_time': self.data_time,
-            }
-        return group_dict
+            })
+        return groups
 
-    def getGroupInfo(self, share_key: str) -> dict | None:
+    def getGroupInfo(self, share_key: str, auth_token: str = '') -> dict | None:
         '''获取小班信息'''
         info = {}
-        self.data_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+        self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         url = f'{self.group_detail_url}?shareKey={share_key}'
         headers = {'Cookie': f'access_token="{self.main_token}"'}
         main_response = requests.get(url, headers=headers, timeout=5)
-        headers = {'Cookie': f'access_token="{self.auth_token}"'}
-        auth_response = requests.get(url, headers=headers, timeout=5)
+        if auth_token:
+            headers = {'Cookie': f'access_token="{auth_token}"'}
+            auth_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
             logging.error(f'{msg}\n{main_response.text}')
@@ -269,7 +267,7 @@ class BCZ:
         today_date = main_data.get('todayDate') if main_data else ''
         today_daka_count = 0
         main_member_list = main_data.get('members') if main_data else []
-        member_dict = {}
+        members = []
         for member in main_member_list:
             member_id = member['uniqueId']
             nickname = re.sub(self.invalid_pattern, '', member['nickname'])
@@ -277,11 +275,13 @@ class BCZ:
             if member['completedTime']:
                 today_daka_count += 1
                 completed_time = time.strftime('%H:%M:%S', time.localtime(member['completedTime']))
-            member_dict[member_id] = {
+            members.append({
+                'id': member_id,
                 'group_id': group_id,
                 'group_name': group_name,
                 'nickname': nickname,
                 'group_nickname': '',
+                'avatar': member['avatar'],
                 'book_name': member['bookName'],
                 'today_word_count': member['todayWordCount'],
                 'completed_times': member['completedTimes'],
@@ -290,34 +290,41 @@ class BCZ:
                 'today_study_cheat': '是' if member['todayStudyCheat'] else '否',
                 'today_date': today_date,
                 'data_time': self.data_time,
-            }
+            })
             if member['leader']:
                 info['leader'] = member['nickname']
                 info['leader_id'] = member_id
 
-        auth_data = auth_response.json()['data']
-        auth_member_list = auth_data.get('members') if auth_data else []
-        for member in auth_member_list:
-            member_id = member['uniqueId']
-            nickname = re.sub(self.invalid_pattern, '', member['nickname'])
-            if member_id in member_dict and member_dict[member_id]['nickname'] != nickname:
-                member_dict[member_id]['group_nickname'] = member['nickname']
-            else:
-                member_dict[member_id]['group_nickname'] = ''
+        if auth_token:
+            auth_data = auth_response.json()['data']
+            auth_member_list = auth_data.get('members') if auth_data else []
+            for member in auth_member_list:
+                member_id = member['uniqueId']
+                nickname = re.sub(self.invalid_pattern, '', member['nickname'])
+                member['group_nickname'] = ''
+                for member_info in members:
+                    if member_id == member_info['id'] and member_info['nickname'] != nickname:
+                        member_info['group_nickname'] = member['nickname']
+
         if today_daka_count != 0:
             info['today_daka_count'] = today_daka_count
-        info['members'] = member_dict
+        info['members'] = members
 
         return info
 
     def updateGroupInfo(self, group_list: list[dict], full_info: bool = False) -> list:
         '''获取最新信息并刷新小班信息列表'''
         with ThreadPoolExecutor() as executor:
-            share_keys = []
-            for group_info in group_list:
-                share_keys.append(group_info['share_key'])
-            results = executor.map(self.getGroupInfo, share_keys)
-        for result in results:
+            futures = []
+            for group in group_list:
+                future = executor.submit(
+                    lambda argv: self.getGroupInfo(argv[0], argv[1]),
+                    (group['share_key'], group['auth_token'])
+                )
+                futures.append(future)
+
+        for future in futures:
+            result = future.result()
             if not full_info and 'members' in result:
                 result.pop('members')
             for group_info in group_list:
@@ -339,10 +346,12 @@ class BCZ:
         user_info['group_dict'] = group_dict
         return user_info
 
+
 class SQLite:
     def __init__(self, config: Config) -> None:
         '''数据库类'''
         self.db_path = config.database_path
+        self.cache_second = config.cache_second
         self.init_sql = [
             '''CREATE TABLE IF NOT EXISTS GROUPS (                   -- 小班表
                 GROUP_ID INTEGER,                   -- 小班ID
@@ -411,8 +420,8 @@ class SQLite:
                 NOTICE TEXT,                        -- 小班公告
                 DAILY_RECORD INTEGER,               -- 每日记录
                 LATE_DAKA_TIME TEXT,                -- 晚打卡时间
-                WEEKLY_ABSENCE INTEGER,             -- 每周缺卡上限
-                AUTH_TOKEN TEXT                     -- 主授权令牌
+                AUTH_TOKEN TEXT,                    -- 授权令牌
+                VALID INTEGER                       -- 是否有效
             );'''
         ]
         self.init()
@@ -473,7 +482,7 @@ class SQLite:
         cursor = conn.cursor()
         for group_info in group_list:
             if group_info.get('exception'):
-                return
+                continue
             cursor.execute(
                 f'INSERT OR IGNORE INTO GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
@@ -498,18 +507,18 @@ class SQLite:
             conn.commit()
             self.saveMemberInfo(group_info['members'])
 
-    def saveMemberInfo(self, member_dict: dict, temp: bool = False) -> None:
+    def saveMemberInfo(self, members: list, temp: bool = False) -> None:
         '''仅保存成员详情'''
         table_name = 'MEMBERS'
         if temp:
             table_name = 'T_' + table_name
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        for id, member in member_dict.items():
+        for member in members:
             cursor.execute(
                 f'INSERT OR IGNORE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
-                    id,
+                    member['id'],
                     member['nickname'],
                     member['group_nickname'],
                     member['completed_time'],
@@ -554,18 +563,18 @@ class SQLite:
                     group_info.get('notice', ''),
                     group_info.get('daily_record', 1),
                     group_info.get('late_daka_time', ''),
-                    group_info.get('weekly_absence', 7),
                     group_info.get('auth_token', ''),
+                    group_info.get('valid', 1),
                 )
             )
         conn.commit()
 
-    def deleteObserveGroupInfo(self, group_id) -> None:
-        '''删除关注小班信息'''
+    def disableObserveGroupInfo(self, group_id) -> None:
+        '''禁用关注小班'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
-            'DELETE FROM OBSERVED_GROUPS WHERE GROUP_ID = ?',
+            'UPDATE OBSERVED_GROUPS SET VALID=0 WHERE GROUP_ID = ?',
             (group_id)
         )
         conn.commit()
@@ -618,15 +627,15 @@ class SQLite:
             )
         conn.commit()
 
-    def queryObserveGroupInfo(self, group_id: str = '', full_info: bool=False) -> dict:
+    def queryObserveGroupInfo(self, group_id: str = '', show_token: bool=False) -> dict:
         '''查询关注小班信息'''
         if group_id:
             result = self.read(
-                f'SELECT * FROM OBSERVED_GROUPS WHERE GROUP_ID = ? ORDER BY GROUP_ID ASC',
+                f'SELECT * FROM OBSERVED_GROUPS WHERE VALID = 1 AND GROUP_ID = ? ORDER BY GROUP_ID ASC',
                 [group_id],
             )
         else:
-            result = self.read(f'SELECT * FROM OBSERVED_GROUPS ORDER BY GROUP_ID ASC')
+            result = self.read(f'SELECT * FROM OBSERVED_GROUPS WHERE VALID = 1 ORDER BY GROUP_ID ASC')
         result_keys = [
             'id',
             'name',
@@ -646,13 +655,13 @@ class SQLite:
             'notice',
             'daily_record',
             'late_daka_time',
-            'weekly_absence',
             'auth_token',
+            'valid',
         ]
         group_info = []
         for item in result:
             group_info.append(dict(zip(result_keys, item)))
-        if not full_info:
+        if not show_token:
             for item in group_info:
                 item['auth_token'] = len(item['auth_token']) * '*'
         return group_info
@@ -748,7 +757,7 @@ class SQLite:
             f'SELECT COUNT(*) FROM MEMBERS'
         )[0][0]
 
-    def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> list:
+    def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> dict:
         '''查询用户信息表
 
         Args:
@@ -814,12 +823,11 @@ class SQLite:
         count_sql += sql
         count_result = self.read(count_sql, param)
         count = count_result[0][0]
+        sql += ' ORDER BY GROUP_ID ASC, DATA_TIME DESC'
         page_max = 1
         page_num = 1
         page_count = 'unlimited'
-        if payload.get('page_count', '') == '':
-            pass
-        elif payload.get('page_count', '') != 'unlimited':
+        if payload.get('page_count', '') != 'unlimited':
             page_count = payload.get('page_count', 20)
             page_num = payload.get('page_num', 1)
             page_num = page_num if page_num else 1
@@ -827,7 +835,7 @@ class SQLite:
             page_max = math.ceil(int(count) / int(page_count))
             page_num = page_num if int(page_num) > 0 else 1
             page_num = page_num if int(page_num) < page_max else page_max
-            sql += ' ORDER BY GROUP_ID ASC, DATA_TIME DESC LIMIT ? OFFSET (? - 1) * ?'
+            sql += ' LIMIT ? OFFSET (? - 1) * ?'
             param.append(page_count)
             param.append(page_num)
             param.append(page_count)
@@ -864,16 +872,21 @@ class SQLite:
         )
         data_time = 0
         if result:
-            data_time = int(datetime.strptime(result[0][0], "%Y-%m-%d %H:%M:%S").timestamp())
+            data_time = int(datetime.strptime(result[0][0], '%Y-%m-%d %H:%M:%S').timestamp())
         return data_time
 
-    def truncateTempMemberTable(self) -> None:
+    def deleteTempMemberTable(self, group_id: str = '') -> None:
         '''清除成员临时表数据'''
+        sql = 'DELETE FROM T_MEMBERS WHERE 1=1'
+        params = []
+        if group_id:
+            sql += ' AND GROUP_ID = ?'
+            params.append(group_id)
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        cursor.execute('DELETE FROM T_MEMBERS')
+        cursor.execute(sql, params)
         conn.commit()
-        
+
 
 class Xlsx:
     def __init__(self, config: Config) -> None:
@@ -1000,12 +1013,81 @@ class Schedule:
 def recordInfo(bcz: BCZ, sqlite: SQLite):
     '''记录用户信息'''
     group_info_list = []
-    for group_info in sqlite.queryObserveGroupInfo():
-        if group_info['daily_record']:
-            logging.info(f'正在获取小班[{group_info["name"]}({group_info["id"]})]的数据')
-            group_info_list.append(bcz.getGroupInfo(group_info['share_key']))
+    for group in sqlite.queryObserveGroupInfo(show_token=True):
+        if group['daily_record']:
+            logging.info(f'正在获取小班[{group["name"]}({group["id"]})]的数据')
+            group_info_list.append(bcz.getGroupInfo(group['share_key'], group['auth_token']))
     sqlite.saveGroupInfo(group_info_list)
 
+def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', show_token: bool = False) -> list[dict]:
+    '''刷新成员临时表数据并返回小班数据列表'''
+    data_time = sqlite.queryTempMemberCacheTime()
+    group_list = sqlite.queryObserveGroupInfo(group_id, show_token=True)
+    if int(time.time()) - data_time > sqlite.cache_second or group_id:
+        group_list = bcz.updateGroupInfo(group_list, full_info=True)
+        sqlite.updateObserveGroupInfo(group_list)
+        sqlite.deleteTempMemberTable(group_id)
+        sqlite.saveGroupInfo(group_list, temp=True)
+    for group in group_list:
+        if not show_token:
+            group['auth_token'] = len(group['auth_token']) * '*'
+    return group_list
+
+def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> list[dict]:
+    '''分析打卡数据并返回'''
+    year, week = map(int, week_date.split('-W'))
+    start_of_year = date(year, 1, 1)
+    start_of_week = start_of_year + timedelta(days=(week - 1) * 7 - start_of_year.weekday())
+    sdate = start_of_week.strftime('%Y-%m-%d')
+    end_of_week = start_of_week + timedelta(days=6)
+    edate = end_of_week.strftime('%Y-%m-%d')
+    is_this_week = False
+    if start_of_week <= date.today() <= end_of_week:
+        is_this_week = True
+    for group in group_list:
+        group['week'] = week_date
+        group['total_times'] = 0
+        group['late_times'] = 0
+        group['absence_times'] = 0
+        week_data = sqlite.queryMemberTable(
+            {
+                'group_id': group['id'],
+                'sdate': sdate,
+                'edate': edate,
+                'page_count': 'unlimited',
+                
+            },
+            header = False,
+        )
+        if not group.get('members'):
+            continue
+        for member in group['members']:
+            daka_time_dict = {}
+            late = 0
+            absence = 0
+            if is_this_week and member['completed_time']:
+                group['total_times'] += 1
+            for line_data in week_data['data']:
+                if line_data[0] == member['id']:
+                    if line_data[4] in daka_time_dict:
+                        continue
+                    daka_time_dict[line_data[4]] = line_data[3]
+                    group['total_times'] += 1
+                    if line_data[3] == '':
+                        absence += 1
+                    if group['late_daka_time'] and line_data[3] > group['late_daka_time']:
+                        late += 1
+            if late:
+                group['late_times'] += 1
+            if absence:
+                group['absence_times'] += 1
+            member.update({
+                'daka': daka_time_dict,
+                'late': late,
+                'absence': absence,
+            })
+        list.sort(group['members'], key= lambda x: [x['absence'], x['late']], reverse=True)
+    return group_list
 
 if __name__ == '__main__':
     logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.DEBUG)

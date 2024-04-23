@@ -1,11 +1,10 @@
 import sys
 import time
 import logging
-from datetime import datetime
 
 from flask import Flask, render_template, send_file, jsonify, request
 
-from bcz import Config, BCZ, SQLite, Xlsx, Schedule, recordInfo
+from bcz import Config, BCZ, SQLite, Xlsx, Schedule, recordInfo, refreshTempMemberTable, analyseWeekInfo
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
 app.json.ensure_ascii = False
@@ -118,6 +117,22 @@ def observe_group():
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         return restful(200, msg)
 
+@app.route('/query_group_details', methods=['POST'])
+def query_group_details():
+    '''获取关注小班列表'''
+    group_id = request.json.get('id', '')
+    week = request.json.get('week', '')
+    if not group_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        group_list = refreshTempMemberTable(bcz, sqlite, group_id)
+        analyseWeekInfo(group_list, sqlite, week)
+        if not group_list:
+            return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
+        return restful(200, '', group_list)
+    except Exception as e:
+        return restful(400, str(e))
+
 @app.route('/get_search_option', methods=['GET'])
 def get_search_option():
     option = sqlite.getSearchOption()
@@ -126,13 +141,7 @@ def get_search_option():
 @app.route('/query_member_table', methods=['POST'])
 def query_member_table():
     try:
-        data_time = sqlite.queryTempMemberCacheTime()
-        if int(time.time()) - data_time > config.cache_second:
-            group_list = sqlite.queryObserveGroupInfo()
-            group_list = bcz.updateGroupInfo(group_list, full_info=True)
-            sqlite.truncateTempMemberTable()
-            sqlite.saveGroupInfo(group_list, temp=True)
-
+        refreshTempMemberTable(bcz, sqlite)
         result = sqlite.queryMemberTable(request.json, header=True, union_temp=True)
         return restful(200, '', result)
     except Exception as e:

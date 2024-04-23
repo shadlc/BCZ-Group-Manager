@@ -141,7 +141,7 @@
     <div id="scroll_top_btn" title="回到顶部" onclick="scrollToTop()">▲</div>
   </body>
   <script src="lib/script.js"></script>
-  <script type="text/javascript">
+  <script>
     let page_num = 0
     let page_max = 0
     let observe_groups = [];
@@ -162,24 +162,13 @@
         getSearchOption();
         queryMemberTable();
       });
+      bindScrollToTopBtn(document.querySelector('.wall-container'));
       // let yesterday = new Date();
       // yesterday.setDate(new Date().getDate() - 1);
       // yesterday = yesterday.toISOString().split('T')[0];
       // document.getElementById('sdate_select').value = yesterday;
       // document.getElementById('edate_select').value = yesterday;
     }
-    let container = document.querySelector('.wall-container');
-    container.onscroll = () => {
-      if (container.scrollTop > container.clientHeight * 1.5) {
-        document.getElementById("scroll_top_btn").classList.add('show');
-      } else {
-        document.getElementById("scroll_top_btn").classList.remove('show');
-      }
-    }
-    function scrollToTop() {
-      container.scrollIntoView({ behavior: "smooth" });
-      container.scrollTop = 0;
-    };
 
     // 获取数据查询信息
     function getInfo() {
@@ -226,14 +215,14 @@
 
     // 展示关注小班
     function show_observe_groups() {
-      let content =  '<div style="text-align:start">';
+      let content =  '<div class="start">';
       for (let i in observe_groups) {
         let group = observe_groups[i];
         content += ' <line><a href="../group/'+group.id+'">'+group.name+'</a>'
         if (group.daily_record) {
-          content += '<b style="float:right;padding-left:1rem;">已开启</b>';
+          content += '<b class="float-right">已开启</b>';
         } else {
-          content += '<b style="float:right;padding-left:1rem;">未开启</b>';
+          content += '<b class="float-right">未开启</b>';
         }
         content += '</line>';
       }

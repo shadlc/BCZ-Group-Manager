@@ -8,49 +8,24 @@
     <link rel="shortcut icon" href="../favicon.ico" />
     <link rel="apple-touch-icon" href="../favicon.ico" />
     <link rel="stylesheet" href="../lib/style.css">
-    <style>
-      .inside-bg {
-        background-color: rgb(255, 245, 216);
-      }
-    </style>
   </head>
 
   <body class="inside-bg">
     <main>
-      <div class="group-container"></div>
+      <div class="group-info-container"></div>
       <div class="paper">
-        <div class="input-group hide">
-          <div class="input">
-            <label for="cheat_select">晚卡时间</label>
-            <select id="cheat_select" onkeyup="eventSearch(event)">
-              <option value="">任意</option>
-              <option value="true" selected>是</option>
-              <option value="false">否</option>
-            </select>
+        <div class="member-info-container hide">
+          <div class="input-group hide">
+            <div class="input">
+              <label for="week_input">周数</label>
+              <input type="week" id="week_input" onkeyup="eventSearch(event)" />
+            </div>
+            <div class="btn-group">
+              <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
+              <div id="setting_btn" class="btn" onclick="toggleSettingModal()">设置</div>
+            </div>
           </div>
-          <div class="input">
-            <label for="completed_select">缺卡次数</label>
-            <select id="completed_select" onkeyup="eventSearch(event)">
-              <option value="">任意</option>
-              <option value="true" selected>是</option>
-              <option value="false">否</option>
-            </select>
-          </div>
-          <div class="input">
-            <label for="user_id_input">用户ID</label>
-            <input id="user_id_input" type="number" onkeyup="eventSearch(event)" />
-          </div>
-          <div class="input">
-            <label for="nickname_input">昵称</label>
-            <input id="nickname_input" type="text" onkeyup="eventSearch(event)" />
-          </div>
-          <div class="btn-group">
-            <div id="reset_btn" class="btn" onclick="resetSearch()">重置</div>
-            <div id="search_btn" class="btn" onclick="queryMemberTable()">查询</div>
-            <div id="download_btn" class="btn" onclick="downloadMemberTable(event)">下载</div>
-          </div>
-        </div>
-        <div class="data-container">
+          <div class="details-container"></div>
         </div>
         <span class="loading-text">
           <div class="loader">
@@ -76,20 +51,55 @@
       </div>
     </main>
     <div class="left-corner-btn btn" onclick="backToHome()">回主页</div>
+    <div id="setting_modal" class="modal hide" data-status="hidden" onclick="toggleSettingModal(event)">
+      <div class="modal-content">
+        <span class="modal-close-btn" onclick="toggleSettingModal()"></span>
+        <div class="modal-title">小班设置</div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <div class="input">
+              <label for="record_select">每日记录开关</label>
+              <select id="record_select">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+            </div>
+            <div class="input">
+              <label for="late_time_input">晚卡时间</label>
+              <input type="time" id="late_time_input" />
+            </div>
+            <div class="input">
+              <label for="auth_token_input">授权令牌</label>
+              <input type="text" id="auth_token_input" />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </body>
   <script src="../lib/script.js"></script>
   <script>
+    let href = window.location.href;
+    let group_id = href.substring(href.lastIndexOf('/') + 1);
+    let today = new Date();
+    let adjusted_day = (today.getDay() + 6) % 7 + 1;
+    let first_day_of_year = new Date(today.getFullYear(), 0, 1);
+    let past_days_of_year = (today - first_day_of_year) / 86400000;
+    let current_week = Math.ceil((past_days_of_year + first_day_of_year.getDay() + 1) / 7);
+    current_week = today.getFullYear() + "-W" + ("0" + current_week).slice(-2);
     window.onload = ()=>{
-      var href = window.location.href;
-      var group_id = href.substring(href.lastIndexOf('/') + 1);
-      getGroupInfo(group_id).then((result)=>{
-        if (result) {          
+      let week_input = document.getElementById("week_input");
+      week_input.value = current_week;
+      queryGroupDetails(group_id).then((result)=>{
+        if (result) {
           let loading_text = document.querySelector('.loading-text');
-          loading_text.innerHTML = '';
+          loading_text.classList.add('hide');
           document.querySelector('.input-group').classList.remove('hide');
+          document.querySelector('.member-info-container').classList.remove('hide');
         }
       }
       )
+      bindScrollToTopBtn(document.querySelector('.member-info-container'));
     }
 
     // 返回主页
@@ -129,10 +139,51 @@
       }
     }
 
+    // 打开关闭小班设置模态框
+    function toggleSettingModal(event) {
+      if (event?.target) {
+        if (event?.target.id != 'setting_modal') {
+          return;
+        }
+      }
+      let modal = document.getElementById('setting_modal');
+      let modal_content = modal.children[0];
+      let status = modal.getAttribute('data-status');
+      modal.setAttribute('data-status', '');
+      if (status == 'show') {
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal.classList.add('hide');
+          modal.setAttribute('data-status', 'hidden');
+        }, 500);
+      } else if (status == 'hidden') {
+        modal.classList.remove('hide');
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal_content.style.transform = 'scale(1)';
+          modal.style.opacity = 1;
+        }, 1);
+        setTimeout(()=>{
+          modal.setAttribute('data-status', 'show');
+        }, 500);
+      }
+    }
+
     // 获取小班信息
-    function getGroupInfo(group_id) {
+    function queryGroupDetails() {
       let loading_text = document.querySelector('.loading-text');
-      return fetch('../observe_group?id=' + group_id)
+      let week_input = document.querySelector('#week_input');
+      let payload = {
+        'id': group_id,
+        'week': week_input.value,
+      }
+      return fetch('../query_group_details', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
       .then(response => response.json())
       .then(data => {
         if (data.retcode != 0) {
@@ -152,9 +203,23 @@
       });
     }
 
+    // 事件触发搜索
+    function eventSearch(event) {
+      if (event.key === "Enter" || event.type === 'blur') {
+        queryGroupDetails(event?.target?.value);
+      }
+    }
+
     // 通过数据设置展示小班信息
     function setGroupInfo(group) {
-      let container = document.querySelector('.group-container');
+      document.getElementById('record_select').value = group.daily_record;
+      document.getElementById('late_time_input').value = group.late_daka_time;
+      document.getElementById('auth_token_input').value = group.auth_token;
+      let container = document.querySelector('.group-info-container');
+      let week_count_limit = 1400;
+      if (group.week == current_week) {
+        week_count_limit = group.count_limit*adjusted_day;
+      }
       let group_content = `
         <span class="gloss"></span>
         <span class="eraser" onclick="slideLeft(event)"></span>
@@ -169,7 +234,12 @@
             </div>
             <div class="group-detail">
               <span>班长: `+group.leader+`(`+group.leader_id+`)</span>
-              <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`+Math.round(group.finishing_rate * 100)+`%</span>
+              <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`
+                + Math.round(group.finishing_rate * 100)+`%, `
+                + (group.member_count - group.today_daka_count) +`人未打卡</span>
+              <span>本周总打卡数: `+group.total_times+`/`+week_count_limit+`, `
+                + (group.absence_times) +`人缺卡, `
+                + group.late_times +`人晚卡</span>
               <span>`+group.introduction+`</span>
             </div>
           </div>
@@ -191,13 +261,74 @@
       let info_div = document.createElement('div');
       info_div.className = 'blackboard';
       info_div.innerHTML = group_content;
+      container.innerHTML = '';
       container.insertBefore(info_div, container.firstChild);
     }
 
     // 通过数据设置展示成员信息
     function setMemberInfo(group) {
-      let container = document.querySelector('.paper');
-
+      let container = document.querySelector('.details-container');
+      container.innerHTML = '';
+      for (let i in group.members) {
+        let member = group.members[i];
+        let group_nickname_span = '';
+        let badges = '';
+        if (member.group_nickname) {
+          group_nickname_span += '<span>' + member.group_nickname + '</span>';
+        }
+        if (group.week == current_week && member.completed_time == '') {
+          badges += '<span class="badge blue-border">' + '今日未打卡' + '</span>';
+        }
+        if (member.late) {
+          badges += '<span class="badge yellow-border">晚卡' + member.late + '次</span>';
+        }
+        if (member.absence) {
+          badges += '<span class="badge red-border">漏卡' + member.absence + '次</span>';
+        }
+        if (badges == '') {
+          continue;
+        }
+        let member_content = `
+          <div class="avatar">
+            <img src="`+member.avatar+`" />
+          </div>
+          <div class="member-info">
+            <span>`+member.nickname+`</span>
+            <span>`+member.id+`</span>
+            `+group_nickname_span+`
+          </div>
+          <div class="member-extra">
+            `+badges+`
+          </div>
+        `;
+        let member_table = document.createElement('div');
+        member_table.className = 'info-table member-table';
+        member_table.innerHTML = member_content;
+        let modal_content = '打卡记录为空';
+        if (member.daka.length != 0) {
+          modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th></tr>';
+          for (let date in member.daka) {
+            let daka_time = member.daka[date] ? member.daka[date] : '未打卡';
+            modal_content += '<tr><td>'+date+'</td><td>'+daka_time+'</td></tr>';
+          }
+          let daka_time = member.completed_time ? member.completed_time : '未打卡';
+          modal_content += '<tr><td>'+member.today_date+'</td><td>'+daka_time+'</td></tr>';
+          modal_content += '</table>';
+        }
+        member_table.onclick = () => {
+          showModal(modal_content, '打卡详情');
+        }
+        container.appendChild(member_table, container.lastChild);
+      }
+      if (container.innerHTML == '') {
+        if (group.exception) {
+          container.innerHTML = '<line class="center">'+group.exception+'</line>';
+        } else if (group.total_times) {
+          container.innerHTML = '<line class="center">所有人都在规定时间内完成学习了~</br>好耶! ヾ(≧▽≦*)o</line>';
+        } else {
+          container.innerHTML = '<line class="center">本周记录数据为空~</br>o((>ω< ))o</line>';
+        }
+      }
     }
 
   </script>

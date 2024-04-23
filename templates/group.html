@@ -65,7 +65,7 @@
       </div>
     </main>
     <div id="group_search_modal" class="modal hide" data-status="hidden" onclick="toggleGroupSearchModal(event)">
-      <div class="modal-content notice">
+      <div class="modal-content">
         <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>
         <div class="modal-title">添加小班</div>
         <div class="modal-body">
@@ -130,7 +130,7 @@
           let group_div = document.createElement('div');
           group_div.className = 'group';
           if (group.exception) {
-            notify('小班'+group.name+'的数据获取失败! \n原因为: '+group.exception);
+            // notify('小班'+group.name+'的数据获取失败! \n原因为: '+group.exception);
             group_div.className += ' invalid';
           }
           group_div.innerHTML = group_content;
@@ -149,7 +149,7 @@
       });
     }
 
-    // 关闭小班搜索模态框
+    // 打开关闭小班搜索模态框
     function toggleGroupSearchModal(event) {
       if (event?.target) {
         if (event?.target.id != 'group_search_modal') {
@@ -238,7 +238,7 @@
           group_div.className = 'group brief';
           group_div.innerHTML = group_content;
           group_div.addEventListener('click', ()=>{
-            addObserveGroup(group.share_key);
+            addObserveGroup(group);
           });
           container.appendChild(group_div);
         }
@@ -262,18 +262,29 @@
     }
 
     // 添加关注小班
-    function addObserveGroup(share_key) {
-      payload = {'share_key': share_key}
-      fetch('observe_group', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      })
-      .then(response => {
-        return response.json();
-      })
-      .then(data => {
-        notify(data.msg);
+    function addObserveGroup(group) {
+      let content = `
+        <line>是否添加此小班?</line>
+        <div class="modal-text">`
+          +`\n小班名称: `+group.name
+          +`\n小班ID: `+group.id
+          +`\n邀请码: `+group.share_key
+          +`\n班长: `+group.leader
+          +`\n班长ID: `+group.leader_id
+          +`</div>`;
+      showModal(content, '添加小班', ()=>{
+        let payload = {'share_key': group.share_key};
+        fetch('observe_group', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        })
+        .then(response => {
+          return response.json();
+        })
+        .then(data => {
+          notify(data.msg);
+        });
       });
     }
 

@@ -216,25 +216,49 @@ function notify(content) {
 }
 
 // 展示模态框
-function showModal(content='', title='') {
+function showModal(content='', title='', callback=null) {
   document.querySelectorAll('.modal').forEach((modal)=>{
     if (modal.id == '') {
       modal.remove();
     }
   });
-  let modal_content = `
-    <div class="modal-content notice">
-      <span class="modal-close-btn" onclick="toggleModal()"></span>
-      <div class="modal-title">`+title+`</div>
-      <div class="modal-body">`+content+`</div>
-    </div>
-  `
+  let modal_content = document.createElement('div');
+  modal_content.className = 'modal-content';
+  let modal_close_btn = document.createElement('span');
+  modal_close_btn.className = 'modal-close-btn';
+  modal_close_btn.onclick = ()=>{toggleModal()};
+  modal_content.appendChild(modal_close_btn, null);
+  let modal_title = document.createElement('div');
+  modal_title.className = 'modal-title';
+  modal_title.innerHTML = title;
+  modal_content.appendChild(modal_title, null);
+  let modal_body = document.createElement('div');
+  modal_body.className = 'modal-body';
+  modal_body.innerHTML = content;
+  modal_content.appendChild(modal_body, null);
+  let modal_footer = document.createElement('div');
+  modal_footer.className = 'modal-footer';
+  modal_content.appendChild(modal_footer, null);
+
   let modal = document.createElement('div');
   modal.className = 'modal hide';
   modal.setAttribute('data-status', 'hidden');
   modal.onclick = (event) =>{toggleModal(event)};
-  modal.innerHTML = modal_content;
-  document.body.appendChild(modal, document.body.lastChild);
+  modal.appendChild(modal_content, null);
+  document.body.appendChild(modal, null);
+
+  if (callback) {
+    let confirm_btn = document.createElement('div');
+    confirm_btn.className = 'btn';
+    confirm_btn.innerText = '确认';
+    confirm_btn.onclick = (event) =>{toggleModal();callback(event)};
+    let deny_btn = document.createElement('div');
+    deny_btn.className = 'btn';
+    deny_btn.innerText = '取消';
+    deny_btn.onclick = ()=>{toggleModal()};
+    modal_footer.appendChild(confirm_btn, null);
+    modal_footer.insertBefore(deny_btn, null);
+  }
   toggleModal();
 }
 
@@ -272,4 +296,24 @@ function toggleModal(event) {
       }, 500);
     }
   })
+}
+
+// 为元素绑定返回顶部按钮
+function bindScrollToTopBtn(element) {
+  let scroll_to_top_btn = document.createElement('div');
+  scroll_to_top_btn.id = 'scroll_top_btn';
+  scroll_to_top_btn.title = '回到顶部';
+  scroll_to_top_btn.innerText = '▲';
+  document.body.appendChild(scroll_to_top_btn, document.body.lastChild);
+  scroll_to_top_btn.onscroll = () => {
+    if (element.scrollTop > element.clientHeight * 1.5) {
+      document.getElementById("scroll_top_btn").classList.add('show');
+    } else {
+      document.getElementById("scroll_top_btn").classList.remove('show');
+    }
+  }
+  scroll_to_top_btn.onclick = () => {
+    element.scrollTo({top: 0, behavior: "smooth" });
+  };
+
 }
