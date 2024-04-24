@@ -278,6 +278,11 @@
         }
         if (group.week == current_week && member.completed_time == '') {
           badges += '<span class="badge blue-border">' + '今日未打卡' + '</span>';
+        } else if (group.week == current_week && group.late_daka_time != '' && member.completed_time > group.late_daka_time) {
+          badges += '<span class="badge purple-border">' + '今日晚卡' + '</span>';
+        }
+        if (member.today_study_cheat == '是') {
+          badges += '<span class="badge red-border">今日作弊</span>';
         }
         if (member.late) {
           badges += '<span class="badge yellow-border">晚卡' + member.late + '次</span>';
@@ -306,13 +311,14 @@
         member_table.innerHTML = member_content;
         let modal_content = '打卡记录为空';
         if (member.daka.length != 0) {
-          modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th></tr>';
+          modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th><th>单词数</th></tr>';
           for (let date in member.daka) {
-            let daka_time = member.daka[date] ? member.daka[date] : '未打卡';
-            modal_content += '<tr><td>'+date+'</td><td>'+daka_time+'</td></tr>';
+            let daka_time = member.daka[date].time ? member.daka[date].time : '未打卡';
+            let today_word_count = member.daka[date].count;
+            modal_content += '<tr><td>'+date+'</td><td>'+daka_time+'</td><td>'+today_word_count+'</td></tr>';
           }
           let daka_time = member.completed_time ? member.completed_time : '未打卡';
-          modal_content += '<tr><td>'+member.today_date+'</td><td>'+daka_time+'</td></tr>';
+          modal_content += '<tr><td>'+member.today_date+'</td><td>'+daka_time+'</td><td>'+member.today_word_count+'</td></tr>';
           modal_content += '</table>';
         }
         member_table.onclick = () => {

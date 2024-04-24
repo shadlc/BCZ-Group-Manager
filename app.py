@@ -2,9 +2,13 @@ import sys
 import time
 import logging
 
-from flask import Flask, render_template, send_file, jsonify, request, redirect, url_for
+from flask import Flask, render_template, send_file, jsonify, request, redirect
 
-from bcz import Config, BCZ, SQLite, Xlsx, Schedule, recordInfo, refreshTempMemberTable, analyseWeekInfo
+from src.bcz import BCZ, SQLite, recordInfo, refreshTempMemberTable, analyseWeekInfo
+from src.config import Config
+from src.sqlite import SQLite
+from src.xlsx import Xlsx
+from src.schedule import Schedule
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
 app.json.ensure_ascii = False
@@ -16,13 +20,13 @@ sqlite = SQLite(config)
 processing = False
 
 if not config.main_token:
-    print('未配置授权令牌，请在[config.json]文件中修改后重启，程序会在5秒后自动退出')
+    print('未配置授权令牌，请在[config.json]文件中填入正确main_token后重启，程序会在5秒后自动退出')
     time.sleep(5)
     sys.exit(0)
 
 @app.route('/')
 def index():
-    return redirect(url_for('group'))
+    return redirect('group')
 
 @app.route('/group', methods=['GET'])
 def group():
@@ -165,6 +169,11 @@ def search_group():
     except Exception as e:
         return restful(400, f'{e}')
 
+@app.after_request
+def add_header(response):
+    response.headers['Server'] = r'BCZ-Group-Manager/1.0'
+    return response
+
 def restful(code: int, msg: str = '', data: dict = {}) -> None:
     '''以RESTful的方式进行返回响应'''
     retcode = 1
@@ -180,8 +189,9 @@ if __name__ == '__main__':
     print(' * BCZ-Group-Manger 启动中...')
     if '--debug' in sys.argv:
         logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+    else:
+        logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
     if config.daily_record:
-        print(f' * BCZ-Group-Manger 每日记录已开启 {config.daily_record}')
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
     # app.run(config.host, config.port, debug=True)
     app.run(config.host, config.port)
