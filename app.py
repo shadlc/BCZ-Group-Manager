@@ -2,7 +2,7 @@ import sys
 import time
 import logging
 
-from flask import Flask, render_template, send_file, jsonify, request
+from flask import Flask, render_template, send_file, jsonify, request, redirect, url_for
 
 from bcz import Config, BCZ, SQLite, Xlsx, Schedule, recordInfo, refreshTempMemberTable, analyseWeekInfo
 
@@ -22,7 +22,7 @@ if not config.main_token:
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return redirect(url_for('group'))
 
 @app.route('/group', methods=['GET'])
 def group():
