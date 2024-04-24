@@ -5,6 +5,7 @@ import logging
 from flask import Flask, render_template, send_file, jsonify, request
 
 from bcz import Config, BCZ, SQLite, Xlsx, Schedule, recordInfo
+from filter import Filter
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
 app.json.ensure_ascii = False
