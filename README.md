@@ -64,17 +64,20 @@
 ### 用户信息
 `https://social.baicizhan.com/api/deskmate/personal_details?uniqueId=XXXXXX`
 
-### 班级列表
+### 小班列表
 `https://group.baicizhan.com/group/own_groups?uniqueId=XXXXXX`
 
 ### 授权班列表
 `https://group.baicizhan.com/group/get_group_authorization_page?uniqueId=XXXXXX`
 
-### 班级排名
+### 小班排名
 `https://group.baicizhan.com/group/get_group_rank`
 
-### 打卡信息
+### 小班打卡信息
 `https://group.baicizhan.com/group/information?shareKey=XXXXXX`
+
+### 搜索用户
+`https://social.baicizhan.com/api/social/get_friend_state?uniqueId=XXXXXX`
 
 ### 铜板数量
 `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_vo`

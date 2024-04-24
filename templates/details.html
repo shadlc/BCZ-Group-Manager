@@ -17,8 +17,8 @@
         <div class="member-info-container hide">
           <div class="input-group hide">
             <div class="input">
-              <label for="week_input">周数</label>
-              <input type="week" id="week_input" onkeyup="eventSearch(event)" />
+              <label for="week_select">周数</label>
+              <select id="week_select" onkeyup="eventSearch(event)"></select>
             </div>
             <div class="btn-group">
               <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
@@ -88,17 +88,18 @@
     let current_week = Math.ceil((past_days_of_year + first_day_of_year.getDay() + 1) / 7);
     current_week = today.getFullYear() + "-W" + ("0" + current_week).slice(-2);
     window.onload = ()=>{
-      let week_input = document.getElementById("week_input");
-      week_input.value = current_week;
-      queryGroupDetails(group_id).then((result)=>{
-        if (result) {
-          let loading_text = document.querySelector('.loading-text');
-          loading_text.classList.add('hide');
-          document.querySelector('.input-group').classList.remove('hide');
-          document.querySelector('.member-info-container').classList.remove('hide');
-        }
-      }
-      )
+      getGroupDetailsOption().then(()=>{
+        document.querySelector('.input-group').classList.remove('hide');
+        let week_select = document.getElementById("week_select");
+        week_select.value = current_week;
+        queryGroupDetails(group_id).then((result)=>{
+          if (result) {
+            let loading_text = document.querySelector('.loading-text');
+            loading_text.classList.add('hide');
+            document.querySelector('.member-info-container').classList.remove('hide');
+          }
+        });
+      });
       bindScrollToTopBtn(document.querySelector('.member-info-container'));
     }
 
@@ -174,10 +175,10 @@
     // 获取小班信息
     function queryGroupDetails() {
       let loading_text = document.querySelector('.loading-text');
-      let week_input = document.querySelector('#week_input');
+      let week_select = document.querySelector('#week_select');
       let payload = {
         'id': group_id,
-        'week': week_input.value,
+        'week': week_select.value,
       }
       return fetch('../query_group_details', {
         method: 'POST',
@@ -200,6 +201,30 @@
         console.error('请求错误:', error);
         notify('请求错误:' + error);
         loading_text.innerHTML = error;
+      });
+    }
+
+    // 获取筛选选项
+    function getGroupDetailsOption() {
+      return fetch('../get_group_details_option')
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let week = data.data.week;
+        let week_select = document.querySelector('#week_select');
+        for(let key in week) {
+          let option = document.createElement('option');
+          option.value = key;
+          option.text = week[key];
+          week_select.add(option);
+        }
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
       });
     }
 

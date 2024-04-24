@@ -2,7 +2,7 @@ import re
 import time
 import logging
 import requests
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime
 from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Config
@@ -326,6 +326,30 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
             reverse=True
         )
     return group_list
+
+def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
+    '''获取指定时间指定范围内所有的周'''
+    target_date = datetime.today()
+    if date:
+        try:    
+            target_date = datetime.strptime(date, '%Y-%m-%d')
+        except Exception as e:
+            logger.error(f'转换时间[{date}]出错: {e}')
+
+    start_date = target_date - timedelta(days=range_day[0])
+    end_date = target_date + timedelta(days=range_day[1])
+
+    week_dict = {}
+    current_date = start_date
+    while current_date <= end_date + timedelta(days=7):
+        week_number = current_date.isocalendar()[1]
+        week_start = current_date - timedelta(days=current_date.weekday())
+        week_end = week_start + timedelta(days=6)
+        week = f'{current_date.year}-W{week_number:02d}'
+        week_str = f'{week_start.strftime("%m月%d日")} - {week_end.strftime("%m月%d日")} {current_date.year}年第{week_number:02d}周'
+        week_dict[week] = week_str
+        current_date += timedelta(7)
+    return week_dict
 
 if __name__ == '__main__':
     logger.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logger.DEBUG)
