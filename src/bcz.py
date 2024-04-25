@@ -186,6 +186,8 @@ class BCZ:
                 group['leader_id'] = member_id
 
         if auth_token:
+            if auth_response.status_code != 200 or auth_response.json().get('code') != 1:
+                group['token_invalid'] = True
             auth_data = auth_response.json()['data']
             auth_member_list = auth_data.get('members') if auth_data else []
             for member in auth_member_list:
@@ -239,24 +241,21 @@ class BCZ:
 def recordInfo(bcz: BCZ, sqlite: SQLite):
     '''记录用户信息'''
     group_info_list = []
-    for group in sqlite.queryObserveGroupInfo(show_token=True):
+    for group in sqlite.queryObserveGroupInfo():
         if group['daily_record']:
             logger.info(f'正在获取小班[{group["name"]}({group["id"]})]的数据')
             group_info_list.append(bcz.getGroupInfo(group['share_key'], group['auth_token']))
     sqlite.saveGroupInfo(group_info_list)
 
-def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', show_token: bool = False) -> list[dict]:
+def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '') -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
     data_time = sqlite.queryTempMemberCacheTime()
-    group_list = sqlite.queryObserveGroupInfo(group_id, show_token=True)
+    group_list = sqlite.queryObserveGroupInfo(group_id)
     if int(time.time()) - data_time > sqlite.cache_second or group_id:
         group_list = bcz.updateGroupInfo(group_list, full_info=True)
         sqlite.updateObserveGroupInfo(group_list)
         sqlite.deleteTempMemberTable(group_id)
         sqlite.saveGroupInfo(group_list, temp=True)
-    for group in group_list:
-        if not show_token:
-            group['auth_token'] = len(group['auth_token']) * '*'
     return group_list
 
 def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> list[dict]:
@@ -295,7 +294,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                 group['total_times'] += 1
             for line_data in week_data['data']:
                 if line_data[0] == member['id']:
-                    if line_data[4] in daka_time_dict:
+                    if line_data[4] in daka_time_dict or line_data[4] == member['today_date']:
                         continue
                     daka_time_dict[line_data[4]] = {
                         'time': line_data[3],

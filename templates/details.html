@@ -15,10 +15,31 @@
       <div class="group-info-container"></div>
       <div class="paper">
         <div class="member-info-container hide">
-          <div class="input-group hide">
+          <div class="input-group">
             <div class="input">
               <label for="week_select">周数</label>
               <select id="week_select" onkeyup="eventSearch(event)"></select>
+            </div>
+            <div class="input">
+              <label for="display_type">展示类型</label>
+              <div id="display_type" class="btn-group">
+                <div class="checkbox">
+                  <input type="checkbox" id="display_cheat" checked />
+                  <label for="display_cheat">作弊</label>
+                </div>
+                <div class="checkbox">
+                  <input type="checkbox" id="display_late" checked />
+                  <label for="display_late">晚卡</label>
+                </div>
+                <div class="checkbox">
+                  <input type="checkbox" id="display_absence" checked />
+                  <label for="display_absence">缺卡</label>
+                </div>
+                <div class="checkbox">
+                  <input type="checkbox" id="display_all" />
+                  <label for="display_all">全员</label>
+                </div>
+              </div>
             </div>
             <div class="btn-group">
               <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
@@ -72,6 +93,9 @@
               <label for="auth_token_input">授权令牌</label>
               <input type="text" id="auth_token_input" />
             </div>
+            <div class="input-group">
+              <div id="search_btn" class="btn" onclick="saveConfig()">保存设置</div>
+            </div>
           </div>
         </div>
       </div>
@@ -79,6 +103,7 @@
   </body>
   <script src="../lib/script.js"></script>
   <script>
+    let origin_auth_token = '';
     let href = window.location.href;
     let group_id = href.substring(href.lastIndexOf('/') + 1);
     let today = new Date();
@@ -89,7 +114,6 @@
     current_week = today.getFullYear() + "-W" + ("0" + current_week).slice(-2);
     window.onload = ()=>{
       getGroupDetailsOption().then(()=>{
-        document.querySelector('.input-group').classList.remove('hide');
         let week_select = document.getElementById("week_select");
         week_select.value = current_week;
         queryGroupDetails(group_id).then((result)=>{
@@ -193,6 +217,10 @@
           return;
         }
         let group = data.data[0];
+        origin_auth_token = group.auth_token;
+        if (group.token_invalid) {
+          notify('当前小班授权令牌已失效，请设置新的授权令牌');
+        }
         setGroupInfo(group);
         setMemberInfo(group);
         return true;
@@ -301,21 +329,24 @@
         if (member.group_nickname) {
           group_nickname_span += '<span>' + member.group_nickname + '</span>';
         }
-        if (group.week == current_week && member.completed_time == '') {
+        if (group.week == current_week && member.completed_time == ''
+            && document.getElementById('display_absence').checked) {
           badges += '<span class="badge blue-border">' + '今日未打卡' + '</span>';
-        } else if (group.week == current_week && group.late_daka_time != '' && member.completed_time > group.late_daka_time) {
+        } else if (group.week == current_week && group.late_daka_time != ''
+                   && member.completed_time > group.late_daka_time 
+                   && document.getElementById('display_late').checked) {
           badges += '<span class="badge purple-border">' + '今日晚卡' + '</span>';
         }
-        if (member.today_study_cheat == '是') {
+        if (member.today_study_cheat == '是' && document.getElementById('display_cheat').checked) {
           badges += '<span class="badge red-border">今日作弊</span>';
         }
-        if (member.late) {
+        if (member.late && document.getElementById('display_late').checked) {
           badges += '<span class="badge yellow-border">晚卡' + member.late + '次</span>';
         }
-        if (member.absence) {
+        if (member.absence && document.getElementById('display_absence').checked) {
           badges += '<span class="badge red-border">漏卡' + member.absence + '次</span>';
         }
-        if (badges == '') {
+        if (badges == '' && !document.getElementById('display_all').checked) {
           continue;
         }
         let member_content = `
@@ -355,11 +386,56 @@
         if (group.exception) {
           container.innerHTML = '<line class="center">'+group.exception+'</line>';
         } else if (group.total_times) {
-          container.innerHTML = '<line class="center">所有人都在规定时间内完成学习了~</br>好耶! ヾ(≧▽≦*)o</line>';
+          container.innerHTML = '<line class="center">没有符合筛选条件的同学~</br> ヾ(≧▽≦*)o</line>';
         } else {
           container.innerHTML = '<line class="center">本周记录数据为空~</br>o((>ω< ))o</line>';
         }
       }
+    }
+
+    function saveConfig() {
+      showModal('确保设置无误？该操作不可逆', '修改配置', ()=>{
+        let record_enabled = document.getElementById('record_select')?.value;
+        let late_daka_time = document.getElementById('late_time_input')?.value;
+        let auth_token = document.getElementById('auth_token_input')?.value;
+        if (origin_auth_token != auth_token) {
+          showModal('此次操作修改了授权令牌，请确认无误', '', ()=>{
+            postObserveGroup({
+              'id': group_id,
+              'daily_record': record_enabled,
+              'late_daka_time': late_daka_time,
+              'auth_token': auth_token
+            });
+          })
+        } else {
+            postObserveGroup({
+              'id': group_id,
+              'daily_record': record_enabled,
+              'late_daka_time': late_daka_time
+            });
+        }
+      })
+    }
+
+    function postObserveGroup(payload) {
+      return fetch('../observe_group', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(data => {
+        notify(data.msg);
+        if (data.retcode != 0) {
+          return;
+        }
+        toggleSettingModal();
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
     }
 
   </script>

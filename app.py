@@ -93,6 +93,8 @@ def observe_group():
             group_list = sqlite.queryObserveGroupInfo(group_id)
             group_list = bcz.updateGroupInfo(group_list, full_info)
             sqlite.updateObserveGroupInfo(group_list)
+            for group in group_list:
+                group['auth_token'] = len(group['auth_token']) * '*'
             if not group_list:
                 return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
             return restful(200, '', group_list)
@@ -111,10 +113,12 @@ def observe_group():
             msg = '成功添加新的关注小班ヾ(≧▽≦*)o'
         elif 'id' in request.json:
             group_id = request.json.get('id')
-            if share_key in [group_info['id'] for group_info in group_list]:
-                return restful(403, '该小班已存在ヾ(≧▽≦*)o')
-            group_info = sqlite.queryObserveGroupInfo(group_id=group_id, full_info=True)
+            if int(group_id) not in [group_info['id'] for group_info in group_list]:
+                return restful(403, '该小班不存在Σ(っ °Д °;)っ')
+            group_info = sqlite.queryObserveGroupInfo(group_id=group_id)[0]
             group_info.update(request.json)
+            if group_info['late_daka_time'] == '00:00':
+                group_info['late_daka_time'] = ''
             sqlite.updateObserveGroupInfo([group_info])
             msg = '成功修改关注小班的设置ヾ(≧▽≦*)o'
         else:
@@ -130,6 +134,8 @@ def query_group_details():
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
         group_list = refreshTempMemberTable(bcz, sqlite, group_id)
+        for group in group_list:
+            group['auth_token'] = len(group['auth_token']) * '*'
         analyseWeekInfo(group_list, sqlite, week)
         if not group_list:
             return restful(404, '未查询到该小班Σ(っ °Д °;)っ')

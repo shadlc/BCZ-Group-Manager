@@ -247,50 +247,34 @@ class SQLite:
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         for group_info in group_list:
-            cursor.execute(
-                '''
-                    UPDATE OBSERVED_GROUPS SET
-                        GROUP_ID = ?,
-                        NAME = ?,
-                        SHARE_KEY = ?,
-                        INTRO = ?,
-                        LEADER = ?,
-                        LEADER_ID = ?,
-                        MEMBER_COUNT = ?,
-                        COUNT_LIMIT = ?,
-                        TODAY_DAKA = ?,
-                        FINISHING_RATE = ?,
-                        CREATED_TIME = ?,
-                        RANK = ?,
-                        GROUP_TYPE = ?,
-                        AVATAR = ?,
-                        AVATAR_FRAME = ?,
-                        NOTICE = ?
-                    WHERE GROUP_ID = ?
-                ''',
-                (
-                    group_info['id'],
-                    group_info['name'],
-                    group_info['share_key'],
-                    group_info['introduction'],
-                    group_info['leader'],
-                    group_info['leader_id'],
-                    group_info['member_count'],
-                    group_info['count_limit'],
-                    group_info['today_daka_count'],
-                    group_info['finishing_rate'],
-                    group_info['created_time'],
-                    group_info['rank'],
-                    group_info['type'],
-                    group_info['avatar'],
-                    group_info['avatar_frame'],
-                    group_info['notice'],
-                    group_info['id'],
-                )
-            )
+            sql = f'UPDATE OBSERVED_GROUPS SET'
+            params = []
+            if group_info.get('id') != None: sql += ' GROUP_ID = ?,'; params.append(group_info.get('id'))
+            if group_info.get('name') != None: sql += ' NAME = ?,'; params.append(group_info.get('name'))
+            if group_info.get('share_key') != None: sql += ' SHARE_KEY = ?,'; params.append(group_info.get('share_key'))
+            if group_info.get('introduction') != None: sql += ' INTRO = ?,'; params.append(group_info.get('introduction'))
+            if group_info.get('leader') != None: sql += ' LEADER = ?,'; params.append(group_info.get('leader'))
+            if group_info.get('leader_id') != None: sql += ' LEADER_ID = ?,'; params.append(group_info.get('leader_id'))
+            if group_info.get('member_count') != None: sql += ' MEMBER_COUNT = ?,'; params.append(group_info.get('member_count'))
+            if group_info.get('count_limit') != None: sql += ' COUNT_LIMIT = ?,'; params.append(group_info.get('count_limit'))
+            if group_info.get('today_daka_count') != None: sql += ' TODAY_DAKA = ?,'; params.append(group_info.get('today_daka_count'))
+            if group_info.get('finishing_rate') != None: sql += ' FINISHING_RATE = ?,'; params.append(group_info.get('finishing_rate'))
+            if group_info.get('created_time') != None: sql += ' CREATED_TIME = ?,'; params.append(group_info.get('created_time'))
+            if group_info.get('rank') != None: sql += ' RANK = ?,'; params.append(group_info.get('rank'))
+            if group_info.get('type') != None: sql += ' GROUP_TYPE = ?,'; params.append(group_info.get('type'))
+            if group_info.get('avatar') != None: sql += ' AVATAR = ?,'; params.append(group_info.get('avatar'))
+            if group_info.get('avatar_frame') != None: sql += ' AVATAR_FRAME = ?,'; params.append(group_info.get('avatar_frame'))
+            if group_info.get('notice') != None: sql += ' NOTICE = ?,'; params.append(group_info.get('notice'))
+            if group_info.get('daily_record') != None: sql += ' DAILY_RECORD = ?,'; params.append(group_info.get('daily_record'))
+            if group_info.get('late_daka_time') != None: sql += ' LATE_DAKA_TIME = ?,'; params.append(group_info.get('late_daka_time'))
+            if group_info.get('auth_token') != None: sql += ' AUTH_TOKEN = ?,'; params.append(group_info.get('auth_token'))
+            if group_info.get('valid') != None: sql += ' VALID = ?'; params.append(group_info.get('valid'))
+            sql += 'WHERE GROUP_ID = ?'
+            params.append(group_info['id'])
+            cursor.execute(sql, params)
         conn.commit()
 
-    def queryObserveGroupInfo(self, group_id: str = '', show_token: bool=False) -> dict:
+    def queryObserveGroupInfo(self, group_id: str = '') -> dict:
         '''查询关注小班信息'''
         if group_id:
             result = self.read(
@@ -324,9 +308,6 @@ class SQLite:
         group_info = []
         for item in result:
             group_info.append(dict(zip(result_keys, item)))
-        if not show_token:
-            for item in group_info:
-                item['auth_token'] = len(item['auth_token']) * '*'
         return group_info
 
     def getDays(self) -> int:

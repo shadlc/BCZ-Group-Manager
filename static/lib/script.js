@@ -191,7 +191,7 @@ function slideLeft(event) {
 }
 
 // 弹窗提示
-function notify(content) {
+function notify(content, delay=5000) {
   if (!document.getElementById('notify_container')) {
     let notify_container = document.createElement('div');
     notify_container.id = 'notify_container';
@@ -212,21 +212,17 @@ function notify(content) {
     setTimeout(() => {
       container.removeChild(notification);
     }, 800);
-  }, 3000);
+  }, delay);
 }
 
 // 展示模态框
 function showModal(content='', title='', callback=null) {
-  document.querySelectorAll('.modal').forEach((modal)=>{
-    if (modal.id == '') {
-      modal.remove();
-    }
-  });
+  let timestamp = Date.now();
   let modal_content = document.createElement('div');
   modal_content.className = 'modal-content';
   let modal_close_btn = document.createElement('span');
   modal_close_btn.className = 'modal-close-btn';
-  modal_close_btn.onclick = ()=>{toggleModal()};
+  modal_close_btn.onclick = ()=>{toggleModal(null, 'modal-' + timestamp)};
   modal_content.appendChild(modal_close_btn, null);
   let modal_title = document.createElement('div');
   modal_title.className = 'modal-title';
@@ -242,8 +238,9 @@ function showModal(content='', title='', callback=null) {
 
   let modal = document.createElement('div');
   modal.className = 'modal hide';
+  modal.id = 'modal-' + timestamp;
   modal.setAttribute('data-status', 'hidden');
-  modal.onclick = (event) =>{toggleModal(event)};
+  modal.onclick = (event) =>{toggleModal(event, 'modal-' + timestamp)};
   modal.appendChild(modal_content, null);
   document.body.appendChild(modal, null);
 
@@ -251,26 +248,30 @@ function showModal(content='', title='', callback=null) {
     let confirm_btn = document.createElement('div');
     confirm_btn.className = 'btn';
     confirm_btn.innerText = '确认';
-    confirm_btn.onclick = (event) =>{toggleModal();callback(event)};
+    confirm_btn.onclick = (event) =>{toggleModal(null, 'modal-' + timestamp);callback(event)};
     let deny_btn = document.createElement('div');
     deny_btn.className = 'btn';
     deny_btn.innerText = '取消';
-    deny_btn.onclick = ()=>{toggleModal()};
+    deny_btn.onclick = ()=>{toggleModal(null, 'modal-' + timestamp)};
     modal_footer.appendChild(confirm_btn, null);
     modal_footer.insertBefore(deny_btn, null);
   }
-  toggleModal();
+  toggleModal(null, 'modal-' + timestamp);
 }
 
 // 打开关闭模态框
-function toggleModal(event) {
+function toggleModal(event, modal_id='') {
   if (event?.target) {
     if (!event?.target.classList.contains('modal')) {
       return;
     }
   }
-  document.querySelectorAll('.modal').forEach((modal)=>{
-    if (modal.id != '') {
+  let modal_pattern = '.modal';
+  if (modal_id) {
+    modal_pattern += '#' + modal_id;
+  }
+  document.querySelectorAll(modal_pattern).forEach((modal)=>{
+    if (modal_id == '' && modal.id != '') {
       return;
     }
     let modal_content = modal.children[0];
@@ -282,6 +283,7 @@ function toggleModal(event) {
       setTimeout(()=>{
         modal.classList.add('hide');
         modal.setAttribute('data-status', 'hidden');
+        modal.remove();
       }, 500);
     } else if (status == 'hidden') {
       modal.classList.remove('hide');
