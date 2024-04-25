@@ -16,34 +16,51 @@
 
 
 
-//初始化部分
+// 初始化部分
 
 
-//初始化数据，从服务器获取
+// 初始化数据，从服务器获取
 var initData = null;
 
 
-//全局服务器地址
+// 全局服务器地址
 const url = 'ws://192.168.1.101:8080';
 
 
 
 // Establish WebSocket connection
-var socket = new WebSocket(`${url}/filter/a/`);
+var socket = new WebSocket(`${url}/filter/a/notice`);
 socket.onmessage = function (event) {
-    if (event.data) {
+    if (event.data.type === 'init') {
         initData = JSON.parse(event.data);
         init(initData);
     }
+    else if (event.data.type === 'update') {
+        initData = JSON.parse(event.data);
+        init(initData);
+    }
+    else if (event.data.type === 'notice') {
+        showNotice(JSON.parse(event.data));
+    }
 };
-socket.onopen = function () {
-    console.log('WebSocket connection established');
+// 确保WebSocket连接打开  
+socket.onopen = function (event) {
+    console.log("WebSocket is connected now.");
 };
+
+// 处理WebSocket错误  
 socket.onerror = function (error) {
-    console.log('WebSocket error: ' + error);
+    console.error("WebSocket Error: " + error);
 };
-socket.onclose = function () {
-    console.log('WebSocket connection closed');
+
+// 处理WebSocket关闭  
+socket.onclose = function (event) {
+    if (event.wasClean) {
+        console.log(`[close] Connection closed cleanly, code=${event.code} reason=${event.reason}`);
+    } else {
+        // 例如，服务器进程被杀死，浏览器刷新，网络断开等情况  
+        console.log('[close] Connection died');
+    }
 };
 
 function getTimestamp() {
@@ -662,9 +679,9 @@ function addStrategy() {
                 ]
             }
         ],
-            // ... 其他子条目  
+        // ... 其他子条目  
     };
-    
+
     data.strategies.push(newStrategy);
 
     // 更新按钮
@@ -677,8 +694,7 @@ function addStrategy() {
     // 更新页面显示
     showStrategyInfo(newStrategy);
 }
-function copyCurrentStrategy() 
-{
+function copyCurrentStrategy() {
 
     // 提醒先保存
 
@@ -716,8 +732,7 @@ function copyCurrentStrategy()
     showStrategyInfo(name);
 
 }
-function deleteCurrentStrategy() 
-{
+function deleteCurrentStrategy() {
     // 警告
     Swal.fire({
         title: '删除策略',
@@ -737,9 +752,8 @@ function deleteCurrentStrategy()
     });
 
 }
-function saveCurrentStrategy() 
-{
-// 因为页面上的输入框没有监听，所以此函数用于保存页面上的数据到currentStrategy对象，并保存到data对象，然后发送到服务器
+function saveCurrentStrategy() {
+    // 因为页面上的输入框没有监听，所以此函数用于保存页面上的数据到currentStrategy对象，并保存到data对象，然后发送到服务器
 
     // 保存策略的逻辑（后台数据）
     const strategyCard = container.getElementByClass('strategy')
@@ -781,21 +795,20 @@ function saveCurrentStrategy()
         },
         body: JSON.stringify(data)
     }).then(response => {
-        if (response.ok) 
+        if (response.ok)
             Swal.fire({
-              title: '保存成功',
-              type: 'success',
-              showConfirmButton: false,
-              timer: 1000
+                title: '保存成功',
+                type: 'success',
+                showConfirmButton: false,
+                timer: 1000
             });
-        })
-    .catch(error => {
-        console.error('Error:', error);
-    });
-    
+    })
+        .catch(error => {
+            console.error('Error:', error);
+        });
+
 }
-function addSubItem(button) 
-{
+function addSubItem(button) {
     // 在策略中添加子条目，仍属于策略部分
 
     // 添加后台数据
@@ -844,11 +857,10 @@ function addSubItem(button)
 }
 
 // 显示策略信息  
-function showStrategyInfo(strategyName) 
-{
+function showStrategyInfo(strategyName) {
     // 更改按钮样式
     const operationButtons = document.getElementById('operation');
-    
+
     operationButtons.querySelectorAll('.button').forEach(btn => btn.classList.remove('active'));
     operationButtons.find(strategyName).classList.add('active');
 
@@ -860,7 +872,7 @@ function showStrategyInfo(strategyName)
     // 清空column内容
     const column = container;
     column.innerHTML = '';
-    
+
 
     // 创建并添加策略名的card  (包括操作按钮)
 
@@ -982,8 +994,8 @@ function copySubItem(subItemName) {
     // 同步后台数据
     subItem.name = name;
     currentStrategy.subItems.push(subItem);
-    
-    
+
+
     // 复制子条目卡片  
     const subItemCard = button.parentNode.parentNode.parentNode;
     const copiedSubItem = document.createElement('div');
@@ -1021,7 +1033,7 @@ function addCondition(button) {
         equality: "包含"
     };
     subItem.Conditions.push(Condition);
-  
+
 
 
     // 添加条件卡片  
@@ -1110,5 +1122,105 @@ window.addEventListener('beforeunload', function (e) {
 
 
 
+// 通知栏实现  
 
+
+function showNotice(data) {
+    var height = data.height; // 读取高度  
+    var content = data.content; // 读取html内容  
+    var confirm = data.confirm; // 读取是否需要确认  
+    var confirm_content = data.confirm_content; // 读取确认html内容  
+    var confirm_id = data.confirm_id; // 读取确认ID  
+
+
+    // 4.25 进度到此处
+
+
+    // 创建新的card notice类的框  
+    const newCard = document.createElement('div');
+    newCard.innerHTML = `
+        <div>
+            <div class="notice-line" style="width: 100%; height: 3px; background: black; position: absolute; top: 0; left: 0;"></div>
+            <div class="card notice" style="height: ${height}px; opacity: 0; position: relative;">
+                ${content}
+            </div>
+        </div>
+    `;
+    document.getElementByClass('left-column').appendChild(newCard);
+
+    // 向下平滑移动所有已存在的card notice类  
+    $('.card.notice').animate({
+        'margin-bottom': '+=' + (parseInt(height, 10) + 10) + 'px'
+    }, 500);
+
+
+    // 添加触摸事件监听器  
+    var touchStartX = 0;
+    var isSwiping = false;
+
+    newCard.on('touchstart', function (e) {
+        touchStartX = e.originalEvent.touches[0].clientX; // 记录触摸开始的X坐标  
+        isSwiping = true; // 标记为正在滑动  
+    });
+
+    newCard.on('touchmove', function (e) {
+        if (!isSwiping) return; // 如果不是滑动状态，直接返回  
+        var touchEndX = e.originalEvent.touches[0].clientX; // 获取触摸结束的X坐标   
+        var swipeDistance = touchEndX - touchStartX; // 计算滑动距离  
+        var cardWidth = $newCard.width(); // 获取通知框的宽度  
+        var swipeThreshold = cardWidth * 0.5; // 设定滑动阈值，比如50%的宽度  
+
+        if (Math.abs(swipeDistance) > swipeThreshold) { // 如果滑动距离超过阈值  
+            // 停止所有动画并立即删除通知框  
+            $newCard.stop().remove();
+            isSwiping = false; // 标记为不是滑动状态  
+        }
+    });
+
+    $newCard.on('touchend', function (e) {
+        isSwiping = false; // 标记为不是滑动状态  
+    });
+
+    // ...之前的代码，包括动画和Swal弹窗...
+    // 渐显新框  
+    newCard.animate({
+        opacity: 1
+    }, 500, function () {
+        // 线的宽度逐渐减少到0%  
+        newCard.find('.notice-line').animate({
+            width: '0%'
+        }, 10000, function () {
+            // 10秒后淡出通知框  
+            setTimeout(function () {
+                newCard.animate({
+                    opacity: 0
+                }, 500, function () {
+                    // 删除通知框  
+                    newCard.remove();
+                });
+            }, 10000);
+        });
+    });
+
+    // 如果需要确认，则弹出Swal  
+    if (confirm) {
+        Swal.fire({
+            title: '确认',
+            text: confirm_content,
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: '确认'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                // 确认后通过WebSocket发送数据回服务器  
+                socket.send(JSON.stringify({
+                    confirm_id: confirm_id,
+                    operation: data // 假设需要将整个data对象发送回服务器  
+                }));
+            }
+        });
+    }
+};
 
