@@ -4,7 +4,7 @@ import logging
 
 from flask import Flask, render_template, send_file, jsonify, request, redirect
 
-from src.bcz import BCZ, SQLite, recordInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
+from src.bcz import BCZ, recordInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
 from src.config import Config
 from src.sqlite import SQLite
 from src.xlsx import Xlsx
@@ -139,7 +139,7 @@ def query_group_details():
 
 @app.route('/get_group_details_option', methods=['GET'])
 def get_group_details_option():
-    option = {'week': getWeekAroundDate()}
+    option = {'week': getWeekOption()}
     return restful(200, '', option)
 
 @app.route('/get_search_option', methods=['GET'])
