@@ -436,51 +436,77 @@ function Show(element) {
 //策略按钮点击事件
 
 
-
-// 假设HideandShow函数已经定义好  
-
-
+const data = {};
 // 假设服务器响应的JSON结构如下  
 const mockServerResponse = {
     totalStrategies: 3,
-    strategies: [
-        {
-            name: "策略一",
+    strategies: {
+        "策略一": {
             weekDays: ["周一", "周三"],
-            times: ["09:00-10:00"],
+            timesStart: ["09:00"],
+            timesEnd: ["10:00"],
             minPeople: 5,
             subItemsCount: 2,
-            subItems: [
-                {
-                    name: "子条目1",
+            subItems: {
+                "子条目1": {
                     operation: "接受",
                     validity: "本周",
                     conditionsCount: 3,
                     conditions: [
-                        { name: "同桌天数", value: 5, operator: ">", equalTo: false },
+                        { name: "同桌天数", value: 5, operator: "大于", equality: false },
                         // ... 其他条件  
                     ]
                 },
                 // ... 其他子条目  
-            ]
+            }
+        },
+        "策略二": {
+            weekDays: ["周二", "周四"],
+            timesStart: ["10:00"],
+            timesEnd: ["11:00"],
+            minPeople: 3,
+            subItemsCount: 1,
+            subItems: {
+                "子条目1": {
+                    operation: "拒绝",
+                    validity: "本周",
+                    conditionsCount: 2,
+                    conditions: [
+                        { name: "同桌天数", value: 3, operator: "大于", equality: false },
+                        // ... 其他条件  
+                    ]
+                },
+                // ... 其他子条目  
+            }
         },
         // ... 其他策略  
-    ]
+    }
 };
-
-// 模拟从服务器获取JSON的异步操作  
-function fetchStrategyData() {
+//点击策略按钮时调用
+function showStrategyPage(button)
+{
+    shareKey = button.classList[1];
+    data = fetchStrategyData(shareKey, 1);
+    updateStrategyButtonsAndInfo(data);
+}
+// 初始化：模拟从服务器获取JSON的异步操作  
+function fetchStrategyData(shareKey, week) {
     return new Promise((resolve) => {
         setTimeout(() => {
             resolve(mockServerResponse);
         }, 500); // 模拟网络延迟  
     });
+    fetch(`${url}/strategy?shareKey=${shareKey}&week=${week}`)
+        .then(response)
+        .catch(error => {
+            console.error('Error:', error);
+        });
+    return response.json();
 }
 
-// 更新策略按钮并显示第一个策略信息  
+// 初始化：更新策略按钮并显示第一个策略信息  
 function updateStrategyButtonsAndInfo(data) {
     const operationCard = document.getElementById('operation');
-    //   const column = document.getElementById('column');  
     operationCard.innerHTML = ''; // 清空operation内容 ，删除现有所有按钮  
 
 
@@ -491,7 +517,7 @@ function updateStrategyButtonsAndInfo(data) {
         btn.textContent = text;
         if (text === '新建') {
             btn.addEventListener('click', () => {
-                // 点击时新建策略（此处省略实现细节）  
+
                 createNewStrategy();
             });
         }
@@ -505,49 +531,233 @@ function updateStrategyButtonsAndInfo(data) {
 
 
     // 创建并添加策略按钮  
-    data.strategies.forEach((strategy, index) => {
+    data.strategies.forEach((strategyname, strategy) => {
         const btn = document.createElement('div');
         btn.classList.add('center-tag button');
         btn.textContent = strategy.name;
         btn.addEventListener('click', () => {
             // 点击时更新页面显示该策略信息（此处省略实现细节）  
-            showStrategyInfo(strategy);
-            // 切换按钮样式  
-
+            showStrategyInfo(strategyname);
             strategyButtons = operationCard.querySelectorAll('.center-tag');
             // 先清除所有按钮的active样式
             strategyButtons.forEach(btn => btn.classList.remove('active'));
+            // 切换按钮样式  
             btn.classList.add('active');
         });
         if (index === 0) {
             btn.classList.add('active'); // 默认选中第一个策略按钮  
+            showStrategyInfo(strategyname);
         }
         operationCard.appendChild(btn);
     });
+}
+// 初始化结束
+// 以下是 策略 实现细节
+
+
+function showWeekDays() {
+    const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+    const inputOptions = {};
+    days.forEach((day, index) => {
+        inputOptions[index] = day;
+    });
+
+    Swal.fire({
+        title: '选择星期',
+        input: 'checkbox',
+        inputOptions: inputOptions,
+        inputValidator: (result) => {
+            if (!result) {
+                return '至少选择一天';
+            }
+        },
+        inputPlaceholder: '选择星期',
+        showCancelButton: true,
+        confirmButtonText: '确认',
+        cancelButtonText: '取消'
+    }).then((result) => {
+        if (result.isConfirmed) {
+            const selectedDays = Object.keys(result.value).map(key => days[key]);
+            // 输出选中的星期字符串列表
+            console.log(selectedDays);
+            return selectedDays;
+        }
+    });
+}
+
+function addStrategy() {
+    // 新建策略的逻辑（后台数据）  
+    const newStrategy = {
+        name: "新策略",
+        weekDays: ["周一", "周三"],
+        timesStart: ["09:00"],
+        timesEnd: ["10:00"],
+        minPeople: 5,
+        subItemsCount: 2,
+        subItems: {
+            "子条目1": {
+                operation: "接受",
+                validity: "本周",
+                conditionsCount: 3,
+                conditions: [
+                    { name: "同桌天数", value: 5, operator: "大于", equality: false },
+                    // ... 其他条件  
+                ]
+            },
+            // ... 其他子条目  
+        }
+    };
+    data.strategies.push(newStrategy);
+
+    // 更新按钮
+    newButton = document.createElement('div');
+    newButton.innerHTML = `
+        <div class="center-tag button" id="${newStrategy.name}">${newStrategy.name} onclick="showStrategyInfo(this.id)"></div>
+    `;
+    document.getElementById('operation').appendChild(newButton);
+
+    // 更新页面显示
+    showStrategyInfo(newStrategy);
+}
+function deleteStrategy(button) {
+    // 删除策略的逻辑（后台数据）  
+    const strategyName = button.parentNode.parentNode.parentNode.id;
+    const index = data.strategies.findIndex(strategy => strategy.name === strategyName);
+    data.strategies.splice(index, 1);
+
+    // 删除策略卡片
+    button.parentNode.parentNode.parentNode.remove();
+
+}
+function saveStrategy(strategyName) {
+    // 保存策略的逻辑（后台数据）  
+
+    const strategyName = this.parentNode.parentNode.parentNode.id;
+    const strategyData = { strategyName: {} };
+    const index = data.strategies.findIndex(strategy => strategy.name === strategyName);
+    data.strategies[index] = this.parentNode.parentNode.parentNode.strategy;
+
+}
+function addSubItem(button) {
+    // 在策略中添加子条目，仍属于策略部分
+
+    // 添加后台数据
+    const newSubItem = {
+        name: "子条目1",
+        operation: "接受",
+        validity: "本次",
+        conditions: [
+
+        ]
+    };
+
+    thisStrategy = data.strategies.find(strategy => strategy.name === button.parentNode.parentNode.parentNode.id)
+    thisStrategy.subItems.push(newSubItem);
 
 
 
-    // 显示第一个策略的信息  
-    showStrategyInfo(data.strategies[0]);
+    // 添加子条目卡片  
+    const subItemCard = document.createElement('div');
+    subItemCard.classList.add('card subItem');
+    subItemCard.id = 'newSubItem';
+
+    subItemCard.innerHTML = `
+        <div class="tag subItemName">
+            <input type="text" value="子条目1">
+        </div>
+        <div class="tag actions">
+            <div class="center-tag button" onclick="addCondition(this)">添加条件</div>
+            <div class="center-tag button" onclick="copySubItem(this)">复制</div>
+            <div class="center-tag button" onclick="deleteSubItem(this)">删除</div>
+        </div>
+    `;
+
+    document.getElementById('column').appendChild(subItemCard);
 }
 
 // 显示策略信息  
-function showStrategyInfo(strategy) {
+function showStrategyInfo(strategyName) {
     const column = document.getElementById('column');
     column.innerHTML = ''; // 清空column内容  
 
-    // 创建并添加策略名的card  
+    // 获得策略对象
+    const strategy = data.strategies.find(strategy => strategy.name === strategyName);
+
+    // 创建并添加策略名的card  (包括操作按钮)
     const strategyCard = document.createElement('div');
-    strategyCard.classList.add('card');
+    strategyCard.classList.add('card strategyName');
     strategyCard.id = strategy.name;
 
-
-    //4.23进度到这里
 
     const strategyNameInput = document.createElement('input');
     strategyNameInput.value = strategy.name;
     strategyCard.appendChild(strategyNameInput);
-    // 添加子条目、复制、删除按钮（此处省略实现细节）  
+
+    // 添加子条目、复制、删除按钮 
+    const actionButtonsDiv = document.createElement('div');
+    actionButtonsDiv.innerHTML = `
+        <div class="center-tag button" onclick="addSubItem(this)">添加子条目</div>
+        <div class="center-tag button" onclick="copySubItem(this)">复制</div>
+        <div class="center-tag button" onclick="deleteSubItem(this)">删除</div>
+    `;
+
+    addSubItemButton.addEventListener('click', () => {
+        // 添加子条目的逻辑  (要记得后台数据的更新)
+        const newSubItem = {
+            name: "子条目1",
+            operation: "接受",
+            validity: "本次",
+            conditions: [
+
+            ]
+        };
+        strategy.subItems.push(newSubItem);
+
+        // 添加子条目卡片  
+        const subItemCard = document.createElement('div');
+        subItemCard.classList.add('card subItem');
+        subItemCard.id = newSubItem.name;
+
+        subItemCard.innerHTML = `
+            <div class="tag subItemName">
+                <input type="text" value="${newSubItem.name}">
+            </div>
+            <div class="tag actions">
+                <div class="center-tag button" onclick="addCondition(this)">添加条件</div>
+                <div class="center-tag button" onclick="copySubItem(this)">复制</div>
+                <div class="center-tag button" onclick="deleteSubItem(this)">删除</div>
+            </div>
+        `;
+
+    });
+
+    const copyButton = document.createElement('div');
+    copyButton.classList.add('center-tag button');
+    copyButton.textContent = '复制';
+    copyButton.addEventListener('click', () => {
+        // 复制策略的逻辑  
+        const copiedStrategy = JSON.parse(JSON.stringify(strategy));
+        copiedStrategy.name = '复制的' + copiedStrategy.name;
+        data.strategies.push(copiedStrategy);
+        updateStrategyButtonsAndInfo(data);
+    });
+
+    const deleteButton = document.createElement('div');
+    deleteButton.classList.add('center-tag button');
+    deleteButton.textContent = '删除';
+    deleteButton.addEventListener('click', () => {
+        // 删除策略的逻辑  
+        const index = data.strategies.indexOf(strategy);
+        data.strategies.splice(index, 1);
+        updateStrategyButtonsAndInfo(data);
+    });
+
+    actionButtonsDiv.appendChild(addSubItemButton);
+    actionButtonsDiv.appendChild(copyButton);
+    actionButtonsDiv.appendChild(deleteButton);
+
+    strategyCard.appendChild(actionButtonsDiv);
     column.appendChild(strategyCard);
 
     // 创建并添加每个子条目的card  
@@ -557,7 +767,7 @@ function showStrategyInfo(strategy) {
         const subItemNameCard = document.createElement('div');
         subItemNameCard.classList.add('card subItemName');
         subItemNameCard.id = subItem.name;
-        
+
         const subItemNameInput = document.createElement('input');
         subItemNameInput.value = subItem.name;
         subItemNameCard.appendChild(subItemNameInput);
@@ -602,8 +812,8 @@ function showStrategyInfo(strategy) {
                             </select>
                         </div>
                         <div class="tag actions">
-                            <button>复制</button>
-                            <button>删除</button>
+                            <div class="center-tag button">复制</div>
+                            <div class="center-tag button">删除</div>
                         </div>
                     </div>
             ```
@@ -612,7 +822,7 @@ function showStrategyInfo(strategy) {
 
 
         subItem.Conditions.forEach((Condition) => {
-            // 创建卡片元素  
+            // 创建tag元素  
             const ConditionTag = document.createElement('div');
             ConditionTag.id = Condition.name;
             ConditionTag.classList.add('tag');
@@ -625,36 +835,27 @@ function showStrategyInfo(strategy) {
             nameInput.value = Condition.name; // 初始化为子条目的名称  
             nameDiv.appendChild(nameInput);
 
-            // 添加添加条件、复制和删除按钮  
-            // const actionButtonsDiv = document.createElement('div');
-            // actionButtonsDiv.classList.add('tag actions');
-            // const addConditionButton = document.createElement('div');
-            // addConditionButton.classList.add('center-tag button');
-            // addConditionButton.textContent = '添加条件';
-            // addConditionButton.addEventListener('click', () => {
-            //     // 添加条件的逻辑  
-            //     addConditionTag(ConditionTag);
-            // });
+            // 添加复制和删除按钮到子条目名称右侧
             const copyButton = document.createElement('div');
             copyButton.classList.add('center-tag button');
             copyButton.textContent = '复制';
             copyButton.addEventListener('click', () => {
                 // 复制子条目的逻辑
-                const elementToCopy = document.getElementById(Condition.name);
+
                 // 创建一个新的元素，并将要复制的元素的innerHTML赋值给新元素
                 const copiedElement = document.createElement('div');
-                copiedElement.innerHTML = elementToCopy.innerHTML;
+                copiedElement.innerHTML = copyButton.parentNode.parentNode.parentNode.innerHTML;
                 // 将新创建的元素插入到目标位置
                 document.getElementById(subItem.name).appendChild(copiedElement);
             });
             const deleteButton = document.createElement('div');
+            deleteButton.classList.add('center-tag button');
             deleteButton.textContent = '删除';
             deleteButton.addEventListener('click', () => {
-                // 删除子条目的逻辑  
-                // ...  
-                ConditionTag.remove();
+                // 删除子条目的逻辑
+                deleteButton.parentNode.parentNode.parentNode.remove();
             });
-            actionButtonsDiv.appendChild(addConditionButton);
+
             actionButtonsDiv.appendChild(copyButton);
             actionButtonsDiv.appendChild(deleteButton);
 
@@ -663,7 +864,7 @@ function showStrategyInfo(strategy) {
 
             // 创建子条目操作下拉框  
             const actionDiv = document.createElement('div');
-            actionDiv.classList.add('card-action');
+            actionDiv.classList.add('tag action');
             const actionSelect = document.createElement('select');
             const actionOptions = ['接受', '移出'];
             actionOptions.forEach(option => {
@@ -677,7 +878,7 @@ function showStrategyInfo(strategy) {
 
             // 创建子条目操作有效期下拉框  
             const validityDiv = document.createElement('div');
-            validityDiv.classList.add('card-validity');
+            validityDiv.classList.add('tag validity');
             const validitySelect = document.createElement('select');
             const validityOptions = ['本次', '今天', '本周'];
             validityOptions.forEach(option => {
@@ -788,17 +989,82 @@ function showStrategyInfo(strategy) {
     });
 }
 
-// 新建策略  
-function createNewStrategy() {
-    // 实现新建策略逻辑（此处省略实现细节）  
-    const newStrategy = { name: '未命名', /* ... 其他初始化属性 */ };
-    // 假设我们有一个函数用于在页面上显示新策略
-    showNewStrategy(newStrategy);
-    // 假设我们有一个函数用于将新策略添加到我们的数据结构中
-    addStrategyToData(newStrategy);
-    // 更新按钮并显示新策略信息
-    updateStrategyButtonsAndInfo(/* 获取或更新后的数据 */);
+
+// 以下是 子条目 实现细节
+function copySubItem(button) {
+    // 同步后台数据
+
+    thisStrategy = data.strategies.find(strategy => strategy.name === button.parentNode.parentNode.parentNode.id)
+    thisSubItem = thisStrategy.subItems.find(subItem => subItem.name === button.parentNode.parentNode.id)
+        .name = '复制的' + button.parentNode.parentNode.parentNode.id;
+    // 复制子条目卡片  
+    const subItemCard = button.parentNode.parentNode.parentNode;
+    const copiedSubItem = document.createElement('div');
+    copiedSubItem.classList.add('card subItem');
+
+    copiedSubItem.innerHTML = subItemCard.innerHTML;
+    document.getElementById('column').appendChild(copiedSubItem);
 }
+function deleteSubItem(button) {
+    // 删除子条目卡片  
+    const subItemCard = button.parentNode.parentNode.parentNode;
+    subItemCard.remove();
+}
+function addCondition(button) {
+    // 添加条件卡片  
+    const conditionCard = document.createElement('div');
+    conditionCard.classList.add('card-condition');
+
+    conditionCard.innerHTML = `
+        <div class="tag name">
+            <select>
+                <option>同桌天数</option>
+                <option>总榜最长天数</option>
+                <option>今日已打卡0/1</option>
+                <option>作弊0/1</option>
+                <option>总榜最高完成率</option>
+                <option>小队头像框</option>
+                <option>上周打卡天数</option>
+                <option>本周打卡天数</option>
+                <option>加入天数</option>
+                <option>上周晚卡天数</option>
+                <option>本周晚卡天数</option>
+            </select>
+        </div>
+        <div class="tag operator">
+            <select>
+                <option>大于</option>
+                <option>小于</option>
+            </select>
+        </div>
+        <div class="tag value">
+            <input type="number">
+        </div>
+        <div class="tag equality">
+            <select>
+                <option>包含</option>
+                <option>不包含</option>
+            </select>
+        </div>
+        <div class="tag actions">
+            <div class="center-tag button">复制</div>
+            <div class="center-tag button">删除</div>
+        </div>
+    `;
+
+    document.getElementById('newSubItem').appendChild(conditionCard);
+}
+
+
+
+//以下是 条件 实现细节
+function copyConditionTag(button) {
+    // 复制条件卡片  
+    const conditionCard = button.parentNode.parentNode.parentNode;
+}
+
+
+
 
 // 显示新建策略
 function showNewStrategy(newStrategy) {
@@ -872,7 +1138,7 @@ window.addEventListener('beforeunload', function (e) {
     // 取消事件的默认动作
     e.preventDefault();
     // Chrome 需要返回值来显示自定义消息
-    e.returnValue = '';
+    e.returnValue = '直接关闭页面将不会保存更改的策略';
 });
 
 // 初始化页面时，从服务器获取数据并更新页面内容
