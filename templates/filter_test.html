@@ -34,6 +34,7 @@
             padding-top: 150px;
             display: inline-flex;
             flex-wrap: nowrap;
+            position: relative;
             justify-content: space-between;
             max-width: 1000px;
             min-width: 400px;
@@ -41,17 +42,25 @@
             margin: 0 auto
         }
 
-        .column {
+        .left-column {
             background: rgba(255, 255, 255, 0);
             padding: 5px;
-        }
-
-        .left-column {
+            position: absolute;
+            left: 0;
+            top: 150px;
             width: 30%;
+            animation: Fade 0.5s forwards;
         }
 
         .right-column {
+            background: rgba(255, 255, 255, 0);
+            padding: 5px;
+            position: absolute;
+            right: 0;
+            top: 150px;
             width: 60%;
+            animation: Fade 0.5s forwards;
+            /*默认改为隐藏*/
         }
 
         .column-gap {
@@ -60,7 +69,7 @@
 
         .card {
             width: 100%;
-            background: rgba(255, 255, 255, 0.7);
+            background: rgba(255, 255, 255, 0.6);
             margin-bottom: 10px;
             padding: 10px;
 
@@ -102,42 +111,92 @@
     <!-- 动画 -->
     <style>
         @keyframes Fade {
-          0% {
-            opacity: 1;
-            transform: translateX(-300px);
-          }
-          20%{
-            opacity:1;
-            transform: translateX(-275px);
-          }
-          90%{
-            opacity: 0;
-            transform: translateX(-625px);
-          }
-          100% {
-            opacity: 0;
-            transform: translateX(0px);
-          }
+            0% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            20% {
+                opacity: 1;
+                transform: translateX(25px);
+            }
+
+            90% {
+                opacity: 0;
+                transform: translateX(-325px);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(300px);
+            }
         }
+
         @keyframes Show {
-          0% {
-            opacity: 0;
-            transform: translateX(0px);
-          }
-          20% {
-            opacity: 0;
-            transform: translateX(50px);
-          }
-          90% {
-            opacity: 1;
-            transform: translateX(-300px);
-          }
-          100% {
-            opacity: 1;
-            transform: translateX(-300px);
-          }
+            0% {
+                opacity: 0;
+                transform: translateX(300px);
+            }
+
+            20% {
+                opacity: 0;
+                transform: translateX(350px);
+            }
+
+            90% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
         }
-    
+
+        @keyframes FadeRevert {
+            0% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            20% {
+                opacity: 1;
+                transform: translateX(-25px);
+            }
+
+            90% {
+                opacity: 0;
+                transform: translateX(325px);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(-300px);
+            }
+        }
+
+        @keyframes ShowRevert {
+            0% {
+                opacity: 0;
+                transform: translateX(-300px);
+            }
+
+            20% {
+                opacity: 0;
+                transform: translateX(-350px);
+            }
+
+            90% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+        }
     </style>
     <!-- 头像、标签、按钮、图表样式 -->
     <style>
@@ -202,8 +261,8 @@
         .button:hover {
             background-color: #00000030;
         }
-        
-        .active{
+
+        .active {
             /*被激活的按钮样式*/
 
             background-color: #00000050;
@@ -230,7 +289,7 @@
 <body>
     <div class="container">
 
-        <div class="left-column column">
+        <div class="left-column homepage-column">
             <div class="card">
                 <div class="tag" id="userInfo" style="justify-content:start">
                     <div class="avatar" id="useravatar"></div>
@@ -283,17 +342,87 @@
         <div class="column-gap"></div>
 
 
-        <div class="right-column column">
+        <div class="right-column classinfo-column">
             <!-- 班级卡片循环开始 -->
-
+            <div class="card">Class Card</div>
             <!-- 班级卡片循环结束，根据后台数据重复添加 -->
         </div>
+        <div class="right-column strategy-column">
+            <!-- 策略卡片循环开始 -->
+            <br>
+            <div class="card">strategy Card</div>
+
+        </div>
+        <div class="right-column edit-board">
+            <br>
+            <br>
+            <div class="card">Edit Board</div>
+        </div>
+        <div class="left-column notice-column">
+            <br>
+            <br>
+            <br>
+            <div class="card">Notice Card</div>
+        </div>
+
 
     </div>
 </body>
 
 <script>
-    
+    function test() {
+        setTimeout(function () {
+            // 正向轮动
+            document.getElementsByClassName('classinfo-column')[0].style.animation = 'Show 0.5s forwards';
+            document.getElementsByClassName('homepage-column')[0].style.animation = 'Show 0.5s forwards';
+            setTimeout(function () {
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 1000);
+            setTimeout(function () {
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('edit-board')[0].style.animation = 'Show 0.5s forwards';
+            }, 2000);
+            setTimeout(function () {
+                document.getElementsByClassName('edit-board')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 3000);
+            setTimeout(function () {
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('notice-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 4000);
+            setTimeout(function () {
+                document.getElementsByClassName('notice-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 5000);
+
+
+            // 反向轮动
+            setTimeout(function () {
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 6000);
+            setTimeout(function () {
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('edit-board')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 7000);
+            setTimeout(function () {
+                document.getElementsByClassName('edit-board')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 8000);
+            setTimeout(function () {
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('notice-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 9000);
+            setTimeout(function () {
+                document.getElementsByClassName('notice-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 10000);
+        }, 750);
+
+    }
+
+    window.onload = test()
 </script>
 
 </html>

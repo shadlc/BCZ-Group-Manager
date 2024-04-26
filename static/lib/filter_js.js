@@ -23,7 +23,7 @@
 */
 
 /* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
-/*功能module：发送请求，动画切换， */
+/*功能module：发送请求，发送websocket，ajax动画切换和ajax返回， */
 /* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
 
 
@@ -46,23 +46,17 @@ function sendRequest(data, operation) {
 
 }
 //动画切换函数
-function Fade(elementName) {
-    document.getElementById(elementName).style.animation = 'Fade 0.8s forwards';
-}
-function Show(elementName) {
-    document.getElementById(elementName).style.animation = 'Show 0.8s forwards';
-}
-function SwitchLeft(elementHide, elementShow)
-//切换页面时使用，在添加动画的同时注册历史记录
+function SwitchLeft(elementShow)
+// 切换左半栏，同时记录历史记录
 {
-    document.getElementById(elementHide).style.animation = 'Hide 0.8s forwards';
+    document.getElementById(historyLeft.top()).style.animation = 'Fade 0.8s forwards';
     document.getElementById(elementShow).style.animation = 'Show 0.8s forwards';
     historyLeft.push(elementShow);
 }
-function SwitchRight(elementHide, elementShow)
-// 这个是右半边，刚才是左半边
+function SwitchRight(elementShow)
+// 这个是右半边
 {
-    document.getElementById(elementHide).style.animation = 'Hide 0.8s forwards';
+    document.getElementById(historyRight.top()).style.animation = 'Fade 0.8s forwards';
     document.getElementById(elementShow).style.animation = 'Show 0.8s forwards';
     historyRight.push(elementShow);
 }
@@ -74,20 +68,21 @@ function SwitchPop()
         window.history.back();
     }
     if (historyLeft.length > 0) {
-        document.getElementById(historyLeft.top()).style.animation = 'Hide 0.8s forwards';
+        // 反向动画切换
+        document.getElementById(historyLeft.top()).style.animation = 'FadeRevert 0.8s forwards';
         historyLeft.pop();
-        document.getElementById(historyLeft.top()).style.animation = 'Show 0.8s forwards';
+        document.getElementById(historyLeft.top()).style.animation = 'ShowRevert 0.8s forwards';
     }
     if (historyRight.length > 0) {
-        document.getElementById(historyRight.top()).style.animation = 'Hide 0.8s forwards';
+        document.getElementById(historyRight.top()).style.animation = 'FadeRevert 0.8s forwards';
         historyRight.pop();
-        document.getElementById(historyRight.top()).style.animation = 'Show 0.8s forwards';
+        document.getElementById(historyRight.top()).style.animation = 'ShowRevert 0.8s forwards';
     }
 }
 
 
 window.onpopstate = function (event) {
-    // 监听浏览器的后退事件
+// 监听浏览器的后退事件
     if (historyRight.top === 'stragety-column')
     // 正在strategy页面，弹出swal2弹窗询问是否保存 
     {
@@ -115,7 +110,15 @@ window.onpopstate = function (event) {
     }
 
 };
-
+function wssend(confirmId, operation) {
+    if (socket.readyState === 1) {
+        socket.send(JSON.stringify({
+            id: confirmId,
+            operation: operation
+        }));
+    }
+    else console.log('socket not ready');
+}
 
 
 /* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
@@ -575,7 +578,7 @@ function showStrategyPage() {
 
     // 初始化容器
     strategycontainer = document.getElementById('strategy-column');
-    SwitchRight('right-column', 'strategy-column');
+    SwitchRight('strategy-column');
 
 
     const operationCard = document.getElementById('operation');
@@ -957,7 +960,8 @@ function showStrategyInfo(strategyName) {
             </div>
         </div>
     `;
-    column.appendChild(strategyCard);
+    
+    strategycontainer.appendChild(strategyCard);
 
     // 创建并添加每个子条目的card  
     strategy.subItems.forEach((subItem) => {
@@ -1035,7 +1039,7 @@ function showStrategyInfo(strategyName) {
         });
 
         // 将子条目名称卡片添加到容器  
-        container.appendChild(subItemCard);
+        strategycontainer.appendChild(subItemCard);
 
     });
 }
@@ -1043,7 +1047,7 @@ function showStrategyInfo(strategyName) {
 
 // 以下是 子条目 实现细节
 function copySubItem(subItemName) {
-
+// 复制子条目
 
     const subItem = currentStrategy.subItems.find(subItem => subItem.name === subItemName);
     const name = '复制的' + subItem.name;
@@ -1062,6 +1066,7 @@ function copySubItem(subItemName) {
     container.appendChild(copiedSubItem);
 }
 function deleteSubItem(subItemName) {
+// 删除子条目
     // 警告
     Swal.fire({
         title: '删除子条目',
@@ -1079,9 +1084,9 @@ function deleteSubItem(subItemName) {
         document.getElementByClassAndId(`${subItemName}.subItem`).remove();
     });
 }
-function addCondition(button) {
-    // 添加条件的逻辑（后台数据）  
-    const subItemName = button.parentNode.parentNode.parentNode.id;
+function addCondition(subItemName) {
+// 添加条件
+    // 后台
     const subItem = currentStrategy.subItems.find(subItem => subItem.name === subItemName);
     const Condition = {
         name: "请选择",
@@ -1093,11 +1098,11 @@ function addCondition(button) {
 
 
 
-    // 添加条件卡片  
-    const conditionCard = document.createElement('div');
-    conditionCard.classList.add('card-condition');
+    // 前台：添加条件Tag 
+    const conditionTag = document.createElement('div');
+    conditionTag.classList.add('card-condition');
 
-    conditionCard.innerHTML = /*跟后面showSubItem的结构一样*/`
+    conditionTag.innerHTML = /*跟后面showSubItem的结构一样*/`
         <div class="tag condition" id="${Condition.name}">
             <div class="tag name">
                 <select value="${Condition.name || '请选择'}">
@@ -1135,7 +1140,7 @@ function addCondition(button) {
         </div>
 `;
 
-    document.getElementById('newSubItem').appendChild(conditionCard);
+    document.getElementById(subItemName).appendChild(ConditionTag);
 }
 
 
@@ -1147,19 +1152,10 @@ function deleteCondition(button) {
 }
 
 
-// 监听页面关闭事件
-window.addEventListener('beforeunload', function (e) {
-    // 取消事件的默认动作
-    e.preventDefault();
-    // Chrome 需要返回值来显示自定义消息
-    e.returnValue = '直接关闭页面将不会保存更改的策略';
-});
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/*通知栏实现 */
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
 
-
-
-
-
-// 通知栏实现  
 
 
 const notice_data_example = {
@@ -1265,16 +1261,9 @@ const notice_data_example = {
             </div>
         </div>
     `};
-function wssend(confirmId, operation) {
-    if (socket.readyState === 1) {
-        socket.send(JSON.stringify({
-            confirm_id: confirmId,
-            operation: operation
-        }));
-    }
-    else console.log('socket not ready');
-}
+
 function showNotice(data) {
+    // 默认显示位置是左侧栏左下角，单独页面在notice-column中（也是左侧 sidebar）
     const container = document.getElementById('column left-column');
     height = data.height || 100; // 通知框的高度  
 
@@ -1425,11 +1414,14 @@ function showNotice(data) {
     });
 }
 
-// 班级功能按钮实现  
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/*班级功能按钮实现：策略、成员、公告、设置  */
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
 
-// 获取策略列表并显示Swal2弹窗  
+
+
 function switchStrategy(shareKey) {
-    // 用于选择对应班级的策略
+// 【1】用于开始、停止、选择策略
 
     // 发送请求 更新 策略列表  
     fetchStrategyData();
@@ -1477,13 +1469,8 @@ function setStrategy(shareKey) {// 用于设置策略（开始、停止、选择
 }
 
 
-
-
-// 设置页面
-
-
 function showSettings() {
-    // 显示设置面板  
+// 【2】显示设置面板  （shadlc写了一个设置页面，需要整合）
     fetch(`${url}/filter/a/settings`)
         .then(response => response.json())
         .then(settingsData => {
@@ -1515,8 +1502,7 @@ function showSettings() {
                                     <div class="center-tag">
                                         <div class="tag">BCZ-Group-Manager</div>
                                         <div class="separator"></div>
-                                        <div class="tag">${settingsData.description}</div>
-                                        <div class="tag">${settingsData.author}</div>
+                                        <div class="tag">${settingsData.about}</div>
                                         <div class="tag">${settingsData.contact}</div>
                                         <div class="separator"></div>
                                         <div class="tag">项目地址：${settingsData.url}</div>
@@ -1539,66 +1525,16 @@ function showSettings() {
 }
 
 
-
-
-// notice column 实现  
-
-
-function noticePage() {
-    // 隐藏left-column并显示notice-column  
-    Hide(document.querySelector('.left-column'));
-    Show(document.querySelector('.notice-column'));
-
-    // 获取operation card上的按钮  
-    const buttons = document.querySelectorAll('.notice-operation button');
-    buttons.forEach(button => {
-        // 为每个按钮添加点击事件  
-        button.addEventListener('click', async function () {
-            // 加载时显示loading动画  
-            swal.fire({
-                title: '加载中',
-                html: '<i class="fa fa-spinner fa-spin fa-3x fa-fw"></i>',
-                showConfirmButton: false,
-                allowOutsideClick: false
-            });
-            const buttonType = this.textContent.toLowerCase().replace(' ', ''); // 获取按钮类型  
-            const startDate = document.querySelector('.notice-operation #startDate').value; // 日期选择框的ID  
-            const endDate = document.querySelector('.notice-operation #endDate').value;
-
-            // 构建GET请求的URL 
-
-            try {
-                // 发送GET请求  
-                const response = await fetch(`${url}/filter/a/notice/${buttonType}?startDate=${startDate}&endDate=${endDate}`);
-                if (!response.ok) {
-                    throw new Error('网络响应不ok');
-                }
-                const noticeData = await response.json();
-
-                // 遍历返回的json中的每一个notice并显示  
-                noticeData.forEach(notice => {
-                    showNotice(notice);
-                });
-            } catch (error) {
-                console.error('加载通知时出错:', error);
-                // 在这里可以添加错误处理逻辑，比如显示错误消息  
-            }
-        });
-    });
-}
-// 成员页面
-
 function showMember(shareKey) {
-    // 班级成员展示，强行采用了ajax（嗯，强迫症吧）
+// 【3】班级成员展示，强行采用了ajax（嗯，强迫症吧）
 
     const days = 7;
     const groupId = 795528; // 神探小可爱的班级ID
     error("还没有处理groupId的问题！记得处理：将shareKey转换为groupId");
 
     // 隐藏当前列并显示替换列  
-    Fade('right-column');
-    Show('member-column');
-
+    SwitchRight(document.querySelector('.member-column'));
+    
 
     //  我要开始ajax了（炸毛）
 
@@ -1639,16 +1575,13 @@ function showMember(shareKey) {
         });
 }
 
-// 公告页面
-
 
 function editBoards(shareKey) {
-    // 编辑公告页面
+//【4】 编辑公告页面
     // 隐藏left-column并显示notice-column  
     noticePage();// 左半部分切换到通知页面（方便编辑公告）
 
-    Hide(document.querySelector('.right-column'));
-    Show(document.querySelector('.edit-boards'));// 显示编辑公告页面
+    SwitchRight(document.querySelector('.edit-boards'));// 显示编辑公告页面
 
 
 
@@ -1686,4 +1619,55 @@ function editBoards(shareKey) {
             }, 30 * 1000);
         });
 }
-// 隐藏left-column并显示notice-column  
+
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/*第二左侧栏：通知页面   */
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+
+
+function noticePage() {
+    
+// notice column 实现  
+
+    // 隐藏left-column并显示notice-column  
+    SwitchLeft(document.querySelector('.notice-column'));
+    
+
+    // 获取operation card上的按钮  
+    const buttons = document.querySelectorAll('.notice-operation button');
+    buttons.forEach(button => {
+        // 为每个按钮添加点击事件  
+        button.addEventListener('click', async function () {
+            // 加载时显示loading动画  
+            swal.fire({
+                title: '加载中',
+                html: '<i class="fa fa-spinner fa-spin fa-3x fa-fw"></i>',
+                showConfirmButton: false,
+                allowOutsideClick: false
+            });
+            const buttonType = this.textContent.toLowerCase().replace(' ', ''); // 获取按钮类型  
+            const startDate = document.querySelector('.notice-operation #startDate').value; // 日期选择框的ID  
+            const endDate = document.querySelector('.notice-operation #endDate').value;
+
+            // 构建GET请求的URL 
+
+            try {
+                // 发送GET请求  
+                const response = await fetch(`${url}/filter/a/notice/${buttonType}?startDate=${startDate}&endDate=${endDate}`);
+                if (!response.ok) {
+                    throw new Error('网络响应不ok');
+                }
+                const noticeData = await response.json();
+
+                // 遍历返回的json中的每一个notice并显示  
+                noticeData.forEach(notice => {
+                    showNotice(notice);
+                });
+            } catch (error) {
+                console.error('加载通知时出错:', error);
+                // 在这里可以添加错误处理逻辑，比如显示错误消息  
+            }
+        });
+    });
+}
+// 可读性优化完结 @ 4.26
