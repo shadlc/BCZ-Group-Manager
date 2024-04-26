@@ -2,15 +2,16 @@
 
 
 /* <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.min.css">
-    <link rel="stylesheet" href="path/to/font-awesome/css/font-awesome.min.css">
+    <link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.css">
+    <link rel="stylesheet" href="../lib/style.css">
 
     <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.5.1/jquery.min.js">//swal2和通知动画需要</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.all.min.js"></script>
     <script src="https://www.gstatic.com/charts/loader.js">//折线图绘制</script> 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js">//日期处理</script>  
-    <link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.css">
     
-    <script src=`${url}/static/lib/filter_js.js`></script>
+    
+    <script src=`../lib/filter_js.js`></script>
 
 
 
@@ -163,7 +164,7 @@ function loadGroupInfo(shareKey, status, xhr) {
                                         <div class="box-separator"></div>
                                         <div class="tag button ${shareKey}" id="members" onclick="showMember('${shareKey}')">成员</div>
                                         <div class="box-separator"></div>
-                                        <div class="tag button ${shareKey}" id="notice" onclick="editNotice('${shareKey}')">公告</div>
+                                        <div class="tag button ${shareKey}" id="notice" onclick="editBoards('${shareKey}')">公告</div>
                                         <div class="box-separator"></div>
                                         <div class="tag button ${shareKey}" id="log" onclick="showLog('${shareKey}')">日志</div>
                                     </div>
@@ -449,11 +450,11 @@ function exportLog(type) {//导出某物并且下载
 
 //下一个，策略管理
 //动画切换函数
-function Fade(element) {
-    element.style.animation = 'Fade 0.8s forwards';
+function Fade(elementName) {
+    document.getElementById(elementName).style.animation = 'Fade 0.8s forwards';
 }
-function Show(element) {
-    element.style.animation = 'Show 0.8s forwards';
+function Show(elementName) {
+    document.getElementById(elementName).style.animation = 'Show 0.8s forwards';
 }
 
 //策略按钮点击事件
@@ -1516,49 +1517,149 @@ function showSettings() {
 
 // notice column 实现  
 
-  
-function noticePage() {  
+
+function noticePage() {
     // 隐藏left-column并显示notice-column  
     Hide(document.querySelector('.left-column'));
     Show(document.querySelector('.notice-column'));
-  
+
     // 获取operation card上的按钮  
-    const buttons = document.querySelectorAll('.notice-operation button');  
-    buttons.forEach(button => {  
+    const buttons = document.querySelectorAll('.notice-operation button');
+    buttons.forEach(button => {
         // 为每个按钮添加点击事件  
-        button.addEventListener('click', async function() {  
+        button.addEventListener('click', async function () {
             // 加载时显示loading动画  
-            swal.fire({  
-                title: '加载中',  
-                html: '<i class="fa fa-spinner fa-spin fa-3x fa-fw"></i>',  
-                showConfirmButton: false,  
-                allowOutsideClick: false  
-            });  
+            swal.fire({
+                title: '加载中',
+                html: '<i class="fa fa-spinner fa-spin fa-3x fa-fw"></i>',
+                showConfirmButton: false,
+                allowOutsideClick: false
+            });
             const buttonType = this.textContent.toLowerCase().replace(' ', ''); // 获取按钮类型  
             const startDate = document.querySelector('.notice-operation #startDate').value; // 日期选择框的ID  
-            const endDate = document.querySelector('.notice-operation #endDate').value;  
-  
-            // 构建GET请求的URL 
-  
-            try {  
-                // 发送GET请求  
-                const response = await fetch(`${url}/filter/a/notice/${buttonType}?startDate=${startDate}&endDate=${endDate}`);  
-                if (!response.ok) {  
-                    throw new Error('网络响应不ok');  
-                }  
-                const noticeData = await response.json();  
-  
-                // 遍历返回的json中的每一个notice并显示  
-                noticeData.forEach(notice => {  
-                    showNotice(notice);  
-                });  
-            } catch (error) {  
-                console.error('加载通知时出错:', error);  
-                // 在这里可以添加错误处理逻辑，比如显示错误消息  
-            }  
-        });  
-    });  
-}  
+            const endDate = document.querySelector('.notice-operation #endDate').value;
 
+            // 构建GET请求的URL 
+
+            try {
+                // 发送GET请求  
+                const response = await fetch(`${url}/filter/a/notice/${buttonType}?startDate=${startDate}&endDate=${endDate}`);
+                if (!response.ok) {
+                    throw new Error('网络响应不ok');
+                }
+                const noticeData = await response.json();
+
+                // 遍历返回的json中的每一个notice并显示  
+                noticeData.forEach(notice => {
+                    showNotice(notice);
+                });
+            } catch (error) {
+                console.error('加载通知时出错:', error);
+                // 在这里可以添加错误处理逻辑，比如显示错误消息  
+            }
+        });
+    });
+}
+// 成员页面
+
+function showMember(shareKey) {
+    // 班级成员展示，强行采用了ajax（嗯，强迫症吧）
+
+    const days = 7;
+    const groupId = 795528; // 神探小可爱的班级ID
+    error("还没有处理groupId的问题！记得处理：将shareKey转换为groupId");
+
+    // 隐藏当前列并显示替换列  
+    Fade('right-column');
+    Show('member-column');
+
+
+    //  我要开始ajax了（炸毛）
+
+    fetch(`${url}/group/id/${groupId}`)
+        .then(response => response.text())
+        .then(html => {
+            // 创建一个新的 HTMLDocument 对象来处理小班详情页
+            const parser = new DOMParser();
+            const detailsDocument = parser.parseFromString(html, 'text/html');
+
+            // 提取main节点
+            const mainNode = detailsDocument.querySelector('main');
+
+            // 加载main节点到当前页面的right-column元素中
+            const rightColumn = document.querySelector('.right-column');
+            rightColumn.innerHTML = '';
+            rightColumn.appendChild(mainNode);
+
+
+            // 处理脚本文件，替换链接地址（定点爆破，仅1处）
+            const scripts = serverDocument.querySelectorAll('script');
+            scripts.forEach(script => {
+                const originalScriptContent = script.textContent;
+                const searchString = 'window.location.href';
+                const replacementString = `\'../group/${groupId}\'`;
+
+                // 使用正则表达式替换匹配到的字符串
+                const modifiedScriptContent = originalScriptContent.replace(new RegExp(searchString, 'g'), replacementString);
+
+                // 将修改后的脚本内容运行
+                eval(modifiedScriptContent);
+            })
+                .catch(error => {
+                    console.error('请求HTML文件时出现错误：', error);
+                });
+
+
+        });
+}
+
+// 公告页面
+
+
+function editBoards(shareKey) {
+    // 编辑公告页面
+    // 隐藏left-column并显示notice-column  
+    noticePage();// 左半部分切换到通知页面（方便编辑公告）
+
+    Hide(document.querySelector('.right-column'));
+    Show(document.querySelector('.edit-boards'));// 显示编辑公告页面
+
+
+
+    // 发送请求获取公告列表  
+    fetch(`${url}/filter/a/board?shareKey=${shareKey}`)
+        .then(response => response.json())
+        .then(boardData => {
+            // 创建公告框（班级历史公告放在通知栏的公告分类中，此处只显示最近的公告） 
+
+            swal.fire({
+                title: '编辑公告',
+                html: '···公告编辑器···<br>✓ 自动获取最新公告 <br>✓ 保存历史公告记录 <br>✓ 每半分钟自动保存 <br>✓ 快捷查看成员班内数据、昵称对话 <br>× 暂不支持发布，请手动复制发布 <br>× 暂不支持@补全，正在对接成员列表'
+
+            });
+            const newBoard = document.createElement('div');
+            newBoard.innerHTML = `
+                    <div class="board">
+                        <div class="board-title">${boardData.className}</div>
+                        <input class="board-content"></input>
+                        <div class="board-footer">
+                            <div class="board-footer-left">
+                                <div class="board-footer-left-item">${boardData.createTime}</div>
+                                <div class="board-footer-left-item">${boardData.author}</div>
+                                <div class="board-footer-left-item">自动保存：暂无</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            newBoard.querySelector('.board-content').value = boardData.content;
+            document.querySelector('.edit-boards').appendChild(newBoard);
+            // 每半分钟保存一次到服务器  
+            setInterval(() => {
+                const content = newBoard.querySelector('.board-content').value;
+                sendRequest({ content: content }, 'board');
+            }, 30 * 1000);
+        });
+}
+// 隐藏left-column并显示notice-column  
 // 页面加载完成后执行初始化  
 window.onload = init();  
