@@ -1,11 +1,17 @@
 
 
-/* <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.min.css">
 
-    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.5.1/jquery.min.js">//swal2需要</script>
+/* <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.min.css">
+    <link rel="stylesheet" href="path/to/font-awesome/css/font-awesome.min.css">
+
+    <script src="https://cdn.bootcdn.net/ajax/libs/jquery/3.5.1/jquery.min.js">//swal2和通知动画需要</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.all.min.js"></script>
-    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js">//折线图绘制</script> 
+    <script src="https://www.gstatic.com/charts/loader.js">//折线图绘制</script> 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js">//日期处理</script>  
+    <link rel="stylesheet" href=`${url}/static/lib/font-awesome-4.7.0/font-awesome-4.7.0/css/font-awesome.min.css`>
+    
+    <script src=`${url}/static/lib/filter_js.js`></script>
+
 
 
 
@@ -153,13 +159,13 @@ function loadGroupInfo(shareKey, status, xhr) {
                                     <div class="${shareKey}" id="status">${status}</div>
                                     <div class="separator"></div>
                                     <div class="tag center">
-                                        <div class="tag button ${shareKey}" id="strata">策略</div>
+                                        <div class="tag button ${shareKey}" id="strata" onclick="setStrategy('${shareKey}')">策略</div>
                                         <div class="box-separator"></div>
-                                        <div class="tag button ${shareKey}" id="members">成员</div>
+                                        <div class="tag button ${shareKey}" id="members" onclick="showMember('${shareKey}')">成员</div>
                                         <div class="box-separator"></div>
-                                        <div class="tag button ${shareKey}" id="notice">公告</div>
+                                        <div class="tag button ${shareKey}" id="notice" onclick="editNotice('${shareKey}')">公告</div>
                                         <div class="box-separator"></div>
-                                        <div class="tag button ${shareKey}" id="log">日志</div>
+                                        <div class="tag button ${shareKey}" id="log" onclick="showLog('${shareKey}')">日志</div>
                                     </div>
                                 </div>
                             </div>`;
@@ -515,19 +521,23 @@ function showStrategyPage(button) {
     updateStrategyButtonsAndInfo(data);
 
 }
-// 初始化：模拟从服务器获取JSON的异步操作  
-function fetchStrategyData(shareKey, week) {
-    return new Promise((resolve) => {
+
+function fetchStrategyData() {
+    // 初始化：模拟从服务器获取JSON的异步操作 ，然后储存到data全局变量
+    data = new Promise((resolve) => {
         setTimeout(() => {
             resolve(mockServerResponse);
         }, 500); // 模拟网络延迟  
     });
-    fetch(`${url}/strategy?shareKey=${shareKey}&week=${week}`)
-        .then(response)
+    return;
+    fetch(`${url}/strategy`)
+        .then(response => {
+            data = response.json();
+        })
         .catch(error => {
             console.error('Error:', error);
         });
-    return response.json();
+    return;
 }
 
 // 初始化：更新策略按钮并显示第一个策略信息  
@@ -1228,13 +1238,17 @@ const notice_data_example = {
             </div>
         </div>
     `};
-function wssend(confirmId, operation){
-    socket.send(JSON.stringify({
-        confirm_id: confirmId,
-        operation: operation
-    }));
+function wssend(confirmId, operation) {
+    if (socket.readyState === 1) {
+        socket.send(JSON.stringify({
+            confirm_id: confirmId,
+            operation: operation
+        }));
+    }
+    else console.log('socket not ready');
 }
-function newCard(container, data) {
+function showNotice(data) {
+    const container = document.getElementById('column left-column');
     height = data.height || 100; // 通知框的高度  
 
     // 创建新的card notice类的框  
@@ -1248,8 +1262,7 @@ function newCard(container, data) {
         </div>
     `;
     // 如果需要确认，则先弹窗
-    if (data.confirm)
-    {
+    if (data.confirm) {
         setTimeout(function () {
             swal.fire({
                 innerHtml: data.confirmContent,
@@ -1385,10 +1398,167 @@ function newCard(container, data) {
     });
 }
 
+// 班级功能按钮实现  
 
-function showNotice(data) {
-    // 显示通知框  
-    newCard(document.getElementById('column left-column'), data);
-    
-};
+// 获取策略列表并显示Swal2弹窗  
+function switchStrategy(shareKey) {
+    // 用于选择对应班级的策略
 
+    // 发送请求 更新 策略列表  
+    fetchStrategyData();
+
+
+
+    Swal.fire({
+        title: '选择策略',
+        text: '请选择要应用的策略',
+        showCancelButton: true,
+        confirmButtonText: '确定',
+        cancelButtonText: '取消',
+        html: '<div id="swal2-content"></div>',
+        preConfirm: () => {
+            // 这里可以处理用户点击确定前的逻辑，比如验证选择等  
+            return true;
+        }
+    }).catch(swal2 => {
+        // 用户点击了取消按钮或者发生了错误  
+        if (swal2.dismiss === Swal.DismissReason.cancel) {
+            console.log('用户取消了选择');
+        }
+    });
+
+    // 动态生成策略选择列表  
+    const swalContent = document.getElementById('swal2-content');
+    data.strategies.forEach(strategy, index => {
+        const radio = document.createElement('div');
+        radio.innerHTML = `
+                <div class="center-tag button" onclick="sendRequest({strategy_id: ${index},shareKey: '${shareKey}'},'apply')">${strategy.name}</div>`;
+        swalContent.appendChild(radio);
+    });
+}
+function setStrategy(shareKey) {// 用于设置策略（开始、停止、选择策略）
+    swal.fire({
+        title: '策略设置',
+        html: `
+            <div class="center-tag button" onclick="sendRequest({shareKey: '${shareKey}'},'start')">开始</div>
+            <div class="center-tag button" onclick="sendRequest({shareKey: '${shareKey}'},'stop')">停止</div>
+            <div class="center-tag button" onclick="switchStrategy('${shareKey}')">选择策略</div>
+        `,
+        showConfirmButton: false,
+        showCancelButton: false,
+    });
+}
+
+
+
+
+// 设置页面
+
+
+function showSettings() {
+    // 显示设置面板  
+    fetch(`${url}/filter/a/settings`)
+        .then(response => response.json())
+        .then(settingsData => {
+
+
+            swal.fire({
+                title: '设置',
+                html: `
+                    <div id="swal-settings">
+                        <div class="center-tag button" id="removeConfirm">移除成员确认：${settingsData.removeConfirm}</div>
+                        <div class="center-tag button" id="about">：${settingsData.resetConfirm}</div>
+                    </div>
+                `,
+                showConfirmButton: false,
+                showCancelButton: false,
+            }).then(() => {
+                document.querySelector("swal-settings").querySelectorAll("button").forEach(button => {
+                    button.addEventListener("click", event => {
+                        if (button.id === "removeConfirm") {
+                            settingsData.removeConfirm = !settingsData.removeConfirm;
+                            button.innerText = `移除成员确认：${settingsData.removeConfirm}`;
+                        }
+
+                        else if (button.id === "about") {
+                            // 显示关于页面  
+                            swal.fire({
+                                title: '关于',
+                                html: `
+                                    <div class="center-tag">
+                                        <div class="tag">BCZ-Group-Manager</div>
+                                        <div class="separator"></div>
+                                        <div class="tag">${settingsData.description}</div>
+                                        <div class="tag">${settingsData.author}</div>
+                                        <div class="tag">${settingsData.contact}</div>
+                                        <div class="separator"></div>
+                                        <div class="tag">项目地址：${settingsData.url}</div>
+                                        <div class="tag">版本：${settingsData.version}</div>
+                                        <div class="separator"></div>
+                                    </div>
+                                `});
+                        }
+                    });
+                });
+
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    // 用户点击了“是”，执行保存操作
+                    sendRequest(settingsData, 'settings');
+                }
+            });
+
+        });
+}
+
+
+
+
+// notice column 实现  
+
+  
+function noticePage() {  
+    // 隐藏left-column并显示notice-column  
+    Hide(document.querySelector('.left-column'));
+    Show(document.querySelector('.notice-column'));
+  
+    // 获取operation card上的按钮  
+    const buttons = document.querySelectorAll('.notice-operation button');  
+    buttons.forEach(button => {  
+        // 为每个按钮添加点击事件  
+        button.addEventListener('click', async function() {  
+            // 加载时显示loading动画  
+            swal.fire({  
+                title: '加载中',  
+                html: '<i class="fa fa-spinner fa-spin fa-3x fa-fw"></i>',  
+                showConfirmButton: false,  
+                allowOutsideClick: false  
+            });  
+            const buttonType = this.textContent.toLowerCase().replace(' ', ''); // 获取按钮类型  
+            const startDate = document.querySelector('.notice-operation #startDate').value; // 日期选择框的ID  
+            const endDate = document.querySelector('.notice-operation #endDate').value;  
+  
+            // 构建GET请求的URL 
+  
+            try {  
+                // 发送GET请求  
+                const response = await fetch(`${url}/filter/a/notice/${buttonType}?startDate=${startDate}&endDate=${endDate}`);  
+                if (!response.ok) {  
+                    throw new Error('网络响应不ok');  
+                }  
+                const data = await response.json();  
+  
+                // 遍历返回的json中的每一个notice并显示  
+                data.forEach(notice => {  
+                    showNotice(notice);  
+                });  
+            } catch (error) {  
+                console.error('加载通知时出错:', error);  
+                // 在这里可以添加错误处理逻辑，比如显示错误消息  
+            }  
+        });  
+    });  
+}  
+
+// 页面加载完成后执行初始化  
+window.onload = init();  
