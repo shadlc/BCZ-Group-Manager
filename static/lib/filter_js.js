@@ -1125,102 +1125,270 @@ window.addEventListener('beforeunload', function (e) {
 // 通知栏实现  
 
 
-function showNotice(data) {
-    var height = data.height; // 读取高度  
-    var content = data.content; // 读取html内容  
-    var confirm = data.confirm; // 读取是否需要确认  
-    var confirm_content = data.confirm_content; // 读取确认html内容  
-    var confirm_id = data.confirm_id; // 读取确认ID  
+const notice_data_example = {
+    id: 6666,
+    height: 200,
+    timeout: 12000,
+    content: `
+        <div class="frame notice-content">
+            <div class="tag" id="userInfo" style="justify-content:start">
+                <div class="avatar" id="useravatar">
+                    <img src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png" alt="">
+                </div>
+                <div class="center-frame">
+                    <div class="center-tag">
+                        <div class="tag" id="name">某不达标用户</div>
+                        <div class="checkbox" id="checked"></div>
+                    </div>
+                    <div class="center-tag">
+                        <div class="tag" id="district">District</div>
+                        <div class="box-separator"></div>
+                        <div class="tag" id="grade">Grade</div>
+                        <div class="box-separator"></div>
+                        <div class="tag" id="book">Book</div>
+                    </div>
+                    <div class="center-tag">
+                        <div class="tag" id="todayWords">Words</div>
+                        <div class="box-separator"></div>
+                        <div class="tag" id="totalDakaDays">Checks</div>
+                        <div class="box-separator"></div>
+                        <div class="tag" id="totalDays">Days</div>
+                    </div>
+                </div>
+            </div>
+            <div class="tag operation">
+                加入了 xx 班级/将要从 xx 班级移除
+            </div>
+        </div>
+    `,
+    confirm: true,
+    confirmContent: `
+        <div class="tag maximized-content">
+            <div class="tag infoTag">
+                <div class="frame" id="userInfoExpanded">
+                <!-- 包含用户数据图表 -->
+                    <div class="tag" id="userInfo" style="justify-content:start">
+                        <div class="avatar" id="useravatar">
+                            <img src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png" alt="">
+                        </div>
+                        <div class="center-frame">
+                            <div class="center-tag">
+                                <div class="tag" id="name">某不达标用户</div>
+                                <div class="checkbox" id="checked"></div>
+                            </div>
+                            <div class="center-tag">
+                                <div class="tag" id="district">District</div>
+                                <div class="box-separator"></div>
+                                <div class="tag" id="grade">Grade</div>
+                                <div class="box-separator"></div>
+                                <div class="tag" id="book">Book</div>
+                            </div>
+                            <div class="center-tag">
+                                <div class="tag" id="todayWords">Words</div>
+                                <div class="box-separator"></div>
+                                <div class="tag" id="totalDakaDays">Checks</div>
+                                <div class="box-separator"></div>
+                                <div class="tag" id="totalDays">Days</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="graph">
 
+                    </div>
+                </div>
+                <div class="frame">
+                    <div class="tag" name="classinfo">
+                        <div class="avatar 1234abcdef" id="classavatar">
+                            <img src="https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png" alt="">
+                        </div>
+                        <div class="frame">
+                            <div class="tag">
+                                <div class="1234abcdef" id="name">小学一年级</div>
+                                <div class="box-separator"></div>
+                                <div class="1234abcdef" id="leader">神探小可爱</div>
+                            </div>
+                            <div class="tag">
+                                <div class="1234abcdef" id="students">200</div>
+                                <div class="box-separator"></div>
+                                <div class="1234abcdef" id="todayDakaCounts">195</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="graph 1234abcdef" id = "graph">
 
-    // 4.25 进度到此处
-
+                    </div>
+                    <div class="1234abcdef" id="status">策略 xx 正在运行</div>
+                </div>
+            </div>
+            <div class="center-tag operation">
+                <div class="center-tag button" onclick="wssend(6666,'accept')">接受</div>
+                <div class="center-tag button" onclick="wssend(6666,'reject')">移除</div>
+                <!-- 后台支持的其他操作 -->
+                <div class="center-tag button" onclick="wssend(6666,'ignore')">忽略</div>
+            </div>
+        </div>
+    `};
+function wssend(confirmId, operation){
+    socket.send(JSON.stringify({
+        confirm_id: confirmId,
+        operation: operation
+    }));
+}
+function newCard(container, data) {
+    height = data.height || 100; // 通知框的高度  
 
     // 创建新的card notice类的框  
     const newCard = document.createElement('div');
-    newCard.innerHTML = `
+    newCard.innerHTML = /*最外层的div并不是真正的card，转换jquery对象时还有一层*/`
         <div>
-            <div class="notice-line" style="width: 100%; height: 3px; background: black; position: absolute; top: 0; left: 0;"></div>
-            <div class="card notice" style="height: ${height}px; opacity: 0; position: relative;">
-                ${content}
+            <div class="notice-line" style="width: 100%; height: 3px; background: black; position: relative; top: 0; left: 0;"></div>
+            <div class="card notice" style="height: ${height}px; position: relative; touch-action: none; background-color: #ffffffaa; cursor:pointer; ">
+                ${data.content}
             </div>
         </div>
     `;
-    document.getElementByClass('left-column').appendChild(newCard);
+    // 如果需要确认，则先弹窗
+    if (data.confirm)
+    {
+        setTimeout(function () {
+            swal.fire({
+                innerHtml: data.confirmContent,
+                showConfirmButton: false,
+                showCancelButton: false,
+            });
+            // 所有操作按钮都在content中，由后台设置id
+        }, 100);
+    }
 
-    // 向下平滑移动所有已存在的card notice类  
-    $('.card.notice').animate({
-        'margin-bottom': '+=' + (parseInt(height, 10) + 10) + 'px'
-    }, 500);
-
+    var $newCard = $(newCard);
+    $newCard.appendTo(container);
 
     // 添加触摸事件监听器  
     var touchStartX = 0;
     var isSwiping = false;
+    var cardWidth = $newCard.width();
+    var swipeDistance = 0;
+    var cardY = $newCard.offset().top + height; // 获取通知框的Y坐标 + 高度
 
-    newCard.on('touchstart', function (e) {
-        touchStartX = e.originalEvent.touches[0].clientX; // 记录触摸开始的X坐标  
+
+    $newCard.on('touchstart mousedown', function (e) {
+
+        touchStartX = e.originalEvent.touches ? e.originalEvent.touches[0].clientX : e.clientX; // 记录触摸/鼠标开始的X坐标      
+        // 缩小一圈，模拟卡片的缩放效果  
+        $newCard.css('transform', 'scale(0.9)');
+        $newCard.css('transition', 'transform 0.3s ease-in-out');
         isSwiping = true; // 标记为正在滑动  
     });
 
-    newCard.on('touchmove', function (e) {
-        if (!isSwiping) return; // 如果不是滑动状态，直接返回  
-        var touchEndX = e.originalEvent.touches[0].clientX; // 获取触摸结束的X坐标   
-        var swipeDistance = touchEndX - touchStartX; // 计算滑动距离  
-        var cardWidth = $newCard.width(); // 获取通知框的宽度  
-        var swipeThreshold = cardWidth * 0.5; // 设定滑动阈值，比如50%的宽度  
+    $newCard.on('touchmove mousemove', function (e) {
 
-        if (Math.abs(swipeDistance) > swipeThreshold) { // 如果滑动距离超过阈值  
-            // 停止所有动画并立即删除通知框  
-            $newCard.stop().remove();
+        if (!isSwiping) return; // 如果不是滑动状态，直接返回  
+        var touchEndX = e.originalEvent.touches ? e.originalEvent.touches[0].clientX : e.clientX; // 获取触摸/鼠标结束的X坐标
+
+        swipeDistance = touchEndX - touchStartX; // 计算滑动距离  
+
+        // 改变通知框margin，达到左右滑动的效果，同时有消失的动画效果  
+
+        $newCard.css('margin-left', swipeDistance + 'px');
+        $newCard.css('margin-right', -swipeDistance + 'px')
+        // if (1 - Math.abs(swipeDistance / cardWidth) < 0)
+        // $newCard.css('opacity', 0);
+        $newCard.css('opacity', 1 - Math.abs(swipeDistance / cardWidth));
+
+        // 有可能鼠标超过了newCard的高度，此时收不到mouseup，此时newCard通过动画返回原位
+        var touchY = e.originalEvent.touches ? e.originalEvent.touches[0].clientY : e.clientY; // 获取触摸/鼠标的Y坐标
+
+        if (touchY > cardY) {
             isSwiping = false; // 标记为不是滑动状态  
+            $newCard.animate({
+                marginLeft: 0,
+                marginRight: 0,
+                opacity: 1
+            }, 500);
         }
     });
 
-    $newCard.on('touchend', function (e) {
+    $newCard.on('touchend mouseup', function (e) {
+
+        // 还原框大小
+        $newCard.css('transform', 'scale(1)');
+        $newCard.css('transition', 'transform 0.2s ease-in-out');
+        // 设定滑动阈值，比如50%的宽度 
+
+        if (Math.abs(swipeDistance) < cardWidth * 0.1) { // 如果滑动距离很小，则认为是点击事件，打开详情页  
+            // 打开详情页  
+            setTimeout(function () {
+                swal.fire({
+                    innerHtml: data.confirmContent,
+                    showConfirmButton: true,
+                    showCancelButton: true,
+                });
+            }, 100);
+        }
+
+        if (isSwiping && Math.abs(swipeDistance) > cardWidth * 0.3) { // 如果滑动距离超过阈值  
+            // 滑动淡出，然后删除通知框  
+            if (swipeDistance > 0) dist = cardWidth; // 右滑，消失到右边  
+            else dist = -cardWidth; // 左滑，消失到左边  
+            $newCard.animate({
+
+                marginLeft: dist,
+                marginRight: -dist,
+                opacity: 0
+            }, 500, function () {
+
+                // 删除通知框  
+                isSwiping = false; // 标记为不是滑动状态  
+                $newCard.remove();
+            });
+        }
+        else { // 如果滑动距离不超过阈值  
+            // 回到原位并恢复动画效果  
+            $newCard.animate({
+
+                marginLeft: 0,
+                marginRight: 0,
+                opacity: 1
+
+            }, 500);
+        }
         isSwiping = false; // 标记为不是滑动状态  
     });
-
-    // ...之前的代码，包括动画和Swal弹窗...
-    // 渐显新框  
-    newCard.animate({
-        opacity: 1
-    }, 500, function () {
-        // 线的宽度逐渐减少到0%  
-        newCard.find('.notice-line').animate({
-            width: '0%'
-        }, 10000, function () {
-            // 10秒后淡出通知框  
-            setTimeout(function () {
-                newCard.animate({
-                    opacity: 0
-                }, 500, function () {
-                    // 删除通知框  
-                    newCard.remove();
+    $newCard.css('opacity', '0');
+    $newCard.animate({
+        marginLeft: 10,
+        marginRight: -10,
+        opacity: 0.5,
+    }, 200, function () {
+        $newCard.animate({
+            marginLeft: 0,
+            marginRight: 0,
+            opacity: 1,
+        }, 200, function () {
+            if (data.timeout === -1)// 不自动消失
+                return;
+            // 线的宽度逐渐减少到0%  
+            $newCard.find('.notice-line').animate({
+                width: '0%'
+            }, data.timeout, function () {
+                // 淡出通知框  
+                setTimeout(function () {
+                    $newCard.animate({
+                        opacity: 0
+                    }, 500, function () {
+                        // 删除通知框  
+                        $newCard.remove();
+                    });
                 });
-            }, 10000);
+            });
         });
     });
+}
 
-    // 如果需要确认，则弹出Swal  
-    if (confirm) {
-        Swal.fire({
-            title: '确认',
-            text: confirm_content,
-            icon: 'warning',
-            showCancelButton: true,
-            confirmButtonColor: '#3085d6',
-            cancelButtonColor: '#d33',
-            confirmButtonText: '确认'
-        }).then((result) => {
-            if (result.isConfirmed) {
-                // 确认后通过WebSocket发送数据回服务器  
-                socket.send(JSON.stringify({
-                    confirm_id: confirm_id,
-                    operation: data // 假设需要将整个data对象发送回服务器  
-                }));
-            }
-        });
-    }
+
+function showNotice(data) {
+    // 显示通知框  
+    newCard(document.getElementById('column left-column'), data);
+    
 };
 

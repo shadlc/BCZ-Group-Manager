@@ -11,6 +11,7 @@
         </div>
     </div>
     <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@9"></script>
 
     <script>
         function $newCard() {
@@ -41,6 +42,9 @@
             $newCard.on('touchstart mousedown', function (e) {
 
                 touchStartX = e.originalEvent.touches ? e.originalEvent.touches[0].clientX : e.clientX; // 记录触摸/鼠标开始的X坐标      
+                // 缩小一圈，模拟卡片的缩放效果  
+                $newCard.css('transform', 'scale(0.9)');
+                $newCard.css('transition', 'transform 0.3s ease-in-out');
                 isSwiping = true; // 标记为正在滑动  
             });
 
@@ -78,7 +82,20 @@
 
             $newCard.on('touchend mouseup', function (e) {
 
+                // 还原框大小
+                $newCard.css('transform', 'scale(1)');
+                $newCard.css('transition', 'transform 0.2s ease-in-out');
                 // 设定滑动阈值，比如50%的宽度 
+                
+                if (Math.abs(swipeDistance) < cardWidth * 0.1) { // 如果滑动距离很小，则认为是点击事件，打开详情页  
+                    // 打开详情页  
+                    setTimeout(function () {swal.fire({
+                        title: 'New Notice Card',
+                        text: 'You clicked the new notice card',
+                        icon: 'info',
+                    })}, 100);
+                }
+
                 if (isSwiping && Math.abs(swipeDistance) > cardWidth * 0.3) { // 如果滑动距离超过阈值  
                     // 滑动淡出，然后删除通知框  
                     if (swipeDistance > 0) dist = cardWidth; // 右滑，消失到右边  
