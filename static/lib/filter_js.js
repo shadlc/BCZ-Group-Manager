@@ -8,7 +8,7 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.all.min.js"></script>
     <script src="https://www.gstatic.com/charts/loader.js">//折线图绘制</script> 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.29.1/moment.min.js">//日期处理</script>  
-    <link rel="stylesheet" href=`${url}/static/lib/font-awesome-4.7.0/font-awesome-4.7.0/css/font-awesome.min.css`>
+    <link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.css">
     
     <script src=`${url}/static/lib/filter_js.js`></script>
 
@@ -1546,10 +1546,10 @@ function noticePage() {
                 if (!response.ok) {  
                     throw new Error('网络响应不ok');  
                 }  
-                const data = await response.json();  
+                const noticeData = await response.json();  
   
                 // 遍历返回的json中的每一个notice并显示  
-                data.forEach(notice => {  
+                noticeData.forEach(notice => {  
                     showNotice(notice);  
                 });  
             } catch (error) {  
