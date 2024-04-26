@@ -11,13 +11,14 @@ from src.sqlite import SQLite
 from src.xlsx import Xlsx
 from src.schedule import Schedule
 
+# if '--debug' in sys.argv or (hasattr(sys, 'gettrace') and sys.gettrace() is not None):
 if '--debug' in sys.argv:
     level = logging.DEBUG
 else:
     level = logging.INFO
 
 logging.basicConfig(
-    format=' %(asctime)s - %(name)s [%(levelname)s] %(message)s',
+    format='%(asctime)s [%(name)s][%(levelname)s] %(message)s',
     level=level
 )
 
@@ -209,8 +210,8 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     }), code
 
 if __name__ == '__main__':
-    print(' * BCZ-Group-Manger 启动中...')
+    logging.info('BCZ-Group-Manger 启动中...')
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
     # app.run(config.host, config.port, debug=True)
-    app.run(config.host, config.port, request_handler=MyRequestHandler)
+    app.run(config.host, config.port, debug=True, request_handler=MyRequestHandler)

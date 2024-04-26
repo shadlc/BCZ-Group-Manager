@@ -255,7 +255,11 @@ def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '') -> list
 
 def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> list[dict]:
     '''分析打卡数据并返回'''
-    year, week = map(int, week_date.split('-W'))
+    if week_date:
+        year, week = map(int, week_date.split('-W'))
+    else:
+        now = datetime.now()
+        year, week = now.year, now.isocalendar()[1]
     start_of_year = date(year, 1, 1)
     start_of_week = start_of_year + timedelta(days=(week - 1) * 7 - start_of_year.weekday())
     sdate = start_of_week.strftime('%Y-%m-%d')
@@ -335,7 +339,7 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
 
     week_dict = {}
     current_date = start_date
-    while current_date <= end_date + timedelta(days=7):
+    while current_date <= end_date + timedelta(days=1):
         week_number = current_date.isocalendar()[1]
         week_start = current_date - timedelta(days=current_date.weekday())
         week_end = week_start + timedelta(days=6)

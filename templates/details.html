@@ -108,10 +108,7 @@
     let href = window.location.href;
     let group_id = href.substring(href.lastIndexOf('/') + 1);
     let today = new Date();
-    let adjusted_day = (today.getDay() + 6) % 7 + 1;
-    let first_day_of_year = new Date(today.getFullYear(), 0, 1);
-    let past_days_of_year = (today - first_day_of_year) / 86400000;
-    let current_week = Math.ceil((past_days_of_year + first_day_of_year.getDay() + 1) / 7);
+    let current_week = today.getWeek();
     current_week = today.getFullYear() + "-W" + ("0" + current_week).slice(-2);
     window.onload = ()=>{
       getGroupDetailsOption().then(()=>{
@@ -272,7 +269,11 @@
       let container = document.querySelector('.group-info-container');
       let week_count_limit = 1400;
       if (group.week == current_week) {
-        week_count_limit = group.count_limit*adjusted_day;
+        weekday = today.getDay();
+        if (weekday == 0) {
+          weekday = 7;
+        }
+        week_count_limit = group.count_limit * weekday;
       }
       let group_content = `
         <span class="gloss"></span>
