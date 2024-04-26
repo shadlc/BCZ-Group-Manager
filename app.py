@@ -2,10 +2,13 @@ import sys
 import time
 import logging
 
-from flask import Flask, render_template, send_file, jsonify, request
+from flask import Flask, render_template, send_file, jsonify, request, redirect
 
-from bcz import Config, BCZ, SQLite, Xlsx, Schedule, recordInfo
-from filter import Filter
+from src.bcz import BCZ, recordInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
+from src.config import Config
+from src.sqlite import SQLite
+from src.xlsx import Xlsx
+from src.schedule import Schedule
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
 app.json.ensure_ascii = False
@@ -17,13 +20,13 @@ sqlite = SQLite(config)
 processing = False
 
 if not config.main_token:
-    print('未配置授权令牌，请在[config.json]文件中修改后重启，程序会在5秒后自动退出')
+    print('未配置授权令牌，请在[config.json]文件中填入正确main_token后重启，程序会在5秒后自动退出')
     time.sleep(5)
     sys.exit(0)
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return redirect('group')
 
 @app.route('/group', methods=['GET'])
 def group():
@@ -37,9 +40,9 @@ def details(id=None):
 def search():
     return render_template('search.html')
 
-@app.route('/history', methods=['GET'])
-def history():
-    return render_template('history.html')
+@app.route('/data', methods=['GET'])
+def data():
+    return render_template('data.html')
 
 @app.route('/setting', methods=['GET'])
 def setting():
@@ -49,10 +52,10 @@ def setting():
 def download():
     global processing
     if processing:
-        return restful(403, '有正在处理的下载，请稍后再试')
+        return restful(403, '有正在处理的下载，请稍后再试 (ᗜ ˰ ᗜ)"')
     processing = True
     try:
-        result = sqlite.searchMemberTable(request.json, header=True)
+        result = sqlite.queryMemberTable(request.json)
         xlsx = Xlsx(config)
         xlsx.write('用户信息', result[0])
         xlsx.save()
@@ -62,10 +65,9 @@ def download():
         processing = False
     return send_file(config.output_file)
 
-@app.route('/get_info', methods=['GET'])
-def get_info():
-    info = config.getInfo()
-    info.update(bcz.getInfo())
+@app.route('/get_data_info', methods=['GET'])
+def get_data_info():
+    info = bcz.getInfo()
     info.update(sqlite.getInfo())
     return restful(200, '', info)
 
@@ -76,16 +78,25 @@ def get_user_group():
     if group_list:
         return restful(200, '', group_list)
     else:
-        return restful(404, '未查询到该用户的小班')
+        return restful(404, '未查询到该用户的小班Σ(っ °Д °;)っ')
 
 @app.route('/observe_group', methods=['GET', 'POST'])
 def observe_group():
     if request.method == 'GET':
         '''获取关注小班列表'''
-        try: 
-            group_list = sqlite.queryObserveGroupInfo()
-            group_list = bcz.updateGroupInfo(group_list)
+        group_id = request.args.get('id', '')
+        try:
+            if group_id:
+                full_info = True
+            else:
+                full_info = False
+            group_list = sqlite.queryObserveGroupInfo(group_id)
+            group_list = bcz.updateGroupInfo(group_list, full_info)
             sqlite.updateObserveGroupInfo(group_list)
+            for group in group_list:
+                group['auth_token'] = len(group['auth_token']) * '*'
+            if not group_list:
+                return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
             return restful(200, '', group_list)
         except Exception as e:
             return restful(400, str(e))
@@ -93,41 +104,67 @@ def observe_group():
     elif request.method == 'POST':
         '''添加或修改关注小班列表'''
         group_list = sqlite.queryObserveGroupInfo()
-        if 'shareKey' in request.json and len(request.json) == 1:
-            share_key = request.json.get('shareKey')
-            if share_key in [group_info['shareKey'] for group_info in group_list]:
-                return restful(403, '该小班已存在')
+        if 'share_key' in request.json and len(request.json) == 1:
+            share_key = request.json.get('share_key')
+            if share_key in [group_info['share_key'] for group_info in group_list]:
+                return restful(403, '该小班已存在ヾ(≧▽≦*)o')
             group_info = bcz.getGroupInfo(share_key)
             sqlite.addObserveGroupInfo([group_info])
-            msg = '成功添加新的关注小班'
+            msg = '成功添加新的关注小班ヾ(≧▽≦*)o'
         elif 'id' in request.json:
             group_id = request.json.get('id')
-            if share_key in [group_info['id'] for group_info in group_list]:
-                return restful(403, '该小班已存在')
-            group_info = sqlite.queryObserveGroupInfo(group_id=group_id, full_info=True)
+            if int(group_id) not in [group_info['id'] for group_info in group_list]:
+                return restful(403, '该小班不存在Σ(っ °Д °;)っ')
+            group_info = sqlite.queryObserveGroupInfo(group_id=group_id)[0]
             group_info.update(request.json)
+            if group_info['late_daka_time'] == '00:00':
+                group_info['late_daka_time'] = ''
             sqlite.updateObserveGroupInfo([group_info])
-            msg = '成功修改关注小班的设置'
+            msg = '成功修改关注小班的设置ヾ(≧▽≦*)o'
         else:
-            return restful(400, '调用方法异常')
+            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         return restful(200, msg)
+
+@app.route('/query_group_details', methods=['POST'])
+def query_group_details():
+    '''获取关注小班列表'''
+    group_id = request.json.get('id', '')
+    week = request.json.get('week', '')
+    if not group_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        group_list = refreshTempMemberTable(bcz, sqlite, group_id)
+        for group in group_list:
+            group['auth_token'] = len(group['auth_token']) * '*'
+        analyseWeekInfo(group_list, sqlite, week)
+        if not group_list:
+            return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
+        return restful(200, '', group_list)
+    except Exception as e:
+        return restful(400, str(e))
+
+@app.route('/get_group_details_option', methods=['GET'])
+def get_group_details_option():
+    option = {'week': getWeekOption()}
+    return restful(200, '', option)
 
 @app.route('/get_search_option', methods=['GET'])
 def get_search_option():
     option = sqlite.getSearchOption()
     return restful(200, '', option)
 
-@app.route('/search_member_table', methods=['POST'])
-def search_member_table():
+@app.route('/query_member_table', methods=['POST'])
+def query_member_table():
     try:
-        result = sqlite.searchMemberTable(request.json)
+        refreshTempMemberTable(bcz, sqlite)
+        result = sqlite.queryMemberTable(request.json, header=True, union_temp=True)
         return restful(200, '', result)
     except Exception as e:
         return restful(500, f'{e}')
 
 @app.route('/search_group', methods=['GET'])
 def search_group():
-    share_key = request.args.get('shareKey')
+    share_key = request.args.get('share_key')
     user_id = request.args.get('uid')
     try:
         if share_key:
@@ -136,12 +173,17 @@ def search_group():
         elif user_id:
             result = bcz.getUserGroupInfo(user_id)
         else:
-            return restful(400, '请求参数错误')
+            return restful(400, '请求参数错误Σ(っ °Д °;)っ')
         if len(result):
             return restful(200, '', result)
-        return restful(404, '未搜索到符合条件的小班')
+        return restful(404, '未搜索到符合条件的小班 (ᗜ ˰ ᗜ)"')
     except Exception as e:
         return restful(400, f'{e}')
+
+@app.after_request
+def add_header(response):
+    response.headers['Server'] = r'BCZ-Group-Manager/1.0'
+    return response
 
 def restful(code: int, msg: str = '', data: dict = {}) -> None:
     '''以RESTful的方式进行返回响应'''
@@ -158,8 +200,9 @@ if __name__ == '__main__':
     print(' * BCZ-Group-Manger 启动中...')
     if '--debug' in sys.argv:
         logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+    else:
+        logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
     if config.daily_record:
-        print(f' * BCZ-Group-Manger 每日记录已开启 {config.daily_record}')
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
     # app.run(config.host, config.port, debug=True)
     app.run(config.host, config.port)

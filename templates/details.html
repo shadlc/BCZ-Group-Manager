@@ -8,35 +8,46 @@
     <link rel="shortcut icon" href="../favicon.ico" />
     <link rel="apple-touch-icon" href="../favicon.ico" />
     <link rel="stylesheet" href="../lib/style.css">
-    <style>
-      .inside-bg {
-        background-color: rgb(255, 245, 216);
-      }
-    </style>
   </head>
 
   <body class="inside-bg">
     <main>
-      <div class="blackboard">
-        <span class="gloss"></span>
-        <span class="eraser"></span>
-        <div class="group brief transparent">
-          <div class="info-table">
-            <div class="avatar">
-              <img src/>
-              <img src/>
+      <div class="group-info-container"></div>
+      <div class="paper">
+        <div class="member-info-container hide">
+          <div class="input-group">
+            <div class="input">
+              <label for="week_select">周数</label>
+              <select id="week_select" onkeyup="eventSearch(event)"></select>
             </div>
-            <div class="group-info">
-              <span>测试小班</span>
+            <div class="input">
+              <label for="display_type">展示类型</label>
+              <div id="display_type" class="btn-group">
+                <div class="checkbox">
+                  <input type="checkbox" id="display_cheat" checked />
+                  <label for="display_cheat">作弊</label>
+                </div>
+                <div class="checkbox">
+                  <input type="checkbox" id="display_late" checked />
+                  <label for="display_late">晚卡</label>
+                </div>
+                <div class="checkbox">
+                  <input type="checkbox" id="display_absence" checked />
+                  <label for="display_absence">缺卡</label>
+                </div>
+                <div class="checkbox">
+                  <input type="checkbox" id="display_all" />
+                  <label for="display_all">全员</label>
+                </div>
+              </div>
             </div>
-            <div class="group-detail">
-              <span>人数</span>
-              <span>简介</span>
+            <div class="btn-group">
+              <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
+              <div id="setting_btn" class="btn" onclick="toggleSettingModal()">设置</div>
             </div>
           </div>
+          <div class="details-container"></div>
         </div>
-      </div>
-      <div class="paper">
         <span class="loading-text">
           <div class="loader">
             <span></span>
@@ -54,19 +65,378 @@
             <span></span>
             <span></span>
             <div>
-              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+              <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made By Shadlc</span>
             </div>
           </div>
         </footer>
       </div>
     </main>
-    <div id="notify_container"></div>
-    <div id="scroll_top_btn" title="回到顶部" onclick="scrollToTop()">▲</div>
-    <div class="corner-btn btn" onclick="backToHome()">返回主页</div>
+    <div class="left-corner-btn btn" onclick="backToHome()">回主页</div>
+    <div id="setting_modal" class="modal hide" data-status="hidden" onclick="toggleSettingModal(event)">
+      <div class="modal-content">
+        <span class="modal-close-btn" onclick="toggleSettingModal()"></span>
+        <div class="modal-title">小班设置</div>
+        <div class="modal-body">
+          <div class="setting-group">
+            <div class="input">
+              <label for="record_select">每日记录开关</label>
+              <select id="record_select">
+                <option value="1">开启</option>
+                <option value="0">关闭</option>
+              </select>
+            </div>
+            <div class="input">
+              <label for="late_time_input">晚卡时间</label>
+              <input type="time" id="late_time_input" />
+            </div>
+            <div class="input">
+              <label for="auth_token_input">授权令牌</label>
+              <input type="text" id="auth_token_input" />
+            </div>
+            <div class="input-group">
+              <div id="search_btn" class="btn" onclick="saveConfig()">保存设置</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </body>
+  <script src="../lib/script.js"></script>
   <script>
+    let origin_auth_token = '';
+    let href = window.location.href;
+    let group_id = href.substring(href.lastIndexOf('/') + 1);
+    let today = new Date();
+    let adjusted_day = (today.getDay() + 6) % 7 + 1;
+    let first_day_of_year = new Date(today.getFullYear(), 0, 1);
+    let past_days_of_year = (today - first_day_of_year) / 86400000;
+    let current_week = Math.ceil((past_days_of_year + first_day_of_year.getDay() + 1) / 7);
+    current_week = today.getFullYear() + "-W" + ("0" + current_week).slice(-2);
+    window.onload = ()=>{
+      getGroupDetailsOption().then(()=>{
+        let week_select = document.getElementById("week_select");
+        week_select.value = current_week;
+        queryGroupDetails(group_id).then((result)=>{
+          if (result) {
+            let loading_text = document.querySelector('.loading-text');
+            loading_text.classList.add('hide');
+            document.querySelector('.member-info-container').classList.remove('hide');
+          }
+        });
+      });
+      bindScrollToTopBtn(document.querySelector('.member-info-container'));
+    }
+
+    // 返回主页
     function backToHome() {
       window.location.href = '../';
     }
+
+    // 打开关闭公告模态框
+    function toggleNoticeModal(event) {
+      if (event?.target) {
+        if (event?.target.id != 'notice_modal') {
+          return;
+        }
+      }
+      let modal = document.getElementById('notice_modal');
+      let modal_content = modal.children[0];
+      let status = modal.getAttribute('data-status');
+      modal.setAttribute('data-status', '');
+      if (status == 'show') {
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal.classList.add('hide');
+          modal.setAttribute('data-status', 'hidden');
+        }, 500);
+      } else if (status == 'hidden') {
+        modal.classList.remove('hide');
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal_content.style.transform = 'scale(1)';
+          modal.style.opacity = 1;
+        }, 1);
+        setTimeout(()=>{
+          modal.setAttribute('data-status', 'show');
+        }, 500);
+      }
+    }
+
+    // 打开关闭小班设置模态框
+    function toggleSettingModal(event) {
+      if (event?.target) {
+        if (event?.target.id != 'setting_modal') {
+          return;
+        }
+      }
+      let modal = document.getElementById('setting_modal');
+      let modal_content = modal.children[0];
+      let status = modal.getAttribute('data-status');
+      modal.setAttribute('data-status', '');
+      if (status == 'show') {
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal.classList.add('hide');
+          modal.setAttribute('data-status', 'hidden');
+        }, 500);
+      } else if (status == 'hidden') {
+        modal.classList.remove('hide');
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal_content.style.transform = 'scale(1)';
+          modal.style.opacity = 1;
+        }, 1);
+        setTimeout(()=>{
+          modal.setAttribute('data-status', 'show');
+        }, 500);
+      }
+    }
+
+    // 获取小班信息
+    function queryGroupDetails() {
+      let loading_text = document.querySelector('.loading-text');
+      let week_select = document.querySelector('#week_select');
+      let payload = {
+        'id': group_id,
+        'week': week_select.value,
+      }
+      return fetch('../query_group_details', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          loading_text.innerHTML = data.msg;
+          notify(data.msg);
+          return;
+        }
+        let group = data.data[0];
+        origin_auth_token = group.auth_token;
+        if (group.token_invalid) {
+          notify('当前小班授权令牌已失效，请设置新的授权令牌');
+        }
+        setGroupInfo(group);
+        setMemberInfo(group);
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+        loading_text.innerHTML = error;
+      });
+    }
+
+    // 获取筛选选项
+    function getGroupDetailsOption() {
+      return fetch('../get_group_details_option')
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let week = data.data.week;
+        let week_select = document.querySelector('#week_select');
+        for(let key in week) {
+          let option = document.createElement('option');
+          option.value = key;
+          option.text = week[key];
+          week_select.add(option);
+        }
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
+
+    // 事件触发搜索
+    function eventSearch(event) {
+      if (event.key === "Enter" || event.type === 'blur') {
+        queryGroupDetails(event?.target?.value);
+      }
+    }
+
+    // 通过数据设置展示小班信息
+    function setGroupInfo(group) {
+      document.getElementById('record_select').value = group.daily_record;
+      document.getElementById('late_time_input').value = group.late_daka_time;
+      document.getElementById('auth_token_input').value = group.auth_token;
+      let container = document.querySelector('.group-info-container');
+      let week_count_limit = 1400;
+      if (group.week == current_week) {
+        week_count_limit = group.count_limit*adjusted_day;
+      }
+      let group_content = `
+        <span class="gloss"></span>
+        <span class="eraser" onclick="slideLeft(event)"></span>
+        <div class="group brief transparent">
+          <div class="info-table">
+            <div class="avatar" onclick="rotate(event)">
+              <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
+              <img src="`+group.avatar_frame+`" />
+            </div>
+            <div class="group-info">
+            <span>`+group.name+`</span>
+            </div>
+            <div class="group-detail">
+              <span>班长: `+group.leader+`(`+group.leader_id+`)</span>
+              <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`
+                + Math.round(group.finishing_rate * 100)+`%, `
+                + (group.member_count - group.today_daka_count) +`人未打卡</span>
+              <span>本周总打卡数: `+group.total_times+`/`+week_count_limit+`, `
+                + (group.absence_times) +`人缺卡, `
+                + group.late_times +`人晚卡</span>
+              <span>`+group.introduction+`</span>
+            </div>
+          </div>
+        </div>
+        <img class="rank-flag" src="../img/s`+group.rank+`.png" onclick="sway(event)" />
+        <div class="tiny-notice" onclick="toggleNoticeModal()">
+          <span>公告</span>
+        </div>
+        <div id="notice_modal" class="modal hide" data-status="hidden" onclick="toggleNoticeModal(event)">
+          <div class="modal-content notice">
+            <span class="modal-close-btn" onclick="toggleNoticeModal()"></span>
+            <div class="modal-title">小班公告</div>
+            <div class="modal-body">
+              <div class="modal-text">`+group.notice+`</div>
+            </div>
+          </div>
+        </div>
+      `;
+      let info_div = document.createElement('div');
+      info_div.className = 'blackboard';
+      info_div.innerHTML = group_content;
+      container.innerHTML = '';
+      container.insertBefore(info_div, container.firstChild);
+    }
+
+    // 通过数据设置展示成员信息
+    function setMemberInfo(group) {
+      let container = document.querySelector('.details-container');
+      container.innerHTML = '';
+      for (let i in group.members) {
+        let member = group.members[i];
+        let group_nickname_span = '';
+        let badges = '';
+        if (member.group_nickname) {
+          group_nickname_span += '<span>' + member.group_nickname + '</span>';
+        }
+        if (group.week == current_week && member.completed_time == ''
+            && document.getElementById('display_absence').checked) {
+          badges += '<span class="badge blue-border">' + '今日未打卡' + '</span>';
+        } else if (group.week == current_week && group.late_daka_time != ''
+                   && member.completed_time > group.late_daka_time 
+                   && document.getElementById('display_late').checked) {
+          badges += '<span class="badge purple-border">' + '今日晚卡' + '</span>';
+        }
+        if (member.today_study_cheat == '是' && document.getElementById('display_cheat').checked) {
+          badges += '<span class="badge red-border">今日作弊</span>';
+        }
+        if (member.late && document.getElementById('display_late').checked) {
+          badges += '<span class="badge yellow-border">晚卡' + member.late + '次</span>';
+        }
+        if (member.absence && document.getElementById('display_absence').checked) {
+          badges += '<span class="badge red-border">漏卡' + member.absence + '次</span>';
+        }
+        if (badges == '' && !document.getElementById('display_all').checked) {
+          continue;
+        }
+        let member_content = `
+          <div class="avatar">
+            <img src="`+member.avatar+`" />
+          </div>
+          <div class="member-info">
+            <span>`+member.nickname+`</span>
+            <span>`+member.id+`</span>
+            `+group_nickname_span+`
+          </div>
+          <div class="member-extra">
+            `+badges+`
+          </div>
+        `;
+        let member_table = document.createElement('div');
+        member_table.className = 'info-table member-table';
+        member_table.innerHTML = member_content;
+        let modal_content = '打卡记录为空';
+        if (member.daka.length != 0) {
+          modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th><th>单词数</th></tr>';
+          for (let date in member.daka) {
+            let daka_time = member.daka[date].time ? member.daka[date].time : '未打卡';
+            let today_word_count = member.daka[date].count;
+            modal_content += '<tr><td>'+date+'</td><td>'+daka_time+'</td><td>'+today_word_count+'</td></tr>';
+          }
+          let daka_time = member.completed_time ? member.completed_time : '未打卡';
+          modal_content += '<tr><td>'+member.today_date+'</td><td>'+daka_time+'</td><td>'+member.today_word_count+'</td></tr>';
+          modal_content += '</table>';
+        }
+        member_table.onclick = () => {
+          showModal(modal_content, '打卡详情');
+        }
+        container.appendChild(member_table, container.lastChild);
+      }
+      if (container.innerHTML == '') {
+        if (group.exception) {
+          container.innerHTML = '<line class="center">'+group.exception+'</line>';
+        } else if (group.total_times) {
+          container.innerHTML = '<line class="center">没有符合筛选条件的同学~</br> ヾ(≧▽≦*)o</line>';
+        } else {
+          container.innerHTML = '<line class="center">本周记录数据为空~</br>o((>ω< ))o</line>';
+        }
+      }
+    }
+
+    function saveConfig() {
+      showModal('确保设置无误？该操作不可逆', '修改配置', ()=>{
+        let record_enabled = document.getElementById('record_select')?.value;
+        let late_daka_time = document.getElementById('late_time_input')?.value;
+        let auth_token = document.getElementById('auth_token_input')?.value;
+        if (origin_auth_token != auth_token) {
+          showModal('此次操作修改了授权令牌，请确认无误', '', ()=>{
+            postObserveGroup({
+              'id': group_id,
+              'daily_record': record_enabled,
+              'late_daka_time': late_daka_time,
+              'auth_token': auth_token
+            });
+          })
+        } else {
+            postObserveGroup({
+              'id': group_id,
+              'daily_record': record_enabled,
+              'late_daka_time': late_daka_time
+            });
+        }
+      })
+    }
+
+    function postObserveGroup(payload) {
+      return fetch('../observe_group', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(data => {
+        notify(data.msg);
+        if (data.retcode != 0) {
+          return;
+        }
+        toggleSettingModal();
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
+
   </script>
 </html>

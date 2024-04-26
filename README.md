@@ -49,9 +49,9 @@
 - **`port`监听端口，默认为`8840`**
 - **`database_path`数据库路径，默认为`./data.db`**
 - **`main_token`必填，是本程序用以获取小班数据的主要使用授权令牌，不要加入任何需要获取数据的小班**
-- **`auth_token`非必填，是本程序用以获取班内昵称的token，必须加入所有想要获取班内昵称的小班**
 - **`output_file`是程序输出Excel文件的指定目录和默认文件名，默认为`百词斩小班数据.xlsx`**
 - **`daily_record`以`Crontab`语法自动记录每天数据，默认为晚上23点59分，即`59 23 * * *`**
+- **`cache_second`数据查询功能实时数据的查询间隔，设置缓存时间防止过于频繁的实时查询，默认为60秒**
 
 
 ## 🔌 API
@@ -64,17 +64,20 @@
 ### 用户信息
 `https://social.baicizhan.com/api/deskmate/personal_details?uniqueId=XXXXXX`
 
-### 班级列表
+### 小班列表
 `https://group.baicizhan.com/group/own_groups?uniqueId=XXXXXX`
 
 ### 授权班列表
 `https://group.baicizhan.com/group/get_group_authorization_page?uniqueId=XXXXXX`
 
-### 班级排名
+### 小班排名
 `https://group.baicizhan.com/group/get_group_rank`
 
-### 打卡信息
+### 小班打卡信息
 `https://group.baicizhan.com/group/information?shareKey=XXXXXX`
+
+### 搜索用户
+`https://social.baicizhan.com/api/social/get_friend_state?uniqueId=XXXXXX`
 
 ### 铜板数量
 `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_vo`

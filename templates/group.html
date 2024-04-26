@@ -32,7 +32,7 @@
           <div class="gloss"></div>
           <div class="eaves-container">
             <a id="my_class" class="active">我的小班</a>
-            <a href="history">历史查询</a>
+            <a href="data">数据查询</a>
             <a href="setting">系统设置</a>
           </div>
         </div>
@@ -58,18 +58,18 @@
             <span></span>
             <span></span>
             <div>
-              <span><a href="https://github.com/shadlc/Group-Manager" target="_blank"><u>Group-Manager</u></a> Made By Shadlc</span>
+              <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made By Shadlc</span>
             </div>
           </div>
         </footer>
       </div>
     </main>
     <div id="group_search_modal" class="modal hide" data-status="hidden" onclick="toggleGroupSearchModal(event)">
-      <div class="modal-content notice">
+      <div class="modal-content">
         <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>
         <div class="modal-title">添加小班</div>
         <div class="modal-body">
-          <div id="group_search" class="search_input">
+          <div id="group_search" class="main-search-input">
             <input type="text" id="group_search_input" placeholder="班长ID或16位小班分享码(非6位邀请码)" onkeydown="eventSearch(event)" />
             <span class="btn" onclick="searchGroups()">搜索</span>
           </div>
@@ -79,7 +79,6 @@
         </div>
       </div>
     </div>
-    <div id="notify_container"></div>
   </body>
   <script src="lib/script.js"></script>
   <script>
@@ -96,8 +95,8 @@
       });
     }
 
+    // 获取小班信息
     function getGroupList() {
-      // 获取小班信息
       return fetch('observe_group')
       .then(response => response.json())
       .then(data => {
@@ -115,11 +114,11 @@
             <div class="info-table">
               <div class="avatar">
                 <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
-                <img src="`+group.avatarFrame+`" />
+                <img src="`+group.avatar_frame+`" />
               </div>
               <div class="group-info">
                 <span>`+group.name+`</span>
-                <span>`+group.todayDakaCount+`/`+group.memberCount+`已打卡</span>
+                <span>`+group.today_daka_count+`/`+group.member_count+`已打卡</span>
               </div>
             </div>
             <div class="door">
@@ -130,6 +129,10 @@
           `
           let group_div = document.createElement('div');
           group_div.className = 'group';
+          if (group.exception) {
+            // notify('小班'+group.name+'的数据获取失败! \n原因为: '+group.exception);
+            group_div.className += ' invalid';
+          }
           group_div.innerHTML = group_content;
           group_div.addEventListener('click', (e)=>{
             window.location.href = 'group/' + group.id;
@@ -146,8 +149,8 @@
       });
     }
 
+    // 打开关闭小班搜索模态框
     function toggleGroupSearchModal(event) {
-      // 关闭小班搜索模态框
       if (event?.target) {
         if (event?.target.id != 'group_search_modal') {
           return;
@@ -178,14 +181,14 @@
       }
     }
 
+    // 搜索小班
     function searchGroups() {
-      // 搜索小班
       let search_text = document.getElementById('group_search_input').value;
       let container = document.getElementById('group_result');
       let result_span = document.querySelector('#group_result>span');
       let url = 'search_group';
       if (isNaN(search_text) && search_text.length == 16) {
-        url += '?shareKey=' + search_text;
+        url += '?share_key=' + search_text;
       } else if (search_text.length) {
         url += '?uid=' + search_text;
       } else {
@@ -220,13 +223,13 @@
             <div class="info-table">
               <div class="avatar">
                 <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
-                <img src="`+group.avatarFrame+`" />
+                <img src="`+group.avatar_frame+`" />
               </div>
               <div class="group-info">
                 <span>`+group.name+`</span>
               </div>
               <div class="group-detail">
-                <span>人数`+group.memberCount+`/`+group.countLimit+`,完成率`+Math.round(group.finishingRate)+`%</span>
+                <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`+Math.round(group.finishing_rate * 100)+`%</span>
                 <span>`+group.introduction+`</span>
               </div>
             </div>
@@ -235,7 +238,7 @@
           group_div.className = 'group brief';
           group_div.innerHTML = group_content;
           group_div.addEventListener('click', ()=>{
-            addObserveGroup(group.shareKey);
+            addObserveGroup(group);
           });
           container.appendChild(group_div);
         }
@@ -251,26 +254,37 @@
       });
     }
 
+    // 事件触发搜索
     function eventSearch(event) {
-      // 事件触发搜索
       if (event.key === "Enter") {
         searchGroups(event?.target?.value);
       }
     }
 
-    function addObserveGroup(share_key) {
-      // 添加关注小班
-      payload = {'shareKey': share_key}
-      fetch('observe_group', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      })
-      .then(response => {
-        return response.json();
-      })
-      .then(data => {
-        notify(data.msg);
+    // 添加关注小班
+    function addObserveGroup(group) {
+      let content = `
+        <line>是否添加此小班?</line>
+        <div class="modal-text">`
+          +`\n小班名称: `+group.name
+          +`\n小班ID: `+group.id
+          +`\n邀请码: `+group.share_key
+          +`\n班长: `+group.leader
+          +`\n班长ID: `+group.leader_id
+          +`</div>`;
+      showModal(content, '添加小班', ()=>{
+        let payload = {'share_key': group.share_key};
+        fetch('observe_group', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        })
+        .then(response => {
+          return response.json();
+        })
+        .then(data => {
+          notify(data.msg);
+        });
       });
     }
 
