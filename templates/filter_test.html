@@ -256,15 +256,16 @@
                     </div>
                 </div>
                 <div class="frame">
-                    <div class="center-tag button " id="account">管理账号</div>
-                    <div class="center-tag button " id="export">导出日志</div>
+                    <div class="center-tag button " id="account" onclick="manageAccount()">管理账号</div>
+                    <div class="center-tag button " id="export" onclick="exportLog()">导出日志</div>
                 </div>
 
             </div>
             <div class="card">
                 <div class="frame" id="operations">
-                    <div class="center-tag button" id="back">返回</div>
-                    <div class="center-tag button" id="history">历史通知</div>
+                    <div class="center-tag button" id="back" onclick="SwitchPop()">返回</div>
+                    <div class="center-tag button" id="history" onclick="noticePage()">历史通知</div>
+                    <div class="center-tag button" id="strategy" onclick="showStrategyPage()">策略</div>
                     <div class="center-tag button" id="settings" onclick="showSettings()">设置</div>
                     <!-- 动态添加其他操作项 -->
                 </div>

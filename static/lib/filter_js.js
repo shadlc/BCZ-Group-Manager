@@ -1,6 +1,10 @@
 
 
 
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/*丢进html的部分*/
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+
 /* <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/limonte-sweetalert2/8.11.8/sweetalert2.min.css">
     <link rel="stylesheet" href="https://cdn.staticfile.org/font-awesome/4.7.0/css/font-awesome.css">
     <link rel="stylesheet" href="../lib/style.css">
@@ -18,25 +22,130 @@
 
 */
 
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/*功能module：发送请求，动画切换， */
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
 
 
 
+function sendRequest(data, operation) {
+    fetch('/filter/a/' + operation, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(data)
+    })
+        .then(response => response.json())
+        .then(data => {
+            console.log(`${operation} account successfully:`, data);
+        })
+        .catch(error => {
+            console.error(`Error:failed to ${operation} `, error);
+        });
+
+}
+//动画切换函数
+function Fade(elementName) {
+    document.getElementById(elementName).style.animation = 'Fade 0.8s forwards';
+}
+function Show(elementName) {
+    document.getElementById(elementName).style.animation = 'Show 0.8s forwards';
+}
+function SwitchLeft(elementHide, elementShow)
+//切换页面时使用，在添加动画的同时注册历史记录
+{
+    document.getElementById(elementHide).style.animation = 'Hide 0.8s forwards';
+    document.getElementById(elementShow).style.animation = 'Show 0.8s forwards';
+    historyLeft.push(elementShow);
+}
+function SwitchRight(elementHide, elementShow)
+// 这个是右半边，刚才是左半边
+{
+    document.getElementById(elementHide).style.animation = 'Hide 0.8s forwards';
+    document.getElementById(elementShow).style.animation = 'Show 0.8s forwards';
+    historyRight.push(elementShow);
+}
+function SwitchPop()
+// 弹出历史记录，若没有才退回到上一页
+{
+    if (historyLeft.length === 0 && historyRight.length === 0) {
+        // 浏览器返回上一页
+        window.history.back();
+    }
+    if (historyLeft.length > 0) {
+        document.getElementById(historyLeft.top()).style.animation = 'Hide 0.8s forwards';
+        historyLeft.pop();
+        document.getElementById(historyLeft.top()).style.animation = 'Show 0.8s forwards';
+    }
+    if (historyRight.length > 0) {
+        document.getElementById(historyRight.top()).style.animation = 'Hide 0.8s forwards';
+        historyRight.pop();
+        document.getElementById(historyRight.top()).style.animation = 'Show 0.8s forwards';
+    }
+}
 
 
-// 初始化部分
+window.onpopstate = function (event) {
+    // 监听浏览器的后退事件
+    if (historyRight.top === 'stragety-column')
+    // 正在strategy页面，弹出swal2弹窗询问是否保存 
+    {
+        swal2.fire({
+            title: '策略已修改',
+            text: '策略已修改，是否要保存当前的更改？',
+            showCancelButton: true,
+            confirmButtonColor: '#3085d6',
+            cancelButtonColor: '#d33',
+            confirmButtonText: '是',
+            cancelButtonText: '否'
+        }).then((result) => {
+            if (result.isConfirmed) {
+                saveCurrentStrategy();
+            } else if (result.isDenied) {
+
+            }
+        });
+    }
+    else {
+        // 其他页面，弹出历史记录弹窗，如果没有才上一页
+        if (historyLeft.length === 0 && historyRight.length === 0) {
+            SwitchPop();
+        }
+    }
+
+};
 
 
-// 初始化数据，从服务器获取
+
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/*初始化module：获取数据、加载用户、加载班级信息、加载折线图、初始化websocket*/
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+
+
+// 页面ajax历史记录，便于返回，分为左右两部分
+var historyLeft = {};
+var historyRight = {};
+
+// 初始化数据，从服务器获取，包含用户信息、班级信息、班级折线图数据
 var initData = null;
 
 
-// 全局服务器地址
+// 全局服务器地址，后端接口地址（通知信息专用，后 => 前）
 const url = 'ws://192.168.1.101:8080';
+var socket = new WebSocket(`${url}/filter/a/notice`);
+
+// data：策略信息；currentStrategy：当前策略；currentStrategyIndex：当前策略索引
+const data = {};
+const currentStrategy = {};
+const currentStrategyIndex = 1;
+
+// 容器：策略卡片，
+var strategycontainer;
 
 
 
 // Establish WebSocket connection
-var socket = new WebSocket(`${url}/filter/a/notice`);
 socket.onmessage = function (event) {
     if (event.data.type === 'init') {
         initData = JSON.parse(event.data);
@@ -70,124 +179,90 @@ socket.onclose = function (event) {
     }
 };
 
-function getTimestamp() {
-    var date = new Date();
-    const timestamp = parseint(date.getTime() / 1000);
-    return timestamp;
-}
-function setCookie(token) {
-    document.cookie = `access_token=${token};Pay-Support-H5=alipay_mob_client:qq_app device_name="android/V2218A-vivo"; bcz_dmid="2a16dfbb"; device_version="12"; device_id="032ae8f8427885d7"; app_name="7060100"; channel="qq"; client_time="${getTimestamp()}"
-pay-support: alipay_mob_client;qq_app;`;
-}
-function setHeader(xhr) {
-    xhr.withCredentials = true;
-    setCookie(getAccessToken());
-    xhr.setRequestHeader("Accept", "*/*");
-    xhr.setRequestHeader("Origin", "");
-    xhr.setRequestHeader("X-Requested-With", "");
-    xhr.setRequestHeader("Sec-Fetch-Site", "same-site");
-    xhr.setRequestHeader("Sec-Fetch-Mode", "cors");
-    xhr.setRequestHeader("Sec-Fetch-Dest", "empty");
-    xhr.setRequestHeader("Referer", "");
-    xhr.setRequestHeader("Accept-Encoding", "gzip, deflate");
-    xhr.setRequestHeader("Accept-Language", "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7");
-    xhr.setRequestHeader('User-Agent', 'bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI');
+// 废弃：前端不再直接向bcz发送请求，通过服务器中转
 
-}
+
 function init(initData) {
-    //主初始化函数
-    // Load user information
+    // 添加ajax初始记录
+    historyLeft.pushState(null, null, `.left-column`);
+    historyRight.pushState(null, null, `.right-column`);
+
+    //主初始化函数：从服务器获取数据并初始化用户信息、班级信息、折线图
+
     if (initData.accountCount == 0) swal2.fire("错误", "没有可用的账号，请先创建账号", "error");
     setCookie(main_access_token);
-    // var xhr = new XMLHttpRequest();
 
-    // xhr.open('GET', 'https://social.baicizhan.com/api/deskmate/home_page', true);
-    // setHeader(xhr);
-
-    // xhr.onload = function () {
-    // if (xhr.status === 200) {
-    // var userData = JSON.parse(xhr.responseText);
     document.getElementById('useravatar').src = initData.avatarUrl;
-    // }
-    // };
-    // xhr.send();
 
-    // Load sub-class information
-    var groupCount = initData.groupCount;
-
-    for (var i = 0; i < groupCount; i++) {
-        var shareKey = initData.shareKeys[i];
-        var status = initData.statuses[i];
-        loadGroupInfo(shareKey, status, xhr);
+    initData.groups.forEach(function (groupData) {
+        loadGroupInfo(groupData);
         //前面已经创建了div，这里只需要填充折线图
-        drawChart(initData.times[i], initData.rank[i], initData.dakaCounts[i])
-    }
+        drawChart(groupData);
+    });
 }
-function loadGroupInfo(shareKey, status, xhr) {
+// 页面加载完成后执行初始化  
+window.onload = init();
 
-    xhr.open('GET', 'https://group.baicizhan.com/group/information?shareKey=' + shareKey, true);
 
-    xhr.onload = function () {
-        if (xhr.status === 200) {
-            var groupData = JSON.parse(xhr.responseText);
-            var className = groupData.className;
-            var leaderName = groupData.leaderName;
-            var studentCount = groupData.studentCount;
-            var todayDakaCounts = groupData.todayDakaCounts;
-            var intro = groupData.introduction;
-            var avatarUrl = groupData.avatarUrl;
-            // Create a new div for the sub-class avatar
 
-            const template = `
-                            <div class="card">
-                                <div class="frame">
-                                    <div class="tag" name="classinfo">
-                                        <div class="avatar ${shareKey}" id="classavatar"></div>
-                                        <div class="frame">
-                                            <div class="tag">
-                                                <div class="${shareKey}" id="name">${className}</div>
-                                                <div class="box-separator"></div>
-                                                <div class="${shareKey}" id="leader">${leaderName}</div>
-                                            </div>
-                                            <div class="tag">
-                                                <div class="${shareKey}" id="students">${studentCount}</div>
-                                                <div class="box-separator"></div>
-                                                <div class="${shareKey}" id="todayDakaCounts">${todayDakaCounts}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="graph ${shareKey}" id = "graph"></div>
-                                    <div class="${shareKey}" id="status">${status}</div>
-                                    <div class="separator"></div>
-                                    <div class="tag center">
-                                        <div class="tag button ${shareKey}" id="strata" onclick="setStrategy('${shareKey}')">策略</div>
-                                        <div class="box-separator"></div>
-                                        <div class="tag button ${shareKey}" id="members" onclick="showMember('${shareKey}')">成员</div>
-                                        <div class="box-separator"></div>
-                                        <div class="tag button ${shareKey}" id="notice" onclick="editBoards('${shareKey}')">公告</div>
-                                        <div class="box-separator"></div>
-                                        <div class="tag button ${shareKey}" id="log" onclick="showLog('${shareKey}')">日志</div>
-                                    </div>
+function loadGroupInfo(groupData) {
+    // 加载班级信息，将写入class-info卡片然后加载到right-column中
+    var className = groupData.className;
+    var leaderName = groupData.leaderName;
+    var studentCount = groupData.studentCount;
+    var todayDakaCounts = groupData.todayDakaCounts;
+    var intro = groupData.introduction;
+    var avatarUrl = groupData.avatarUrl;
+    // Create a new div for the sub-class avatar
+
+    const classInfoCard = document.createElement('div');
+    classInfoCard.innerHTML = `
+                <div class="card">
+                    <div class="frame">
+                        <div class="tag" name="classinfo">
+                            <div class="avatar ${shareKey}" id="classavatar">
+                                <img src="${avatarUrl}" alt="${className}">
+                            </div>
+                            <div class="frame">
+                                <div class="tag">
+                                    <div class="${shareKey}" id="name">${className}</div>
+                                    <div class="box-separator"></div>
+                                    <div class="${shareKey}" id="leader">${leaderName}</div>
                                 </div>
-                            </div>`;
+                                <div class="tag">
+                                    <div class="${shareKey}" id="students">${studentCount}</div>
+                                    <div class="box-separator"></div>
+                                    <div class="${shareKey}" id="todayDakaCounts">${todayDakaCounts}</div>
+                                    <div class="box-separator"></div>
+                                    <div class="${shareKey}" id="intro">${intro}</div>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="graph ${shareKey}" id = "graph"></div>
+                        <div class="${shareKey}" id="status"> </div>
+                        <div class="separator"></div>
+                        <div class="tag center">
+                            <div class="tag button ${shareKey}" id="strata" onclick="setStrategy('${shareKey}')">策略</div>
+                            <div class="box-separator"></div>
+                            <div class="tag button ${shareKey}" id="members" onclick="showMember('${shareKey}')">成员</div>
+                            <div class="box-separator"></div>
+                            <div class="tag button ${shareKey}" id="notice" onclick="editBoards('${shareKey}')">公告</div>
+                            <div class="box-separator"></div>
+                            <div class="tag button ${shareKey}" id="log" onclick="showLog('${shareKey}')">日志</div>
+                        </div>
+                    </div>
+                </div>`;
 
-            // 使用DOMParser解析模板字符串为HTML元素
-            const parser = new DOMParser();
-            const doc = parser.parseFromString(template, 'text/html');
-            const divElement = doc.body.firstChild;
+    document.querySelector('right-column').appendChild(classInfoCard);
 
-            // 将新创建的元素添加到文档中
-            document.body.appendChild(divElement);
-
-        }
-    };
-    xhr.send();
 }
+
 
 
 
 function drawChart(cnt, t, a, b) {
-    // 加载Google Charts库
+    // 绘制小班数据折线图，参数cnt为数据数量，t为时间数组，ab待定（到时后端实现）暂定是卡数和排名
+
     google.charts.load('current', { 'packages': ['corechart'] });
     // 创建数据表
     var data = new google.visualization.DataTable();
@@ -227,26 +302,15 @@ function drawChart(cnt, t, a, b) {
 }
 
 
-function getAccessToken() {
-    return document.cookie.match(/access_token=([^;]*)/)[1];
-}
+
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/*account管理*/
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
 
 
+function manageAccount() {
+    // 点击主页账号管理按钮后弹出
 
-
-
-
-
-
-
-
-
-
-
-
-
-// 事件绑定:account管理
-document.getElementById('account').addEventListener('click', function () {
     Swal.fire({//弹窗，选择、删除、创建账号
         title: 'Account Management',
         html: '<ul id="account-list"></ul>',
@@ -329,35 +393,17 @@ document.getElementById('account').addEventListener('click', function () {
             }
         });
     });
-    function sendRequest(data, operation) {
-        fetch('/filter/a/' + operation, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify(data)
-        })
-            .then(response => response.json())
-            .then(data => {
-                console.log(`${operation} account successfully:`, data);
-            })
-            .catch(error => {
-                console.error(`Error:failed to ${operation} account:`, error);
-            });
-        // var xhr = new XMLHttpRequest();
-        // xhr.open('POST', '/filter/a/' + operation, true);
-        // xhr.setRequestHeader('Content-Type', 'application/json');
-        // xhr.send(JSON.stringify(data));
-    }
-});
 
-
-//导出日志按钮
+}
 
 
 
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/* 导出日志 */
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
 
-document.getElementById('export').addEventListener('click', function () {
+function exportLog() {
+    // 点击导出日志按钮后弹出
     // 获取本周一和今天的日期  
     const startDate = moment().startOf('week').format('YYYY-MM-DD');
     const endDate = moment().format('YYYY-MM-DD');
@@ -385,24 +431,21 @@ document.getElementById('export').addEventListener('click', function () {
         didOpen: () => {
             Swal.getHtmlContainer().querySelector('#swal2-confirm').addEventListener('click', () => {
                 const type = 'run'; // 运行日志  
-                exportLog(type);
+                exportAndDownload(type);
             });
 
             const notifyBtn = Swal.getHtmlContainer().insertAdjacentHTML
                 ('beforeend', '<button class="swal2-confirm swal2-styled" style="display:inline-block;margin-left:10px;">导出通知日志</button>');
             notifyBtn.addEventListener('click', () => {
                 const type = 'notify'; // 通知日志  
-                exportLog(type);
+                exportAndDownload(type);
             });
         }
-    }).then((result) => {
-        if (result.isConfirmed) {
-            Swal.close();
-        }
     });
-});
+}
 
-function exportLog(type) {//导出某物并且下载
+function exportAndDownload(type) {
+    //请求服务器导出某物并且下载
     const { startDate, endDate } = Swal.getPopup().preConfirm();
 
     const data = {
@@ -446,26 +489,17 @@ function exportLog(type) {//导出某物并且下载
 }
 
 
+
+
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
+/* （大件警告）策略管理页面：策略列表、策略详情、策略编辑、策略删除、策略新建、策略保存  */
 //好了，到这里就结束了，可以愉快的玩耍了。———— fittencode
-
-//下一个，策略管理
-//动画切换函数
-function Fade(elementName) {
-    document.getElementById(elementName).style.animation = 'Fade 0.8s forwards';
-}
-function Show(elementName) {
-    document.getElementById(elementName).style.animation = 'Show 0.8s forwards';
-}
-
 //策略按钮点击事件
+/* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */
 
 
-const data = {};
-const currentStrategy = {};
-const currentStrategyIndex = 1;
 
-var container;
-// 假设服务器响应的JSON结构如下  
+// 模拟服务器返回的策略数据  
 const mockServerResponse = {
     totalStrategies: 3,
     strategies: [
@@ -514,14 +548,7 @@ const mockServerResponse = {
         // ... 其他策略  
     ]
 };
-//点击策略按钮时调用
-function showStrategyPage(button) {
-    shareKey = button.classList[1];
-    data = fetchStrategyData(shareKey, 1);
-    container = document.getElementById('strategy-column');
-    updateStrategyButtonsAndInfo(data);
 
-}
 
 function fetchStrategyData() {
     // 初始化：模拟从服务器获取JSON的异步操作 ，然后储存到data全局变量
@@ -541,8 +568,16 @@ function fetchStrategyData() {
     return;
 }
 
-// 初始化：更新策略按钮并显示第一个策略信息  
-function updateStrategyButtonsAndInfo(data) {
+//点击策略按钮时调用，初始化strategy页面
+function showStrategyPage() {
+
+    data = fetchStrategyData();
+
+    // 初始化容器
+    strategycontainer = document.getElementById('strategy-column');
+    SwitchRight('right-column', 'strategy-column');
+
+
     const operationCard = document.getElementById('operation');
     operationCard.innerHTML = ''; // 清空operation内容 ，删除现有所有按钮  
 
@@ -588,11 +623,14 @@ function updateStrategyButtonsAndInfo(data) {
         operationCard.appendChild(btn);
     });
 }
-// 初始化结束
+
+
+
 // 以下是 策略 实现细节
 
 
 function showWeekDays() {
+    // 点击策略页面，的星期按钮时弹出选择星期的弹窗
     const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
     const inputOptions = {};
@@ -623,6 +661,7 @@ function showWeekDays() {
     });
 }
 function showTimes() {
+    // 点击策略页面，的运行时间按钮时弹出选择时间的弹窗
     Swal.fire({
         title: '选择运行时间',
         html: `  
@@ -650,6 +689,7 @@ function showTimes() {
     });
 }
 function showMinPeople() {
+    // 点击策略页面，的最小人数按钮时弹出设置最小人数的弹窗
     Swal.fire({
         title: '设置最小人数',
         input: 'range',
@@ -670,7 +710,9 @@ function showMinPeople() {
 }
 
 function addStrategy() {
-    // 新建策略的逻辑（后台数据）  
+    // 新建策略
+
+    //（后台数据）  
     const newStrategy = {
         name: "新策略",
         weekDays: ["周一", "周三"],
@@ -706,6 +748,7 @@ function addStrategy() {
     showStrategyInfo(newStrategy);
 }
 function copyCurrentStrategy() {
+    // 复制当前策略
 
     // 提醒先保存
 
@@ -744,6 +787,8 @@ function copyCurrentStrategy() {
 
 }
 function deleteCurrentStrategy() {
+    // 删除当前策略
+
     // 警告
     Swal.fire({
         title: '删除策略',
@@ -756,8 +801,9 @@ function deleteCurrentStrategy() {
         cancelButtonText: '取消'
     }).then((result) => {
         if (result.isConfirmed) {
-            // 删除策略的逻辑（后台数据）  
+            // （后台数据）  
             data.strategies.splice(currentStrategyIndex, 1);
+            // 更新页面显示
             showStrategyInfo(data.strategies[0].name);
         }
     });
@@ -766,7 +812,7 @@ function deleteCurrentStrategy() {
 function saveCurrentStrategy() {
     // 因为页面上的输入框没有监听，所以此函数用于保存页面上的数据到currentStrategy对象，并保存到data对象，然后发送到服务器
 
-    // 保存策略的逻辑（后台数据）
+    // （后台数据）
     const strategyCard = container.getElementByClass('strategy')
     currentStrategy.name = strategyCard.querySelector('.name input').value;
     // 星期、时间、最小人数有监听，所以不需要处理
@@ -813,10 +859,9 @@ function saveCurrentStrategy() {
                 showConfirmButton: false,
                 timer: 1000
             });
-    })
-        .catch(error => {
-            console.error('Error:', error);
-        });
+    }).catch(error => {
+        console.error('Error:', error);
+    });
 
 }
 function addSubItem(button) {
@@ -867,8 +912,10 @@ function addSubItem(button) {
     container.appendChild(subItemCard);
 }
 
-// 显示策略信息  
+
 function showStrategyInfo(strategyName) {
+    // 显示策略信息  
+
     // 更改按钮样式
     const operationButtons = document.getElementById('operation');
 
@@ -881,8 +928,7 @@ function showStrategyInfo(strategyName) {
 
 
     // 清空column内容
-    const column = container;
-    column.innerHTML = '';
+    strategycontainer.innerHTML = '';
 
 
     // 创建并添加策略名的card  (包括操作按钮)
@@ -1100,26 +1146,6 @@ function deleteCondition(button) {
     button.parentNode.parentNode.remove();
 }
 
-// 监听浏览器的后退事件
-window.onpopstate = function (event) {
-    // 弹出swal2弹窗询问是否保存
-    swal2.fire({
-        title: '离开前确认',
-        text: '你是否要保存当前的更改？',
-        showCancelButton: true,
-        confirmButtonColor: '#3085d6',
-        cancelButtonColor: '#d33',
-        confirmButtonText: '是',
-        cancelButtonText: '否'
-    }).then((result) => {
-        if (result.isConfirmed) {
-            // 用户点击了“是”，执行保存操作
-            saveCurrentStrategy();
-        } else if (result.isDenied) {
-            // 用户点击了“否”，可以执行其他操作或什么都不做
-        }
-    });
-};
 
 // 监听页面关闭事件
 window.addEventListener('beforeunload', function (e) {
@@ -1661,5 +1687,3 @@ function editBoards(shareKey) {
         });
 }
 // 隐藏left-column并显示notice-column  
-// 页面加载完成后执行初始化  
-window.onload = init();  
