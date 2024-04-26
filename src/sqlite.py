@@ -203,9 +203,10 @@ class SQLite:
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         for group_info in group_list:
+            cursor.execute('DELETE FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', [group_info.get('id', 0)])
             cursor.execute(
                 '''
-                    INSERT INTO OBSERVED_GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO OBSERVED_GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 (
                     group_info.get('id', 0),
@@ -274,15 +275,17 @@ class SQLite:
             cursor.execute(sql, params)
         conn.commit()
 
-    def queryObserveGroupInfo(self, group_id: str = '') -> dict:
+    def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> dict:
         '''查询关注小班信息'''
+        sql = f'SELECT * FROM OBSERVED_GROUPS WHERE 1 = 1'
+        params = []
+        if not all:
+            sql += ' AND VALID = 1'
         if group_id:
-            result = self.read(
-                f'SELECT * FROM OBSERVED_GROUPS WHERE VALID = 1 AND GROUP_ID = ? ORDER BY GROUP_ID ASC',
-                [group_id],
-            )
-        else:
-            result = self.read(f'SELECT * FROM OBSERVED_GROUPS WHERE VALID = 1 ORDER BY GROUP_ID ASC')
+            sql += ' AND GROUP_ID = ?'
+            params.append(group_id)
+        sql += ' ORDER BY GROUP_ID ASC'
+        result = self.read(sql, params)
         result_keys = [
             'id',
             'name',

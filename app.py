@@ -120,7 +120,7 @@ def observe_group():
             if group_info['late_daka_time'] == '00:00':
                 group_info['late_daka_time'] = ''
             sqlite.updateObserveGroupInfo([group_info])
-            msg = '成功修改关注小班的设置ヾ(≧▽≦*)o'
+            msg = '操作成功ヾ(≧▽≦*)o'
         else:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         return restful(200, msg)
@@ -199,9 +199,9 @@ def restful(code: int, msg: str = '', data: dict = {}) -> None:
 if __name__ == '__main__':
     print(' * BCZ-Group-Manger 启动中...')
     if '--debug' in sys.argv:
-        logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.DEBUG)
+        logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
     else:
-        logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+        logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.INFO)
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
     # app.run(config.host, config.port, debug=True)
