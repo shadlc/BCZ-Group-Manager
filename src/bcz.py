@@ -15,6 +15,7 @@ class BCZ:
         '''小班解析类'''
         self.main_token = config.main_token
         self.invalid_pattern = r'[\000-\010]|[\013-\014]|[\016-\037]'
+        self.own_info_url = 'https://social.baicizhan.com/api/deskmate/home_page'
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
         self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
@@ -37,16 +38,13 @@ class BCZ:
             'uid': None,
             'name': None,
         }
-        url = 'https://social.baicizhan.com/api/deskmate/home_page'
         headers = {'Cookie': f'access_token="{token}"'}
-        response = requests.get(url, headers=headers, timeout=5)
-        try:
-            response_json = response.json()
-            if response_json.get('code') == 1:
-                data['uid'] = response_json['data']['mine']['uniqueId']
-                data['name'] = response_json['data']['mine']['name']
-        except ValueError as e:
-            logger.error(f'请求API[{url}]异常!\n{response.text}')
+        response = requests.get(self.own_info_url, headers=headers, timeout=5)
+        if response.status_code != 200 or response.json().get('code') != 1:
+            logger.warning(f'使用token获取用户信息失败!\n{response.text}')
+        user_info = response.json().get('data')
+        data['uid'] = user_info['mine']['uniqueId']
+        data['name'] = user_info['mine']['name']
         return data
         
     def getUserInfo(self, user_id: str = None) -> dict | None:
@@ -60,7 +58,7 @@ class BCZ:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
             raise Exception(msg)
-        user_info = response.json()['data']
+        user_info = response.json().get('data')
         return user_info
 
     def getUserGroupInfo(self, user_id: str = None) -> dict | None:
@@ -74,7 +72,7 @@ class BCZ:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
             raise Exception(msg)
-        group_info = response.json()['data']
+        group_info = response.json().get('data')
         group_list = group_info.get('list') if group_info else []
         groups = []
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
@@ -117,14 +115,14 @@ class BCZ:
             auth_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
-            logger.error(f'{msg}\n{main_response.text}')
+            logger.warning(f'{msg}\n{main_response.text}')
             # raise Exception(msg)
             return {
                 'share_key': share_key,
                 'exception': main_response.text,
             }
 
-        main_data = main_response.json()['data']
+        main_data = main_response.json().get('data')
         group_info = main_data.get('groupInfo') if main_data else []
         group_id = group_info['id']
         group_name = re.sub(self.invalid_pattern, '', group_info['name']) if group_info['name'] else ''
@@ -185,7 +183,7 @@ class BCZ:
         if auth_token:
             if auth_response.status_code != 200 or auth_response.json().get('code') != 1:
                 group['token_invalid'] = True
-            auth_data = auth_response.json()['data']
+            auth_data = auth_response.json().get('data')
             auth_member_list = auth_data.get('members') if auth_data else []
             for member in auth_member_list:
                 member_id = member['uniqueId']
@@ -330,7 +328,7 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
         try:    
             target_date = datetime.strptime(date, '%Y-%m-%d')
         except Exception as e:
-            logger.error(f'转换时间[{date}]出错: {e}')
+            logger.warning(f'转换时间[{date}]出错: {e}')
 
     start_date = target_date - timedelta(days=range_day[0])
     end_date = target_date + timedelta(days=range_day[1])
@@ -348,6 +346,6 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
     return week_dict
 
 if __name__ == '__main__':
-    logger.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logger.DEBUG)
+    logger.basicConfig(format='[%(asctime)s][%(levelname)s] %(message)s', level=logger.DEBUG)
     config = Config()
     recordInfo(BCZ(config), SQLite(config))

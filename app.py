@@ -2,13 +2,30 @@ import sys
 import time
 import logging
 
-from flask import Flask, render_template, send_file, jsonify, request, redirect
+from flask import Flask, Response, render_template, send_file, jsonify, redirect, request
+from werkzeug.serving import WSGIRequestHandler, _log
 
 from src.bcz import BCZ, recordInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
 from src.config import Config
 from src.sqlite import SQLite
 from src.xlsx import Xlsx
 from src.schedule import Schedule
+
+if '--debug' in sys.argv:
+    level = logging.DEBUG
+else:
+    level = logging.INFO
+
+logging.basicConfig(
+    format=' %(asctime)s - %(name)s [%(levelname)s] %(message)s',
+    level=level
+)
+
+WSGIRequestHandler.address_string = lambda self: self.headers.get('x-real-ip', self.client_address[0])
+class MyRequestHandler(WSGIRequestHandler):
+    def log(self, type, message, *args):
+        _log(type, f'{self.address_string()} {message % args}\n')
+
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
 app.json.ensure_ascii = False
@@ -180,12 +197,7 @@ def search_group():
     except Exception as e:
         return restful(400, f'{e}')
 
-@app.after_request
-def add_header(response):
-    response.headers['Server'] = r'BCZ-Group-Manager/1.0'
-    return response
-
-def restful(code: int, msg: str = '', data: dict = {}) -> None:
+def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     '''以RESTful的方式进行返回响应'''
     retcode = 1
     if code == 200:
@@ -198,11 +210,7 @@ def restful(code: int, msg: str = '', data: dict = {}) -> None:
 
 if __name__ == '__main__':
     print(' * BCZ-Group-Manger 启动中...')
-    if '--debug' in sys.argv:
-        logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.DEBUG)
-    else:
-        logging.basicConfig(format='%(asctime)s [%(levelname)s] %(message)s', level=logging.INFO)
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
     # app.run(config.host, config.port, debug=True)
-    app.run(config.host, config.port)
+    app.run(config.host, config.port, request_handler=MyRequestHandler)
