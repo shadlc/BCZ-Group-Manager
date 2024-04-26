@@ -95,6 +95,7 @@
             </div>
             <div class="input-group">
               <div id="search_btn" class="btn" onclick="saveConfig()">保存设置</div>
+              <div id="delete_btn" class="btn red-border" onclick="deleteGroup()">删除小班</div>
             </div>
           </div>
         </div>
@@ -384,7 +385,8 @@
       }
       if (container.innerHTML == '') {
         if (group.exception) {
-          container.innerHTML = '<line class="center">'+group.exception+'</line>';
+          container.innerHTML = '<line class="center">当前小班已不可用~ 请在设置内删除</line>';
+          container.innerHTML += '<line class="center">'+group.exception+'</line>';
         } else if (group.total_times) {
           container.innerHTML = '<line class="center">没有符合筛选条件的同学~</br> ヾ(≧▽≦*)o</line>';
         } else {
@@ -435,6 +437,17 @@
       .catch(error => {
         console.error('请求错误:', error);
         notify('请求错误:' + error);
+      });
+    }
+
+    function deleteGroup() {
+      showModal('真的要删除此小班吗？该操作不可逆', '警告', ()=>{
+        postObserveGroup({
+          'id': group_id,
+          'valid': 0
+        }).then(()=>{
+          location.href = '../';
+        });
       });
     }
 

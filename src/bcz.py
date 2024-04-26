@@ -77,9 +77,6 @@ class BCZ:
         group_info = response.json()['data']
         group_list = group_info.get('list') if group_info else []
         groups = []
-        leader_name = ''
-        if user := self.getUserInfo(user_id):
-            leader_name = user.get('name', '')
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         for group in group_list:
             group_id = group['id']
@@ -93,8 +90,8 @@ class BCZ:
                 'name': group_name,
                 'share_key': group['shareKey'],
                 'introduction': introduction,
-                'leader': leader_name,
-                'leader_id': user_id,
+                'leader': '',
+                'leader_id': '',
                 'member_count': group['memberCount'],
                 'count_limit': group['countLimit'],
                 'today_daka_count': group['todayDakaCount'],
@@ -250,7 +247,7 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
 def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '') -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
     data_time = sqlite.queryTempMemberCacheTime()
-    group_list = sqlite.queryObserveGroupInfo(group_id)
+    group_list = sqlite.queryObserveGroupInfo(group_id, all=True)
     if int(time.time()) - data_time > sqlite.cache_second or group_id:
         group_list = bcz.updateGroupInfo(group_list, full_info=True)
         sqlite.updateObserveGroupInfo(group_list)

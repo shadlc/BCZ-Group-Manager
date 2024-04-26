@@ -266,12 +266,10 @@
       let content = `
         <line>是否添加此小班?</line>
         <div class="modal-text">`
-          +`\n小班名称: `+group.name
-          +`\n小班ID: `+group.id
-          +`\n邀请码: `+group.share_key
-          +`\n班长: `+group.leader
-          +`\n班长ID: `+group.leader_id
-          +`</div>`;
+          + `\n小班名称: ` + group.name
+          + `\n小班ID: ` + group.id
+          + `\n分享码: ` + group.share_key
+          + `</div>`;
       showModal(content, '添加小班', ()=>{
         let payload = {'share_key': group.share_key};
         fetch('observe_group', {

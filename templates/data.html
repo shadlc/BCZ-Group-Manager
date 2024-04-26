@@ -218,7 +218,7 @@
       let content =  '<div class="start">';
       for (let i in observe_groups) {
         let group = observe_groups[i];
-        content += ' <line><a href="../group/'+group.id+'">'+group.name+'</a>'
+        content += ' <line><a href="group/'+group.id+'">'+group.name+'</a>'
         if (group.daily_record) {
           content += '<b class="float-right">已开启</b>';
         } else {
