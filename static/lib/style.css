@@ -1316,6 +1316,22 @@ table.simple-table td {
 .tiny-notice:active {
   transform: scale(0.9);
 }
+.setting-desc {
+  font-weight: normal;
+  display: block;
+  padding: 0 0.5rem 1rem 0.5rem;
+}
+.disclaimer {
+  margin: 1rem;
+  margin-top: 3rem;
+}
+.disclaimer h1 {
+  text-align: center;
+}
+.disclaimer p {
+  font-weight: normal;
+  white-space: pre-wrap;
+}
 .yellow-bg {
   color: black;
   background: var(--yellow);

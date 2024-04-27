@@ -138,7 +138,7 @@ def observe_group():
             if group_info['late_daka_time'] == '00:00':
                 group_info['late_daka_time'] = ''
             sqlite.updateObserveGroupInfo([group_info])
-            msg = '操作成功ヾ(≧▽≦*)o'
+            msg = '操作成功! ヾ(≧▽≦*)o'
         else:
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         return restful(200, msg)
@@ -197,6 +197,22 @@ def search_group():
         return restful(404, '未搜索到符合条件的小班 (ᗜ ˰ ᗜ)"')
     except Exception as e:
         return restful(400, f'{e}')
+
+@app.route('/configure', methods=['GET', 'POST'])
+def configure():
+    if request.method == 'GET':
+        '''获取配置文件'''
+        info = config.getInfo()
+        info['main_token'] = len(info['main_token']) * '*'
+        return restful(200, '', info)
+    elif request.method == 'POST':
+        '''修改配置文件'''
+        try:
+            config.modify(request.json)
+        except Exception as e:
+            return restful(400, str(e))
+        return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
+
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     '''以RESTful的方式进行返回响应'''

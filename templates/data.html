@@ -148,8 +148,15 @@
 
     window.onload = ()=>{
       initCloud(10);
-      getInfo().then((result)=>{
+      getInfo()
+      .then((result)=>{
         if (!result) return;
+        return getSearchOption();
+      })
+      .then(()=>{
+        return queryMemberTable();
+      })
+      .then(()=>{
         document.querySelectorAll('.loading-text').forEach((e)=>{
           e.classList.add('hide');
         });
@@ -159,15 +166,8 @@
         document.querySelectorAll('.data-container').forEach((e)=>{
           e.classList.remove('hide');
         });
-        getSearchOption();
-        queryMemberTable();
       });
       bindScrollToTopBtn(document.querySelector('.wall-container'));
-      // let yesterday = new Date();
-      // yesterday.setDate(new Date().getDate() - 1);
-      // yesterday = yesterday.toISOString().split('T')[0];
-      // document.getElementById('sdate_select').value = yesterday;
-      // document.getElementById('edate_select').value = yesterday;
     }
 
     // 获取数据查询信息
@@ -373,11 +373,13 @@
       .then(response => {
         const contentType = response.headers.get("Content-Type");
         if (contentType.includes("application/json")) {
-          return response.json().then(data => {
+          return response.json()
+          .then(data => {
             notify(data?.msg);
           });
         } else {
-          return response.blob().then(data => {
+          return response.blob()
+          .then(data => {
             const link = document.createElement('a');
             const dispositionHeader = response.headers.get('Content-Disposition');
             const filename = decodeURIComponent(dispositionHeader.split("UTF-8''").pop());

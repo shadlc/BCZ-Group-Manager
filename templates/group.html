@@ -84,11 +84,12 @@
   <script>
     onload = ()=>{
       initCloud(10);
-      getGroupList().then((result)=>{
+      getGroupList()
+      .then((result)=>{
+        if (!result) return;
         document.querySelectorAll('.loading-text').forEach((e)=>{
           e.classList.add('hide');
         });
-        if (!result) return;
         document.querySelectorAll('.group').forEach((e)=>{
           e.classList.remove('hide');
         });

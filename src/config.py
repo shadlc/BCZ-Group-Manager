@@ -42,7 +42,7 @@ class Config:
             time.sleep(5)
             sys.exit(0)
 
-    def read(self, key: str=None) -> list | dict | str | int | bool:
+    def read(self, key: str = '') -> list | dict | str | int | bool:
         '''获取指定配置'''
         try:
             json_data = json.load(open(self.config_file, encoding='utf-8'))
@@ -54,7 +54,7 @@ class Config:
             time.sleep(5)
             sys.exit(0)
 
-    def save(self, key: str, value: list | dict | str | int | bool) -> None:
+    def save(self, key, value: list | dict | str | int | bool = '') -> None:
         '''保存指定配置文件'''
         try:
             json_data = json.load(open(self.config_file, encoding='utf-8'))
@@ -110,3 +110,23 @@ class Config:
             'daily_record': self.daily_record,
             'cache_second': self.cache_second,
         }
+
+    def modify(self, configure: dict) -> None:
+        '''修改配置文件'''
+        for key in configure:
+            if key == 'main_token':
+                self.main_token = configure[key]
+                self.raw[key] = configure[key]
+                self.save(key, self.main_token)
+            elif key == 'output_file':
+                self.output_file = configure[key]
+                self.raw[key] = configure[key]
+                self.save(key, self.output_file)
+            elif key == 'daily_record':
+                self.daily_record = configure[key]
+                self.raw[key] = configure[key]
+                self.save(key, self.daily_record)
+            elif key == 'cache_second':
+                self.cache_second = int(configure[key])
+                self.raw[key] = int(configure[key])
+                self.save(key, self.cache_second)

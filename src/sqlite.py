@@ -311,6 +311,8 @@ class SQLite:
         group_info = []
         for item in result:
             group_info.append(dict(zip(result_keys, item)))
+        for group in group_info:
+            group['members'] = []
         return group_info
 
     def getDays(self) -> int:

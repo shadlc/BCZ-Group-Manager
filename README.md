@@ -76,6 +76,12 @@
 ### 小班打卡信息
 `https://group.baicizhan.com/group/information?shareKey=XXXXXX`
 
+### 小班本周打卡详情
+`https://group.baicizhan.com/group/get_week_rank?shareKey=XXXXXX&week=1`
+
+### 小班上周打卡详情
+`https://group.baicizhan.com/group/get_week_rank?shareKey=XXXXXX&week=2`
+
 ### 搜索用户
 `https://social.baicizhan.com/api/social/get_friend_state?uniqueId=XXXXXX`
 

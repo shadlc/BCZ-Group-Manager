@@ -204,6 +204,8 @@ class BCZ:
         with ThreadPoolExecutor() as executor:
             futures = []
             for group in group_list:
+                if not group.get('valid'):
+                    continue
                 future = executor.submit(
                     lambda argv: self.getGroupInfo(argv[0], argv[1]),
                     (group['share_key'], group['auth_token'])

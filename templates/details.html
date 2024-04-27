@@ -111,16 +111,18 @@
     let current_week = today.getWeek();
     current_week = today.getFullYear() + "-W" + ("0" + current_week).slice(-2);
     window.onload = ()=>{
-      getGroupDetailsOption().then(()=>{
+      getGroupDetailsOption()
+      .then(()=>{
         let week_select = document.getElementById("week_select");
         week_select.value = current_week;
-        queryGroupDetails(group_id).then((result)=>{
-          if (result) {
-            let loading_text = document.querySelector('.loading-text');
-            loading_text.classList.add('hide');
-            document.querySelector('.member-info-container').classList.remove('hide');
-          }
-        });
+        return queryGroupDetails(group_id);
+      })
+      .then((result)=>{
+        if (result) {
+          let loading_text = document.querySelector('.loading-text');
+          loading_text.classList.add('hide');
+          document.querySelector('.member-info-container').classList.remove('hide');
+        }
       });
       bindScrollToTopBtn(document.querySelector('.member-info-container'));
     }
@@ -396,6 +398,7 @@
       }
     }
 
+    // 保存小班配置
     function saveConfig() {
       showModal('确保设置无误？该操作不可逆', '修改配置', ()=>{
         let record_enabled = document.getElementById('record_select')?.value;
@@ -420,6 +423,7 @@
       })
     }
 
+    // 更改小班请求
     function postObserveGroup(payload) {
       return fetch('../observe_group', {
         method: 'POST',
@@ -441,6 +445,7 @@
       });
     }
 
+    // 删除小班请求
     function deleteGroup() {
       showModal('真的要删除此小班吗？该操作不可逆', '警告', ()=>{
         postObserveGroup({
