@@ -18,6 +18,7 @@ class Config:
             'output_file': './小班数据.xlsx',
             'daily_record': '59 23 * * *',
             'cache_second': 60,
+            'debug': False,
         }
         self.initConfig()
         self.raw = self.read()
@@ -28,6 +29,7 @@ class Config:
         self.output_file = self.raw.get('output_file', '')
         self.daily_record = self.raw.get('daily_record', '')
         self.cache_second = self.raw.get('cache_second', '')
+        self.debug = self.raw.get('debug', '')
         self.verify()
 
     def initConfig(self):
@@ -101,6 +103,11 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.cache_second = value
+        if self.debug == '':
+            key = 'debug'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.debug = value
 
     def getInfo(self) -> dict:
         '''获取配置文件相关状态信息'''
