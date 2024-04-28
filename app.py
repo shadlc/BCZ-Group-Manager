@@ -176,8 +176,12 @@ def query_member_table():
     try:
         refreshTempMemberTable(bcz, sqlite)
         result = sqlite.queryMemberTable(request.json, header=True, union_temp=True)
-        for row in result:
-            del row[12]
+        data = []
+        for row in result['data']:
+            row = list(row)
+            del row[-2]
+            data.append(row)
+        result['data'] = data
         return restful(200, '', result)
     except Exception as e:
         return restful(500, f'{e}')
