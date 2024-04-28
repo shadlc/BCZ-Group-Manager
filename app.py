@@ -229,5 +229,4 @@ if __name__ == '__main__':
     logging.info('BCZ-Group-Manger 启动中...')
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
-    # app.run(config.host, config.port, request_handler=MyRequestHandler, debug=True)
     app.run(config.host, config.port, request_handler=MyRequestHandler, debug=config.debug)
