@@ -286,24 +286,64 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
         )
         if not group.get('members'):
             continue
+
+        today_date = group['members'][0]['today_date']
+        member_list = [member['id'] for member in group['members']]
+        for line in week_data['data']:
+            if line[0] not in member_list:
+                member_list.append(line[0])
+                group['members'].append(dict(zip(
+                    [
+                        'id',
+                        'nickname',
+                        'group_nickname',
+                        'completed_time',
+                        'today_date',
+                        'today_word_count',
+                        'today_study_cheat',
+                        'completed_times',
+                        'duration_days',
+                        'book_name',
+                        'group_id',
+                        'group_name',
+                        'data_time',
+                    ],
+                    [
+                        line[0],
+                        line[1],
+                        line[2],
+                        '',
+                        today_date,
+                        0,
+                        False,
+                        line[7],
+                        line[8],
+                        line[9],
+                        line[10],
+                        line[11],
+                        ''
+                    ]
+                )))
+
         for member in group['members']:
             daka_time_dict = {}
             late = 0
             absence = 0
             if is_this_week and member['completed_time']:
                 group['total_times'] += 1
-            for line_data in week_data['data']:
-                if line_data[0] == member['id']:
-                    if line_data[4] in daka_time_dict or line_data[4] == member['today_date']:
+            for line in week_data['data']:
+                if line[0] == member['id']:
+                    if line[4] in daka_time_dict or line[4] == member['today_date']:
                         continue
-                    daka_time_dict[line_data[4]] = {
-                        'time': line_data[3],
-                        'count': line_data[5],
+                    daka_time_dict[line[4]] = {
+                        'time': line[3],
+                        'count': line[5],
                     }
-                    group['total_times'] += 1
-                    if line_data[3] == '':
+                    if line[3] == '':
                         absence += 1
-                    if group['late_daka_time'] and line_data[3] > group['late_daka_time']:
+                    else:
+                        group['total_times'] += 1
+                    if group['late_daka_time'] and line[3] > group['late_daka_time']:
                         late += 1
             if late:
                 group['late_times'] += 1
@@ -314,6 +354,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                 'late': late,
                 'absence': absence,
             })
+
         list.sort(
             group['members'],
             key = lambda x: [
@@ -337,10 +378,11 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
 
     start_date = target_date - timedelta(days=range_day[0])
     end_date = target_date + timedelta(days=range_day[1])
+    end_date_week_end = end_date - timedelta(days=end_date.weekday()) + timedelta(days=6)
 
     week_dict = {}
     current_date = start_date
-    while current_date <= end_date + timedelta(days=1):
+    while current_date <= end_date_week_end:
         week_number = current_date.isocalendar()[1]
         week_start = current_date - timedelta(days=current_date.weekday())
         week_end = week_start + timedelta(days=6)

@@ -678,6 +678,21 @@ img[src=""] {
   border-right: none;
   border-radius: 0.5rem 0 0 0.5rem;
 }
+.wrap-input {
+  display: flex;
+  align-items: stretch;
+  flex-basis: 100% !important;
+}
+.wrap-input>* {
+  height: unset !important;
+  display: flex;
+  align-items: center;
+}
+.wrap-input>div {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
 .simple-table {
   border-spacing: 0;
 }
@@ -1352,6 +1367,9 @@ table.simple-table td {
 .purple-bg {
   color: white;
   background: var(--purple);
+}
+.border {
+  border: solid 0.1rem black;
 }
 .yellow-border {
   border: solid 0.1rem var(--yellow);
