@@ -47,6 +47,7 @@ class SQLite:
                 BOOK_NAME TEXT,                     -- 学习词书
                 GROUP_ID INTEGER,                   -- 小班ID
                 GROUP_NAME TEXT,                    -- 小班昵称
+                AVATAR TEXT,                        -- 用户头像
                 DATA_TIME TEXT                      -- 采集时间
             );''',
             '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
@@ -62,6 +63,7 @@ class SQLite:
                 BOOK_NAME TEXT,                     -- 学习词书
                 GROUP_ID INTEGER,                   -- 小班ID
                 GROUP_NAME TEXT,                    -- 小班昵称
+                AVATAR TEXT,                        -- 用户头像
                 DATA_TIME TEXT                      -- 采集时间
             );''',
             '''CREATE TABLE IF NOT EXISTS OBSERVED_GROUPS (                   -- 关注小班表
@@ -179,7 +181,7 @@ class SQLite:
         cursor = conn.cursor()
         for member in members:
             cursor.execute(
-                f'INSERT OR IGNORE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                f'INSERT OR IGNORE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
                     member['id'],
                     member['nickname'],
@@ -193,6 +195,7 @@ class SQLite:
                     member['book_name'],
                     member['group_id'],
                     member['group_name'],
+                    member['avatar'],
                     member['data_time'],
                 )
             )
@@ -430,7 +433,24 @@ class SQLite:
             list: 用户信息表
         '''   
         count_sql = f'SELECT COUNT(*) FROM MEMBERS WHERE 1=1'
-        search_sql = f'SELECT * FROM MEMBERS WHERE 1=1'
+        search_sql = f'''
+            SELECT
+                USER_ID,
+                NICKNAME,
+                GROUP_NICKNAME,
+                COMPLETED_TIME,
+                TODAY_DATE,
+                WORD_COUNT,
+                STUDY_CHEAT,
+                COMPLETED_TIMES,
+                DURATION_DAYS,
+                BOOK_NAME,
+                GROUP_ID,
+                GROUP_NAME,
+                AVATAR,
+                DATA_TIME
+            FROM MEMBERS WHERE 1=1
+        '''
         if union_temp:  
             count_sql = f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS) WHERE 1=1'
             search_sql = f'SELECT * FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS) WHERE 1=1'
@@ -504,6 +524,7 @@ class SQLite:
                 '学习词书',
                 '小班ID',
                 '小班名称',
+                '用户头像',
                 '采集时间',
             ]] + result
         return {

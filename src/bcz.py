@@ -306,6 +306,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                         'book_name',
                         'group_id',
                         'group_name',
+                        'avatar',
                         'data_time',
                     ],
                     [
@@ -321,6 +322,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                         line[9],
                         line[10],
                         line[11],
+                        line[12],
                         ''
                     ]
                 )))

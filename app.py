@@ -176,6 +176,8 @@ def query_member_table():
     try:
         refreshTempMemberTable(bcz, sqlite)
         result = sqlite.queryMemberTable(request.json, header=True, union_temp=True)
+        for row in result:
+            del row[12]
         return restful(200, '', result)
     except Exception as e:
         return restful(500, f'{e}')
@@ -229,4 +231,4 @@ if __name__ == '__main__':
     logging.info('BCZ-Group-Manger 启动中...')
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
-    app.run(config.host, config.port, request_handler=MyRequestHandler, debug=config.debug)
+    app.run(config.host, config.port, request_handler=MyRequestHandler)
