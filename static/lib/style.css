@@ -678,6 +678,21 @@ img[src=""] {
   border-right: none;
   border-radius: 0.5rem 0 0 0.5rem;
 }
+.wrap-input {
+  display: flex;
+  align-items: stretch;
+  flex-basis: 100% !important;
+}
+.wrap-input>* {
+  height: unset !important;
+  display: flex;
+  align-items: center;
+}
+.wrap-input>div {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+}
 .simple-table {
   border-spacing: 0;
 }
@@ -1095,7 +1110,8 @@ table.simple-table td {
   display: block;
   margin: 0.2rem;
 }
-.member-extra {
+.member-extra,
+.group-extra {
   display: flex;
   position: absolute;
   right: 0.5rem;
@@ -1316,6 +1332,22 @@ table.simple-table td {
 .tiny-notice:active {
   transform: scale(0.9);
 }
+.setting-desc {
+  font-weight: normal;
+  display: block;
+  padding: 0 0.5rem 1rem 0.5rem;
+}
+.disclaimer {
+  margin: 1rem;
+  margin-top: 3rem;
+}
+.disclaimer h1 {
+  text-align: center;
+}
+.disclaimer p {
+  font-weight: normal;
+  white-space: pre-wrap;
+}
 .yellow-bg {
   color: black;
   background: var(--yellow);
@@ -1335,6 +1367,9 @@ table.simple-table td {
 .purple-bg {
   color: white;
   background: var(--purple);
+}
+.border {
+  border: solid 0.1rem black;
 }
 .yellow-border {
   border: solid 0.1rem var(--yellow);

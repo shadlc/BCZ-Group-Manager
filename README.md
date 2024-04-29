@@ -59,28 +59,45 @@
 **部分较为实用百词斩官方接口在这里整理一下**
 
 ### 个人主页
-`https://social.baicizhan.com/api/deskmate/home_page`
+GET `https://social.baicizhan.com/api/deskmate/home_page`
 
 ### 用户信息
-`https://social.baicizhan.com/api/deskmate/personal_details?uniqueId=XXXXXX`
+GET `https://social.baicizhan.com/api/deskmate/personal_details?uniqueId=XXXXXX`
 
 ### 小班列表
-`https://group.baicizhan.com/group/own_groups?uniqueId=XXXXXX`
+GET `https://group.baicizhan.com/group/own_groups?uniqueId=XXXXXX`
 
 ### 授权班列表
-`https://group.baicizhan.com/group/get_group_authorization_page?uniqueId=XXXXXX`
+GET `https://group.baicizhan.com/group/get_group_authorization_page?uniqueId=XXXXXX`
 
 ### 小班排名
-`https://group.baicizhan.com/group/get_group_rank`
+GET `https://group.baicizhan.com/group/get_group_rank`
 
 ### 小班打卡信息
-`https://group.baicizhan.com/group/information?shareKey=XXXXXX`
+GET `https://group.baicizhan.com/group/information?shareKey=XXXXXX`
+
+### 小班本周打卡详情
+GET `https://group.baicizhan.com/group/get_week_rank?shareKey=XXXXXX&week=1`
+
+### 小班上周打卡详情
+GET `https://group.baicizhan.com/group/get_week_rank?shareKey=XXXXXX&week=2`
+
+### 小班移除用户
+POST `https://group.baicizhan.com/group/remove_members`
+```
+{
+  "shareKey":"XXXXXX",
+  "memberIds":[
+    XXXXXX
+  ]
+}
+```
 
 ### 搜索用户
-`https://social.baicizhan.com/api/social/get_friend_state?uniqueId=XXXXXX`
+GET `https://social.baicizhan.com/api/social/get_friend_state?uniqueId=XXXXXX`
 
 ### 铜板数量
-`https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_vo`
+GET `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_vo`
 
 ### 铜板记录
-`https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_records`
+GET `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_records`

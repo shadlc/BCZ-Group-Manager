@@ -15,6 +15,7 @@ class BCZ:
         '''小班解析类'''
         self.main_token = config.main_token
         self.invalid_pattern = r'[\000-\010]|[\013-\014]|[\016-\037]'
+        self.own_info_url = 'https://social.baicizhan.com/api/deskmate/home_page'
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
         self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
@@ -37,16 +38,13 @@ class BCZ:
             'uid': None,
             'name': None,
         }
-        url = 'https://social.baicizhan.com/api/deskmate/home_page'
         headers = {'Cookie': f'access_token="{token}"'}
-        response = requests.get(url, headers=headers, timeout=5)
-        try:
-            response_json = response.json()
-            if response_json.get('code') == 1:
-                data['uid'] = response_json['data']['mine']['uniqueId']
-                data['name'] = response_json['data']['mine']['name']
-        except ValueError as e:
-            logger.error(f'请求API[{url}]异常!\n{response.text}')
+        response = requests.get(self.own_info_url, headers=headers, timeout=5)
+        if response.status_code != 200 or response.json().get('code') != 1:
+            logger.warning(f'使用token获取用户信息失败!\n{response.text}')
+        user_info = response.json().get('data')
+        data['uid'] = user_info['mine']['uniqueId']
+        data['name'] = user_info['mine']['name']
         return data
         
     def getUserInfo(self, user_id: str = None) -> dict | None:
@@ -60,7 +58,7 @@ class BCZ:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
             raise Exception(msg)
-        user_info = response.json()['data']
+        user_info = response.json().get('data')
         return user_info
 
     def getUserGroupInfo(self, user_id: str = None) -> dict | None:
@@ -74,7 +72,7 @@ class BCZ:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
             raise Exception(msg)
-        group_info = response.json()['data']
+        group_info = response.json().get('data')
         group_list = group_info.get('list') if group_info else []
         groups = []
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
@@ -90,8 +88,7 @@ class BCZ:
                 'name': group_name,
                 'share_key': group['shareKey'],
                 'introduction': introduction,
-                'leader': '',
-                'leader_id': '',
+                'leader': group['leader'],
                 'member_count': group['memberCount'],
                 'count_limit': group['countLimit'],
                 'today_daka_count': group['todayDakaCount'],
@@ -117,14 +114,14 @@ class BCZ:
             auth_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
-            logger.error(f'{msg}\n{main_response.text}')
+            logger.warning(f'{msg}\n{main_response.text}')
             # raise Exception(msg)
             return {
                 'share_key': share_key,
                 'exception': main_response.text,
             }
 
-        main_data = main_response.json()['data']
+        main_data = main_response.json().get('data')
         group_info = main_data.get('groupInfo') if main_data else []
         group_id = group_info['id']
         group_name = re.sub(self.invalid_pattern, '', group_info['name']) if group_info['name'] else ''
@@ -185,7 +182,7 @@ class BCZ:
         if auth_token:
             if auth_response.status_code != 200 or auth_response.json().get('code') != 1:
                 group['token_invalid'] = True
-            auth_data = auth_response.json()['data']
+            auth_data = auth_response.json().get('data')
             auth_member_list = auth_data.get('members') if auth_data else []
             for member in auth_member_list:
                 member_id = member['uniqueId']
@@ -206,6 +203,8 @@ class BCZ:
         with ThreadPoolExecutor() as executor:
             futures = []
             for group in group_list:
+                if not group.get('valid'):
+                    continue
                 future = executor.submit(
                     lambda argv: self.getGroupInfo(argv[0], argv[1]),
                     (group['share_key'], group['auth_token'])
@@ -257,7 +256,11 @@ def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '') -> list
 
 def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> list[dict]:
     '''分析打卡数据并返回'''
-    year, week = map(int, week_date.split('-W'))
+    if week_date:
+        year, week = map(int, week_date.split('-W'))
+    else:
+        now = datetime.now()
+        year, week = now.year, now.isocalendar()[1]
     start_of_year = date(year, 1, 1)
     start_of_week = start_of_year + timedelta(days=(week - 1) * 7 - start_of_year.weekday())
     sdate = start_of_week.strftime('%Y-%m-%d')
@@ -283,24 +286,66 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
         )
         if not group.get('members'):
             continue
+
+        today_date = group['members'][0]['today_date']
+        member_list = [member['id'] for member in group['members']]
+        for line in week_data['data']:
+            if line[0] not in member_list:
+                member_list.append(line[0])
+                group['members'].append(dict(zip(
+                    [
+                        'id',
+                        'nickname',
+                        'group_nickname',
+                        'completed_time',
+                        'today_date',
+                        'today_word_count',
+                        'today_study_cheat',
+                        'completed_times',
+                        'duration_days',
+                        'book_name',
+                        'group_id',
+                        'group_name',
+                        'avatar',
+                        'data_time',
+                    ],
+                    [
+                        line[0],
+                        line[1],
+                        line[2],
+                        '',
+                        today_date,
+                        0,
+                        False,
+                        line[7],
+                        line[8],
+                        line[9],
+                        line[10],
+                        line[11],
+                        line[12],
+                        ''
+                    ]
+                )))
+
         for member in group['members']:
             daka_time_dict = {}
             late = 0
             absence = 0
             if is_this_week and member['completed_time']:
                 group['total_times'] += 1
-            for line_data in week_data['data']:
-                if line_data[0] == member['id']:
-                    if line_data[4] in daka_time_dict or line_data[4] == member['today_date']:
+            for line in week_data['data']:
+                if line[0] == member['id']:
+                    if line[4] in daka_time_dict or line[4] == member['today_date']:
                         continue
-                    daka_time_dict[line_data[4]] = {
-                        'time': line_data[3],
-                        'count': line_data[5],
+                    daka_time_dict[line[4]] = {
+                        'time': line[3],
+                        'count': line[5],
                     }
-                    group['total_times'] += 1
-                    if line_data[3] == '':
+                    if line[3] == '':
                         absence += 1
-                    if group['late_daka_time'] and line_data[3] > group['late_daka_time']:
+                    else:
+                        group['total_times'] += 1
+                    if group['late_daka_time'] and line[3] > group['late_daka_time']:
                         late += 1
             if late:
                 group['late_times'] += 1
@@ -311,6 +356,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                 'late': late,
                 'absence': absence,
             })
+
         list.sort(
             group['members'],
             key = lambda x: [
@@ -330,14 +376,15 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
         try:    
             target_date = datetime.strptime(date, '%Y-%m-%d')
         except Exception as e:
-            logger.error(f'转换时间[{date}]出错: {e}')
+            logger.warning(f'转换时间[{date}]出错: {e}')
 
     start_date = target_date - timedelta(days=range_day[0])
     end_date = target_date + timedelta(days=range_day[1])
+    end_date_week_end = end_date - timedelta(days=end_date.weekday()) + timedelta(days=6)
 
     week_dict = {}
     current_date = start_date
-    while current_date <= end_date + timedelta(days=7):
+    while current_date <= end_date_week_end:
         week_number = current_date.isocalendar()[1]
         week_start = current_date - timedelta(days=current_date.weekday())
         week_end = week_start + timedelta(days=6)
@@ -348,6 +395,6 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
     return week_dict
 
 if __name__ == '__main__':
-    logger.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logger.DEBUG)
+    logger.basicConfig(format='[%(asctime)s][%(levelname)s] %(message)s', level=logger.DEBUG)
     config = Config()
     recordInfo(BCZ(config), SQLite(config))
