@@ -19,6 +19,7 @@ class BCZ:
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
         self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
+        self.get_week_rank_url = 'https://group.baicizhan.com/group/get_week_rank'
 
     def getInfo(self) -> dict:
         '''获取运行信息'''
@@ -198,6 +199,32 @@ class BCZ:
 
         return group
 
+    def getHistoryWeekRank(self, share_key: str) -> dict:
+        '''获取小班历史排行榜信息'''
+        url = f'{self.get_week_rank_url}?shareKey={share_key}'
+        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        week_response = requests.get(f'{url}&week=1', headers=headers, timeout=5)
+        if week_response.status_code != 200 or week_response.json().get('code') != 1:
+            msg = f'获取分享码为{share_key}的小班历史排行榜信息失败! 小班不存在或主授权令牌无效'
+            logger.warning(f'{msg}\n{week_response.text}')
+            return {
+                'share_key': share_key,
+                'exception': week_response.text,
+            }
+        last_week_response = requests.get(f'{url}&week=2', headers=headers, timeout=5)
+        week_data = week_response.json().get('data')
+        last_week_data = last_week_response.json().get('data')
+        daka_dict = {}
+        for member in week_data.get('list', []):
+            id = member['uniqueId']
+            daka_dict[id] = member['weekDakaDates']
+        for member in last_week_data.get('list', []):
+            id = member['uniqueId']
+            daka_dict.update({
+                id: member['weekDakaDates']
+            })
+        return daka_dict
+
     def updateGroupInfo(self, group_list: list[dict]) -> list:
         '''获取最新信息并刷新小班信息列表'''
         with ThreadPoolExecutor() as executor:
@@ -240,6 +267,36 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
             logger.info(f'正在获取小班[{group["name"]}({group["id"]})]的数据')
             group_info_list.append(bcz.getGroupInfo(group['share_key'], group['auth_token']))
     sqlite.saveGroupInfo(group_info_list)
+
+def verifyInfo(bcz: BCZ, sqlite: SQLite):
+    '''通过小班排行榜补全打卡信息'''
+    makeup_list = []
+    for group in sqlite.queryObserveGroupInfo():
+        if group['daily_record']:
+            logger.info(f'正在为小班[{group["name"]}({group["id"]})]的打卡数据进行验证补全')
+            daka_dict = bcz.getHistoryWeekRank(group['share_key'])
+            sdate = (datetime.now() - timedelta(days=7*2)).strftime('%Y-%m-%d')
+            member_list = sqlite.queryMemberTable(
+                {
+                    'group_id': group['id'],
+                    'sdate': sdate,
+                    'page_count': 'unlimited',
+                    
+                },
+                header = False,
+            )['data']
+            absence_list = {line[0]:line[4] for line in member_list if line[3] == ''}
+            for id in daka_dict:
+                for daka_date in daka_dict[id]:
+                    if id in absence_list and daka_date in absence_list[id]:
+                        makeup_list.append({
+                            'id': id,
+                            'group_id': group['id'],
+                            'today_date': daka_date,
+                            'completed_time': '晚于记录时间',
+                            'today_word_count': '?',
+                        })
+    sqlite.updateMemberInfo(makeup_list)
 
 def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', all: bool = True, latest: bool = False) -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
@@ -397,8 +454,3 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
         week_dict[week] = week_str
         current_date += timedelta(7)
     return week_dict
-
-if __name__ == '__main__':
-    logger.basicConfig(format='[%(asctime)s][%(levelname)s] %(message)s', level=logger.DEBUG)
-    config = Config()
-    recordInfo(BCZ(config), SQLite(config))

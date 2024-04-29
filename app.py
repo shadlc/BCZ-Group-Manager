@@ -5,7 +5,7 @@ import logging
 from flask import Flask, Response, render_template, send_file, jsonify, redirect, request
 from werkzeug.serving import WSGIRequestHandler, _log
 
-from src.bcz import BCZ, recordInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
+from src.bcz import BCZ, recordInfo, verifyInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
 from src.config import Config
 from src.sqlite import SQLite
 from src.xlsx import Xlsx
@@ -231,4 +231,5 @@ if __name__ == '__main__':
     logging.info('BCZ-Group-Manger 启动中...')
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
+        Schedule(config.daily_verify, lambda: verifyInfo(bcz, sqlite))
     app.run(config.host, config.port, request_handler=MyRequestHandler)

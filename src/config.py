@@ -17,6 +17,7 @@ class Config:
             'main_token': '',
             'output_file': './小班数据.xlsx',
             'daily_record': '59 23 * * *',
+            'daily_verify': '00 06 * * *',
             'cache_second': 60,
         }
         self.initConfig()
@@ -27,6 +28,7 @@ class Config:
         self.main_token = self.raw.get('main_token', '')
         self.output_file = self.raw.get('output_file', '')
         self.daily_record = self.raw.get('daily_record', '')
+        self.daily_verify = self.raw.get('daily_verify', '')
         self.cache_second = self.raw.get('cache_second', '')
         self.verify()
 
@@ -96,6 +98,11 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.daily_record = value
+        if self.daily_verify == '':
+            key = 'daily_verify'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.daily_verify = value
         if self.cache_second == '':
             key = 'cache_second'
             value = self.default_config_dict[key]

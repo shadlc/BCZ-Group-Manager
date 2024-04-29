@@ -139,6 +139,9 @@ img[src=""] {
 .start {
   text-align:start;
 }
+.scroll-auto {
+  overflow: auto;
+}
 .center {
   text-align:center;
 }
