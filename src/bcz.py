@@ -20,6 +20,57 @@ class BCZ:
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
         self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
 
+    headers = {
+        "default_headers_dict": {
+            "Connection": "keep-alive",
+            "User-Agent": "bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI",
+            "Accept": "*/*",
+            "Origin": "",
+            "X-Requested-With": "",
+            "Sec-Fetch-Site": "same-site",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Referer": "",
+            "Accept-Encoding": "gzip, deflate",
+            "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cookie": {
+                "access_token": "",
+                "client_time": "",
+                "app_name": "7060100",
+                "bcz_dmid": "2a16dfbb",
+                "channel": "qq",
+                "device_id": "032ae8f8427885d7",
+                # device_id 会根据access_token使用哈希唯一确定
+                "device_name": "android/DCO-AL00-HUAWEI",
+                "device_version": "12",
+                "Pay-Support-H5": "alipay_mob_client"
+            }
+        }
+    }
+    hash_rmb = {}
+    def getHeaders(self, auth_token: str) -> dict:
+        '''获取请求头'''
+        # 实际上不同域名请求有细微差别，这里暂时只使用默认
+        if (auth_token == 'main_token'):
+            auth_token = self.main_token
+
+        current_headers = self.headers['default_headers_dict'].copy()
+
+        if auth_token not in self.hash_rmb:
+            
+            # 使用哈希函数计算字符串的哈希值
+            hash_value = hash(auth_token)
+            # 将哈希值转换为unsigned long long值，然后取反，再转换为16进制字符串
+            hex_string = format((~hash_value) & 0xFFFFFFFFFFFFFFFF, '016X')
+            self.hash_rmb[auth_token] = {'hex_string': hex_string }
+        
+
+        current_headers['Cookie']['device_id'] = f'{self.hash_rmb[auth_token]["hex_string"]}'
+        current_headers['Cookie']['access_token'] = auth_token
+        current_headers['Cookie']['client_time'] = str(int(time.time()))
+        return current_headers
+    
+
     def getInfo(self) -> dict:
         '''获取运行信息'''
         main_info = self.getOwnInfo(self.main_token)
@@ -38,7 +89,7 @@ class BCZ:
             'uid': None,
             'name': None,
         }
-        headers = {'Cookie': f'access_token="{token}"'}
+        headers = self.getHeaders(token)
         response = requests.get(self.own_info_url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'使用token获取用户信息失败!\n{response.text}')
@@ -52,7 +103,7 @@ class BCZ:
         if not user_id:
             return
         url = f'{self.user_info_url}?uniqueId={user_id}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = self.getHeaders(self.main_token)
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -66,7 +117,7 @@ class BCZ:
         if not user_id:
             return
         url = f'{self.group_list_url}?uniqueId={user_id}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = self.getHeaders(self.main_token)
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -107,10 +158,10 @@ class BCZ:
         group = {}
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         url = f'{self.group_detail_url}?shareKey={share_key}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = self.getHeaders(self.main_token)
         main_response = requests.get(url, headers=headers, timeout=5)
         if auth_token:
-            headers = {'Cookie': f'access_token="{auth_token}"'}
+            headers = self.getHeaders(auth_token)
             auth_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'

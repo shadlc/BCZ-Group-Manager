@@ -130,3 +130,88 @@ class Config:
                 self.cache_second = int(configure[key])
                 self.raw[key] = int(configure[key])
                 self.save(key, self.cache_second)
+
+
+
+class Strategy:
+    default_dict = {
+        "totalStrategies": 3,
+        "strategies": [
+            {
+                "name": "策略一",
+                "weekDays": ["周一", "周三"],
+                "timeStart": "09:00",
+                "timeEnd": "10:00",
+                "subItemsCount": 2,
+                "subItems": [
+                    {
+                        "name": "子条目1",
+                        "operation": "接受",
+                        "validity": "本周",
+                        "minPeople": 199,
+                        "conditionsCount": 3,
+                        "conditions": [
+                            {"name": "同桌天数", "value": 5, "operator": "大于", "equality": False},
+                            # ... 其他条件  
+                        ]
+                    },
+                    # ... 其他子条目  
+                ]
+            },
+            {
+                "name": "策略二",
+                "weekDays": ["周二", "周四"],
+                "timeStart": "10:00",
+                "timeEnd": "11:00",
+                "subItemsCount": 1,
+                "subItems": [
+                    {
+                        "name": "子条目1",
+                        "operation": "拒绝",
+                        "minPeople": 199,
+                        "validity": "本周",
+                        "conditionsCount": 2,
+                        "conditions": [
+                            {"name": "同桌天数", "value": 3, "operator": "大于", "equality": False},
+                            # ... 其他条件  
+                        ]
+                    },
+                    # ... 其他子条目  
+                ]
+            },
+            # ... 其他策略  
+        ]
+    }
+    def __init__(self) -> None:
+        '''初始化配置文件'''
+        self.file_path = f'./strategy.json'
+        
+        try:
+            if path := os.path.dirname(self.file_path):
+                os.makedirs(path, exist_ok=True)
+            self.json_data = json.read(self.file_path, encoding='utf-8')
+        except:
+            json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            logger.info('初次启动，已在当前执行目录生成配置文件')
+        
+    def read(self: str = '') -> dict:
+        '''获取指定配置'''
+        json_data = json.load(open(self.file_path, encoding='utf-8'))
+        return json_data
+        
+    def update(self, data: dict) -> None:
+        '''用dict更新配置文件'''
+        self.json_data.update(data)
+
+    def modify(self, key: str, value: list | dict | str | int | bool = '') -> None:
+        '''用key-value更新配置文件'''
+        self.json_data[key] = value
+
+    def save(self: dict) -> None:
+        '''保存指定配置文件'''
+        try:
+            json.dump(self.json_data, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f'保存配置文件发生错误\n {e}')
+
+    

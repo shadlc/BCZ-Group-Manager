@@ -4,37 +4,63 @@
 import threading
 import logging
 import time
-import json
+from config import Strategy
 from bcz import BCZ
 
-class Filter:
-    def __init__(shareKey: str, self):
-        self.shareKey = shareKey
-        # 为了共用用户信息，分离出了config.py
-    def set(self, strata_name: str, strategies: dict):
-        # 设置策略
-        self.strategies = strategies
-        self.strata_name = strata_name
 
-    def stop(self):
-        # 停止筛选
+class FilterAgent:
+    # 这个功能跟BCZ类功能类似，BCZ类就用来现有的每日获取，而FilterAgent类则用来筛选
+    def __init__(self, strategy: dict, shareKey: str, strategy_index: str) -> None:
+        self.strategy = strategy
+class Filter:
+    def __init__(self, strategy: dict, shareKey: str, strategy_index: str) -> None:
+        # 每个filter对应一个班级，但是strategy因为要前端更新，所以由外部传入
+        self.strategy = strategy
+        self.shareKey = shareKey
+        self.strategy_index = strategy_index
+
+        self.activate = False
+        
+    def getState(self) -> bool:
+        return self.activate
+    
+    def applyStrategy(self, strategy_index: str) -> None:
+        # 设置策略
+        self.strategy_index = strategy_index
+
+
+    def stop(self) -> None:
+        # 停止筛选，不再分开monitor和activate功能
         if not hasattr(self, "tids"):
-            return # 线程没有运行，且有线程id记录
+            return # 筛选线程没有运行
         self.rlock.acquire()
-        self.monitor = False
+        self.activate = False
         self.rlock.release()
         self.tids.join()
         del self.tids
 
-    def __checkUserProfile(self, uniqueId: str, bcz: BCZ) -> dict:
+    def 
+    def __checkUserProfile(self, refer_dict:dict, member_dict: dict, strata_name: str, unauthorized_token: str) -> None:
         # 通信等价操作：点击了用户主页
         # 本函数不可直接调用，请调用check
         # <重要变量1> member_dict是这个用户在self.my_group_dict中截取出的，用户在我的班级的信息，是单个用户的
         self.personal_dict = self.bcz.getUserInfoRAW(member_dict["uniqueId"], unauthorized_token)
         # <重要变量2> self.personal_dict 是通过uniqueId得到的， 这个用户的个人信息，也是单个用户的
+        time.sleep(3)
+        # print(self.personal_dict["tag"])
+        print (f'<1>原名{self.personal_dict["name"]}，同桌{self.personal_dict["deskmateDays"]}天，\
+            打卡/入班时间{time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(member_dict["completedTime"]+28800))}，总卡{self.personal_dict["dakaDays"]},\
+            {"对方将您拉黑," if self.personal_dict["userInHisBlackList"]  else ""},\
+            {"违规," if self.personal_dict["todayStudyCheat"]  else ""},\
+            {"已点赞," if self.personal_dict["todayLikedState"]  else ""},\
+            总赞{self.personal_dict["likedCount"]},\
+            {"未组队," if self.personal_dict["tag"] == -1 else ""},\
+            {"靠谱," if self.personal_dict["tag"] == 3 else ""},\
+            {""}')
+
         # 默认gmtime总是比北京时间少8个小时（28800秒）
-        logging(f"__checkUserProfile")
-        return bcz.getUserInfo(self, uniqueId)
+
+        return 
 
 
 
@@ -363,7 +389,7 @@ class Filter:
         self.prev_my_group_dict = {} # 上一个
 
         self.rlock.acquire()
-        self.monitor = True
+        self.activate = True
         # 监听标志，self.active是筛选激活标志
         self.rlock.release()
 
@@ -454,11 +480,6 @@ class Filter:
 
 
 
-    def activate(self) -> None:
-        self.active = 1
-
-    def deactivate(self) -> None:
-        self.active = 0
 
     def start(self, authorized_token: str, unauthorized_token: str, share_key: str, strata_name: str) -> None:
         # 是否验证？待测试，如果没有那就可怕了
