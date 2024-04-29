@@ -188,7 +188,6 @@ class BCZ:
             for member in auth_member_list:
                 member_id = member['uniqueId']
                 nickname = re.sub(self.invalid_pattern, '', member['nickname'])
-                member['group_nickname'] = ''
                 for member_info in members:
                     if member_id == member_info['id'] and member_info['nickname'] != nickname:
                         member_info['group_nickname'] = member['nickname']
@@ -200,17 +199,14 @@ class BCZ:
         return group
 
     def getHistoryWeekRank(self, share_key: str) -> dict:
-        '''获取小班历史排行榜信息'''
+        '''获取小班成员历史排行榜信息'''
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
         headers = {'Cookie': f'access_token="{self.main_token}"'}
         week_response = requests.get(f'{url}&week=1', headers=headers, timeout=5)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
-            msg = f'获取分享码为{share_key}的小班历史排行榜信息失败! 小班不存在或主授权令牌无效'
+            msg = f'获取分享码为{share_key}的小班成员历史排行榜信息失败! 小班不存在或主授权令牌无效'
             logger.warning(f'{msg}\n{week_response.text}')
-            return {
-                'share_key': share_key,
-                'exception': week_response.text,
-            }
+            return {}
         last_week_response = requests.get(f'{url}&week=2', headers=headers, timeout=5)
         week_data = week_response.json().get('data')
         last_week_data = last_week_response.json().get('data')
@@ -269,7 +265,7 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
     sqlite.saveGroupInfo(group_info_list)
 
 def verifyInfo(bcz: BCZ, sqlite: SQLite):
-    '''通过小班排行榜补全打卡信息'''
+    '''通过小班成员排行榜补全打卡信息'''
     makeup_list = []
     for group in sqlite.queryObserveGroupInfo():
         if group['daily_record']:

@@ -78,7 +78,7 @@ def download():
         xlsx.write('用户信息', result[0])
         xlsx.save()
     except Exception as e:
-        return restful(500, f'下载数据时发生错误: {e}')
+        return restful(500, f'下载数据时发生错误(X_X): {e}')
     finally:
         processing = False
     return send_file(config.output_file)
@@ -113,7 +113,7 @@ def observe_group():
                 return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
             return restful(200, '', group_list)
         except Exception as e:
-            return restful(400, str(e))
+            return restful(400, f'查询小班时发生错误(X_X): {e}')
 
     elif request.method == 'POST':
         '''添加或修改关注小班列表'''
@@ -155,7 +155,7 @@ def query_group_details():
             return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
         return restful(200, '', group_list)
     except Exception as e:
-        return restful(400, str(e))
+        return restful(400, f'查询小班信息时发生错误(X_X): {e}')
 
 @app.route('/get_group_details_option', methods=['GET'])
 def get_group_details_option():
@@ -180,7 +180,7 @@ def query_member_table():
         result['data'] = data
         return restful(200, '', result)
     except Exception as e:
-        return restful(500, f'{e}')
+        return restful(500, f'查询数据时发生错误(X_X): {e}')
 
 @app.route('/search_group', methods=['GET'])
 def search_group():
@@ -198,7 +198,7 @@ def search_group():
             return restful(200, '', result)
         return restful(404, '未搜索到符合条件的小班 (ᗜ ˰ ᗜ)"')
     except Exception as e:
-        return restful(400, f'{e}')
+        return restful(400, f'搜索小班时发生错误(X_X): {e}')
 
 @app.route('/configure', methods=['GET', 'POST'])
 def configure():
@@ -212,7 +212,7 @@ def configure():
         try:
             config.modify(request.json)
         except Exception as e:
-            return restful(400, str(e))
+            return restful(400, f'修改配置时发生错误(X_X): {e}')
         return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
 
 

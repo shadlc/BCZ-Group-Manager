@@ -31,7 +31,7 @@
         <div class="eaves">
           <div class="gloss"></div>
           <div class="eaves-container">
-            <a id="my_class" class="active">我的小班</a>
+            <a id="my_class" class="active">小班列表</a>
             <a href="data">数据查询</a>
             <a href="setting">系统设置</a>
           </div>
@@ -106,7 +106,7 @@
           return;
         }
         let groups = data.data;
-        document.getElementById('my_class').innerText = '我的小班(' + groups.length + ')';
+        document.getElementById('my_class').innerText = '小班列表(' + groups.length + ')';
         let container = document.querySelector('.wall-container');
         let empty_group = document.querySelector('.empty-group');
         for (let i in groups) {

@@ -17,7 +17,7 @@ class Config:
             'main_token': '',
             'output_file': './小班数据.xlsx',
             'daily_record': '59 23 * * *',
-            'daily_verify': '00 06 * * *',
+            'daily_verify': '00 04 * * *',
             'cache_second': 60,
         }
         self.initConfig()
