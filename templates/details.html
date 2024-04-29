@@ -389,7 +389,7 @@
         member_table.className = 'info-table member-table';
         member_table.innerHTML = member_content;
         let modal_content = '打卡记录为空';
-        if (Object.keys(member.daka).length != 0) {
+        if (group.week == current_week || Object.keys(member.daka).length != 0) {
           modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th><th>单词数</th></tr>';
           for (let date in member.daka) {
             let daka_time = member.daka[date].time ? member.daka[date].time : '未打卡';

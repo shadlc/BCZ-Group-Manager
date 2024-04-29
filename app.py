@@ -104,15 +104,11 @@ def observe_group():
         '''获取关注小班列表'''
         group_id = request.args.get('id', '')
         try:
-            if group_id:
-                full_info = True
-            else:
-                full_info = False
-            group_list = sqlite.queryObserveGroupInfo(group_id)
-            group_list = bcz.updateGroupInfo(group_list, full_info)
-            sqlite.updateObserveGroupInfo(group_list)
+            group_list = refreshTempMemberTable(bcz, sqlite, group_id, latest=True)
             for group in group_list:
                 group['auth_token'] = len(group['auth_token']) * '*'
+                if not group_id:
+                    group.pop('members')
             if not group_list:
                 return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
             return restful(200, '', group_list)

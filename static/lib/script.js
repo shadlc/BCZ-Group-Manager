@@ -317,7 +317,7 @@ function bindScrollToTopBtn(element) {
   scroll_to_top_btn.title = '回到顶部';
   scroll_to_top_btn.innerText = '▲';
   document.body.appendChild(scroll_to_top_btn, document.body.lastChild);
-  scroll_to_top_btn.onscroll = () => {
+  element.onscroll = () => {
     if (element.scrollTop > element.clientHeight * 1.5) {
       document.getElementById("scroll_top_btn").classList.add('show');
     } else {

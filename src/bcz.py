@@ -198,7 +198,7 @@ class BCZ:
 
         return group
 
-    def updateGroupInfo(self, group_list: list[dict], full_info: bool = False) -> list:
+    def updateGroupInfo(self, group_list: list[dict]) -> list:
         '''获取最新信息并刷新小班信息列表'''
         with ThreadPoolExecutor() as executor:
             futures = []
@@ -213,8 +213,6 @@ class BCZ:
 
         for future in futures:
             result = future.result()
-            if not full_info and 'members' in result:
-                result.pop('members')
             for group_info in group_list:
                 if group_info['id'] == result.get('id'):
                      group_info.update(result)
@@ -243,12 +241,12 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
             group_info_list.append(bcz.getGroupInfo(group['share_key'], group['auth_token']))
     sqlite.saveGroupInfo(group_info_list)
 
-def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '') -> list[dict]:
+def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', latest: bool = False) -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
     data_time = sqlite.queryTempMemberCacheTime()
     group_list = sqlite.queryObserveGroupInfo(group_id, all=True)
-    if int(time.time()) - data_time > sqlite.cache_second or group_id:
-        group_list = bcz.updateGroupInfo(group_list, full_info=True)
+    if latest or (int(time.time()) - data_time > sqlite.cache_second or group_id):
+        group_list = bcz.updateGroupInfo(group_list)
         sqlite.updateObserveGroupInfo(group_list)
         sqlite.deleteTempMemberTable(group_id)
         sqlite.saveGroupInfo(group_list, temp=True)
@@ -363,7 +361,6 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                 1 if x['today_study_cheat'] == '是' else 0,
                 x['absence'],
                 x['late'],
-                int(x['completed_time'].replace(':', '')) if x['completed_time'] else 999999,
             ],
             reverse=True
         )
