@@ -51,12 +51,24 @@
 </head>
 <body>
     <div style="display: flex;flex-direction: column; justify-content: center; align-items: center; height: 100vh;">
-  <div class="box" id ='aaa' ></div>
-  <div class="box" id ='bbb' style="opacity:0;"></div>
+  <div class="box" id ='aaa' onclick="b() "></div>
+  <div class="box" id ='bbb' onclick="a()" style="opacity:0;"></div>
 </div>
 </body>
 <script>
-        
+        function a() {
+          var box = document.getElementById('aaa');
+          box.style.animation = "Show 0.5s ease-in-out forwards";
+          box = document.getElementById('bbb');
+          box.style.animation = "Fade 0.5s ease-in-out forwards";
+        }
+        function b() {
+          var box = document.getElementById('bbb');
+          box.style.animation = "Show 0.5s ease-in-out forwards";
+          box = document.getElementById('aaa');
+          box.style.animation = "Fade 0.5s ease-in-out forwards";
+
+        }
 
 </script>
 </html>

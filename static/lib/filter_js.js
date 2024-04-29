@@ -511,13 +511,13 @@ const mockServerResponse = {
             weekDays: ["周一", "周三"],
             timesStart: ["09:00"],
             timesEnd: ["10:00"],
-            minPeople: 5,
             subItemsCount: 2,
             subItems: [
                 {
                     name: "子条目1",
                     operation: "接受",
                     validity: "本周",
+                    minPeople: 199,
                     conditionsCount: 3,
                     conditions: [
                         { name: "同桌天数", value: 5, operator: "大于", equality: false },
@@ -532,12 +532,12 @@ const mockServerResponse = {
             weekDays: ["周二", "周四"],
             timesStart: "10:00",
             timesEnd: "11:00",
-            minPeople: 3,
             subItemsCount: 1,
             subItems: [
                 {
                     name: "子条目1",
                     operation: "拒绝",
+                    minPeople: 199,
                     validity: "本周",
                     conditionsCount: 2,
                     conditions: [
@@ -691,26 +691,6 @@ function showTimes() {
         }
     });
 }
-function showMinPeople() {
-    // 点击策略页面，的最小人数按钮时弹出设置最小人数的弹窗
-    Swal.fire({
-        title: '设置最小人数',
-        input: 'range',
-        type: 'question',
-        inputValue: 1,
-        inputAttributes: {
-            min: 1,
-            max: 200,
-            step: 1
-        },
-        showCancelButton: true,
-        confirmButtonText: '确认',
-    }.then((result) => {
-        if (result.isConfirmed) {
-            currentStrategy.minPeople = result.value;
-        }
-    }));
-}
 
 function addStrategy() {
     // 新建策略
@@ -721,12 +701,12 @@ function addStrategy() {
         weekDays: ["周一", "周三"],
         timesStart: "09:00",
         timesEnd: "10:00",
-        minPeople: 5,
         subItemsCount: 2,
         subItems: [
             {
                 name: "子条目1",
                 operation: "接受",
+                minPeople: 199,
                 validity: "本周",
                 conditionsCount: 3,
                 conditions: [
@@ -825,6 +805,7 @@ function saveCurrentStrategy() {
     subItems.forEach((subItem) => {
         const subItemData = {
             name: subItem.querySelector('.name input').value,
+            minPeople: subItem.querySelector('.minPeople input').value,
             operation: subItem.querySelector('.operation select').value,
             validity: subItem.querySelector('.validity select').value,
             conditions: []
@@ -902,6 +883,9 @@ function addSubItem(button) {
                     <option value="移出">移出</option>
                 </select>
             </div>
+            <div class="tag minPeople">
+                <input type="number" value="${subItem.minPeople || '199'}">
+            </div>
             <div class="tag validity">
                 <select value="${subItem.validity || '请选择'}">
                     <option value="本次">本次</option>
@@ -954,9 +938,6 @@ function showStrategyInfo(strategyName) {
                 <div class="center-tag button" onclick="showTimes()">
                     运行时间：${currentStrategy.timesStart}-${currentStrategy.timesEnd}
                 </div>
-                <div class="center-tag button" onclick="showMinPeople()">
-                    最小人数：${currentStrategy.minPeople}
-                </div>
             </div>
         </div>
     `;
@@ -983,6 +964,9 @@ function showStrategyInfo(strategyName) {
                         <option value="接受">接受</option>
                         <option value="移出">移出</option>
                     </select>
+                </div>
+                <div class="tag minPeople">
+                    <input type="number" value="${subItem.minPeople || '199'}">
                 </div>
                 <div class="tag validity">
                     <select value="${subItem.validity || '请选择'}">
