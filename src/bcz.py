@@ -241,10 +241,10 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
             group_info_list.append(bcz.getGroupInfo(group['share_key'], group['auth_token']))
     sqlite.saveGroupInfo(group_info_list)
 
-def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', latest: bool = False) -> list[dict]:
+def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', all: bool = True, latest: bool = False) -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
     data_time = sqlite.queryTempMemberCacheTime()
-    group_list = sqlite.queryObserveGroupInfo(group_id, all=True)
+    group_list = sqlite.queryObserveGroupInfo(group_id, all=all)
     if latest or (int(time.time()) - data_time > sqlite.cache_second or group_id):
         group_list = bcz.updateGroupInfo(group_list)
         sqlite.updateObserveGroupInfo(group_list)
@@ -270,8 +270,8 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
     for group in group_list:
         group['week'] = week_date
         group['total_times'] = 0
-        group['late_times'] = 0
-        group['absence_times'] = 0
+        group['late_count'] = 0
+        group['absence_count'] = 0
         week_data = sqlite.queryMemberTable(
             {
                 'group_id': group['id'],
@@ -346,15 +346,22 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                     if group['late_daka_time'] and line[3] > group['late_daka_time']:
                         late += 1
             if late:
-                group['late_times'] += 1
+                group['late_count'] += 1
             if absence:
-                group['absence_times'] += 1
+                group['absence_count'] += 1
             member.update({
                 'daka': daka_time_dict,
                 'late': late,
                 'absence': absence,
             })
-
+        for member in group['members']:
+            if member['data_time'] == '' and edate not in member['daka']:
+                for daka_date in member['daka']:
+                    daka = member['daka'][daka_date]
+                    if daka['time']:
+                        group['total_times'] -= 1
+                    if group['late_daka_time'] and daka['time'] > group['late_daka_time']:
+                        group['late_count'] -= 1
         list.sort(
             group['members'],
             key = lambda x: [

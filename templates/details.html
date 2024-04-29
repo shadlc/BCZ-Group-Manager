@@ -307,8 +307,8 @@
                 + Math.round(group.finishing_rate * 100)+`%, `
                 + (group.member_count - group.today_daka_count) +`人未打卡</span>
               <span>当前周总打卡数: `+group.total_times+`/`+week_count_limit+`, `
-                + (group.absence_times) +`人缺卡, `
-                + group.late_times +`人晚卡</span>
+                + (group.absence_count) +`人缺卡, `
+                + group.late_count +`人晚卡</span>
               <span>`+group.introduction+`</span>
             </div>
           </div>

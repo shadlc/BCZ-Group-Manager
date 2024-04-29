@@ -510,6 +510,22 @@ class SQLite:
             param.append(page_count)
         search_sql += sql
         result = self.read(search_sql, param)
+        keys = [
+            'id',
+            'nickname',
+            'group_nickname',
+            'completed_time',
+            'today_date',
+            'today_word_count',
+            'today_study_cheat',
+            'completed_times',
+            'duration_days',
+            'book_name',
+            'group_id',
+            'group_name',
+            'avatar',
+            'data_time',
+        ]
         if header:
             result = [[
                 '用户ID',
