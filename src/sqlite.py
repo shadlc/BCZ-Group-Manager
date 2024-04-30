@@ -434,10 +434,15 @@ class SQLite:
             'groups': self.getDistinctGroupName()
         }
 
-    def getMemberDataCount(self) -> int:
-        return self.read(
-            f'SELECT COUNT(*) FROM MEMBERS'
-        )[0][0]
+    def getMemberDataCount(self, union_temp: bool = True) -> int:
+        if union_temp:
+            return self.read(
+                f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS)'
+            )[0][0]
+        else:
+            return self.read(
+                f'SELECT COUNT(*) FROM MEMBERS'
+            )[0][0]
 
     def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> dict:
         '''查询用户信息表

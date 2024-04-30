@@ -54,10 +54,6 @@ def group():
 def details(id=None):
     return render_template('details.html')
 
-@app.route('/search', methods=['GET'])
-def search():
-    return render_template('search.html')
-
 @app.route('/data', methods=['GET'])
 def data():
     return render_template('data.html')
@@ -109,7 +105,7 @@ def observe_group():
                 group['auth_token'] = len(group['auth_token']) * '*'
                 if not group_id:
                     group.pop('members')
-            if not group_list:
+            if group_id and not group_list:
                 return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
             return restful(200, '', group_list)
         except Exception as e:
@@ -231,5 +227,6 @@ if __name__ == '__main__':
     logging.info('BCZ-Group-Manger 启动中...')
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
+    if config.daily_verify:
         Schedule(config.daily_verify, lambda: verifyInfo(bcz, sqlite))
     app.run(config.host, config.port, request_handler=MyRequestHandler)

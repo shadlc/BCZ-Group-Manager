@@ -639,15 +639,6 @@ img[src=""] {
   align-items: center;
   flex-wrap: nowrap;
 }
-.main-search-input {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: nowrap;
-  margin-bottom: 1rem;
-  width: 90%;
-  min-width: 20rem;
-}
 .input>*:nth-child(2) {
   width: 100%;
   padding: 0.2rem;
@@ -695,6 +686,20 @@ img[src=""] {
   display: flex;
   flex-direction: row;
   flex-wrap: wrap;
+}
+.search-input {
+  flex-basis: 100%;
+  display: flex;
+  padding: 0.2rem;
+  margin: 0 10%;
+  margin-bottom: 1rem;
+  border: solid 0.1rem black;
+  border-radius: 1rem;
+}
+.search-input>input {
+  flex-grow: 1;
+  border: none;
+  background: transparent;
 }
 .simple-table {
   border-spacing: 0;
@@ -1042,7 +1047,7 @@ table.simple-table td {
 .group.brief .info-table {
   flex-wrap: wrap;
 }
-.member-table {
+.member {
   flex-basis: 100%;
   display: flex;
   align-items: center;
@@ -1054,22 +1059,22 @@ table.simple-table td {
   box-shadow: 0.2rem 0.2rem 0 0 rgba(0, 0, 0, 0.2);
 }
 @media (min-width: 900px) {
-  .member-table {
+  .member {
     flex-basis: 47%;
   }
 }
 @media (min-width: 1300px) {
-  .member-table {
+  .member {
     flex-basis: 31%;
   }
 }
 @media (min-width: 1700px) {
-  .member-table {
+  .member {
     flex-basis: 23%;
   }
 }
 @media (min-width: 2100px) {
-  .member-table {
+  .member {
     flex-basis: 18%;
   }
 }
@@ -1162,6 +1167,15 @@ table.simple-table td {
   top: 50%;
   left: 50%;
   transform: translate(-50%, 2.5rem);
+}
+#group_search {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: nowrap;
+  margin-bottom: 1rem;
+  width: 90%;
+  min-width: 20rem;
 }
 #group_search>input  {
   flex: 1;
