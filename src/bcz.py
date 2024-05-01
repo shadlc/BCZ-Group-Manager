@@ -2,6 +2,8 @@ import re
 import time
 import logging
 import requests
+import asyncio  
+import httpx  
 from datetime import timedelta, date, datetime
 from concurrent.futures import ThreadPoolExecutor
 
@@ -84,7 +86,7 @@ class BCZ:
         }
 
     def getOwnInfo(self, token: str) -> dict:
-        '''获取当前用户信息'''
+        '''【我的校牌】获取当前用户信息'''
         data = {
             'uid': None,
             'name': None,
@@ -99,7 +101,7 @@ class BCZ:
         return data
         
     def getUserInfo(self, user_id: str = None) -> dict | None:
-        '''获取指定用户信息'''
+        '''【用户校牌】获取指定用户信息deskmate'''
         if not user_id:
             return
         url = f'{self.user_info_url}?uniqueId={user_id}'
@@ -113,7 +115,7 @@ class BCZ:
         return user_info
 
     def getUserGroupInfo(self, user_id: str = None) -> dict | None:
-        '''获取我的小班信息'''
+        '''获取【我的小班】信息own_groups'''
         if not user_id:
             return
         url = f'{self.group_list_url}?uniqueId={user_id}'
@@ -150,11 +152,13 @@ class BCZ:
                 'avatar': group['avatar'],
                 'avatar_frame': avatar_frame,
                 'data_time': self.data_time,
+                'join_days': group['joinDays'],
             })
         return groups
 
     def getGroupInfo(self, share_key: str, auth_token: str = '') -> dict | None:
-        '''获取小班信息'''
+        '''获取【班内主页】信息group/information'''
+        
         group = {}
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         url = f'{self.group_detail_url}?shareKey={share_key}'
@@ -172,6 +176,11 @@ class BCZ:
                 'exception': main_response.text,
             }
 
+        return self.parseGroupInfo(main_response, auth_response if auth_response else None, auth_token)
+
+    def parseGroupInfo(self, main_response: dict, auth_response: dict = None, auth_token: str = '') -> dict | None:
+        '''请调用 getGroupInfo 或 getGroupsInfo，此函数仅内部调用，仅用于信息解析'''
+        
         main_data = main_response.json().get('data')
         group_info = main_data.get('groupInfo') if main_data else []
         group_id = group_info['id']
@@ -249,8 +258,40 @@ class BCZ:
 
         return group
 
+    async def fetch_url(url, headers: dict):  
+        '''异步请求，仅内部调用'''
+        async with httpx.AsyncClient() as client:  
+            client.headers = headers  
+            response = await client.get(url)  
+            response.raise_for_status()  # 如果请求失败则抛出异常  
+            return response  
+    
+    async def asyncGroupsInfo(self, share_key: list, auth_token: str = ''):
+        '''请使用下面的getGroupsInfo函数，仅内部调用''' 
+        
+        urls = []
+        for share_key in share_key:
+            urls.push(f'{self.group_detail_url}?shareKey={share_key}')
+        # 使用 asyncio.gather 来并发地执行所有请求  
+        
+        main_headers = self.getHeaders(self.main_token)
+        auth_headers = self.getHeaders(auth_token)
+        auth_response = await asyncio.gather(*[self.fetch_url(url, main_headers) for url in urls])  
+        main_response = await asyncio.gather(*[self.fetch_url(url, auth_headers) for url in urls])  
+
+        group_list = []
+        for i, result in enumerate(auth_response):
+            group_list.push(self.parseGroupInfo(main_response[i], auth_response[i], auth_token))
+
+        return group_list
+
+    def getGroupsInfo(self, share_key: list, auth_token: str = '') -> list:
+        '''【多个 班内主页】并发获取''' 
+        return asyncio.run(self.asyncGroupsInfo(self, share_key, auth_token))
+            
+        
     def updateGroupInfo(self, group_list: list[dict], full_info: bool = False) -> list:
-        '''获取最新信息并刷新小班信息列表'''
+        '''【参数传入的班内主页】获取最新信息并刷新小班信息列表'''
         with ThreadPoolExecutor() as executor:
             futures = []
             for group in group_list:
@@ -274,7 +315,7 @@ class BCZ:
         return group_list
 
     def getUserAllInfo(self, user_id: str = None) -> dict | None:
-        '''获取指定用户所有信息'''
+        '''【用户校牌+所有小班内主页】获取指定用户所有信息'''
         user_info = self.getUserInfo(user_id)
         if not user_info:
             return
