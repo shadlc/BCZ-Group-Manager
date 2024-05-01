@@ -194,10 +194,16 @@ class Strategy:
             json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
             logger.info('初次启动，已在当前执行目录生成配置文件')
         
-    def read(self: str = '') -> dict:
+    def read(self: str = '') -> None:
+        '''从文件中更新，一般不需使用'''
+        self.json_data = json.load(open(self.file_path, encoding='utf-8'))
+    
+    def get(self: str = '', key: str = '') -> list | dict | str | int | bool:
         '''获取指定配置'''
-        json_data = json.load(open(self.file_path, encoding='utf-8'))
-        return json_data
+        if key:
+            return self.json_data.get(key)
+        else:
+            return self.json_data
         
     def update(self, data: dict) -> None:
         '''用dict更新配置文件'''
@@ -208,7 +214,7 @@ class Strategy:
         self.json_data[key] = value
 
     def save(self: dict) -> None:
-        '''保存指定配置文件'''
+        '''写入配置文件'''
         try:
             json.dump(self.json_data, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
         except Exception as e:
