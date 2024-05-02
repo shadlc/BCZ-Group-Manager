@@ -49,10 +49,6 @@
                   <label for="display_absence">缺卡</label>
                 </div>
                 <div class="checkbox">
-                  <input type="checkbox" id="display_unfinished" checked />
-                  <label for="display_unfinished">未打卡</label>
-                </div>
-                <div class="checkbox">
                   <input type="checkbox" id="display_all" />
                   <label for="display_all">全员</label>
                 </div>
@@ -62,6 +58,10 @@
               <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
               <div id="setting_btn" class="btn" onclick="toggleSettingModal()">设置</div>
             </div>
+          </div>
+          <div id="member_filter" class="search-input hide">
+            <span>🔍</span>
+            <input type="text" placeholder="筛选用户" onkeyup="memberFilter(event)" />
           </div>
           <div class="details-container"></div>
         </div>
@@ -88,7 +88,7 @@
         </footer>
       </div>
     </main>
-    <div class="left-corner-btn btn" onclick="history.back()">回主页</div>
+    <div class="left-corner-btn btn" onclick="history.back()">返回</div>
     <div id="setting_modal" class="modal hide" data-status="hidden" onclick="toggleSettingModal(event)">
       <div class="modal-content">
         <span class="modal-close-btn" onclick="toggleSettingModal()"></span>
@@ -307,8 +307,8 @@
                 + Math.round(group.finishing_rate * 100)+`%, `
                 + (group.member_count - group.today_daka_count) +`人未打卡</span>
               <span>当前周总打卡数: `+group.total_times+`/`+week_count_limit+`, `
-                + (group.absence_times) +`人缺卡, `
-                + group.late_times +`人晚卡</span>
+                + (group.absence_count) +`人缺卡, `
+                + group.late_count +`人晚卡</span>
               <span>`+group.introduction+`</span>
             </div>
           </div>
@@ -338,6 +338,13 @@
     function setMemberInfo(group) {
       let container = document.querySelector('.details-container');
       container.innerHTML = '';
+      let member_count = Object.keys(group.members).length;
+      let member_filter = document.getElementById('member_filter');
+      if (member_count >= 10) {
+        member_filter.classList.remove('hide');
+      } else {
+        member_filter.classList.add('hide');
+      }
       for (let i in group.members) {
         let member = group.members[i];
         let group_nickname_span = '';
@@ -352,7 +359,7 @@
           continue;
         }
         if (member.data_time && group.week == current_week && member.completed_time == ''
-            && document.getElementById('display_unfinished').checked) {
+            && document.getElementById('display_absence').checked) {
           badges += '<span class="badge blue-border">' + '今日未打卡' + '</span>';
         } else if (member.data_time && group.week == current_week && group.late_daka_time != ''
                    && member.completed_time > group.late_daka_time 
@@ -386,10 +393,10 @@
           </div>
         `;
         let member_table = document.createElement('div');
-        member_table.className = 'info-table member-table';
+        member_table.className = 'member info-table';
         member_table.innerHTML = member_content;
         let modal_content = '打卡记录为空';
-        if (Object.keys(member.daka).length != 0) {
+        if (group.week == current_week || Object.keys(member.daka).length != 0) {
           modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th><th>单词数</th></tr>';
           for (let date in member.daka) {
             let daka_time = member.daka[date].time ? member.daka[date].time : '未打卡';
@@ -479,6 +486,19 @@
         }).then(()=>{
           location.href = '../';
         });
+      });
+    }
+
+    // 筛选成员
+    function memberFilter(event) {
+      let element = event.target;
+      let filter = element.value;
+      document.querySelectorAll('.member').forEach((e)=>{
+        if (e.innerText.includes(filter)) {
+          e.classList.remove('hide');
+        } else {
+          e.classList.add('hide');
+        }
       });
     }
 

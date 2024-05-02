@@ -31,7 +31,7 @@
         <div class="eaves">
           <div class="gloss"></div>
           <div class="eaves-container">
-            <a id="my_class" class="active">我的小班</a>
+            <a id="my_class" class="active">小班列表</a>
             <a href="data">数据查询</a>
             <a href="setting">系统设置</a>
           </div>
@@ -45,6 +45,10 @@
             </div>
             数据获取中，请稍后...
           </span>
+          <div id="group_filter" class="search-input hide">
+            <span>🔍</span>
+            <input type="text" placeholder="筛选小班" onkeyup="groupFilter(event)" />
+          </div>
           <div class="group empty-group hide" onclick="toggleGroupSearchModal()">
           </div>
         </div>
@@ -69,8 +73,8 @@
         <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>
         <div class="modal-title">添加小班</div>
         <div class="modal-body">
-          <div id="group_search" class="main-search-input">
-            <input type="text" id="group_search_input" placeholder="班长ID或16位小班分享码(非6位邀请码)" onkeydown="eventSearch(event)" />
+          <div id="group_search">
+            <input type="text" id="group_search_input" placeholder="班长ID或16位小班分享码(非6位邀请码)" onkeyup="eventSearch(event)" />
             <span class="btn" onclick="searchGroups()">搜索</span>
           </div>
           <div id="group_result">
@@ -106,9 +110,16 @@
           return;
         }
         let groups = data.data;
-        document.getElementById('my_class').innerText = '我的小班(' + groups.length + ')';
+        document.getElementById('my_class').innerText = '小班列表(' + groups.length + ')';
         let container = document.querySelector('.wall-container');
         let empty_group = document.querySelector('.empty-group');
+        let group_count = Object.keys(groups).length;
+        let group_filter = document.getElementById('group_filter');
+        if (group_count >= 10) {
+          group_filter.classList.remove('hide');
+        } else {
+          group_filter.classList.add('hide');
+        }
         for (let i in groups) {
           let group = groups[i];
           let group_content = `
@@ -293,6 +304,19 @@
         .then(data => {
           notify(data.msg);
         });
+      });
+    }
+
+    // 筛选小班
+    function groupFilter(event) {
+      let element = event.target;
+      let filter = element.value;
+      document.querySelectorAll('.group:not(.empty-group)').forEach((e)=>{
+        if (e.innerText.includes(filter)) {
+          e.classList.remove('hide');
+        } else {
+          e.classList.add('hide');
+        }
       });
     }
 

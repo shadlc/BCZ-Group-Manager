@@ -253,7 +253,7 @@ class SQLite:
         for group_info in group_list:
             sql = f'UPDATE OBSERVED_GROUPS SET'
             params = []
-            if group_info.get('id') != None: sql += ' GROUP_ID = ?,'; params.append(group_info.get('id'))
+            # if group_info.get('id') != None: sql += ' GROUP_ID = ?,'; params.append(group_info.get('id'))
             if group_info.get('name') != None: sql += ' NAME = ?,'; params.append(group_info.get('name'))
             if group_info.get('share_key') != None: sql += ' SHARE_KEY = ?,'; params.append(group_info.get('share_key'))
             if group_info.get('introduction') != None: sql += ' INTRO = ?,'; params.append(group_info.get('introduction'))
@@ -272,9 +272,39 @@ class SQLite:
             if group_info.get('daily_record') != None: sql += ' DAILY_RECORD = ?,'; params.append(group_info.get('daily_record'))
             if group_info.get('late_daka_time') != None: sql += ' LATE_DAKA_TIME = ?,'; params.append(group_info.get('late_daka_time'))
             if group_info.get('auth_token') != None: sql += ' AUTH_TOKEN = ?,'; params.append(group_info.get('auth_token'))
-            if group_info.get('valid') != None: sql += ' VALID = ?'; params.append(group_info.get('valid'))
-            sql += 'WHERE GROUP_ID = ?'
+            if group_info.get('valid') != None: sql += ' VALID = ?,'; params.append(group_info.get('valid'))
+            sql = sql.strip(',')
+            sql += ' WHERE GROUP_ID = ?'
             params.append(group_info['id'])
+            cursor.execute(sql, params)
+        conn.commit()
+
+    def updateMemberInfo(self, member_list: list[dict]) -> None:
+        '''更新关注小班信息'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        for member in member_list:
+            sql = f'UPDATE MEMBERS SET'
+            params = []
+            # if group_info.get('id') != None: sql += ' USER_ID = ?,'; params.append(group_info.get('id'))
+            if member.get('nickname') != None: sql += ' NICKNAME = ?,'; params.append(member.get('nickname'))
+            if member.get('group_nickname') != None: sql += ' GROUP_NICKNAME = ?,'; params.append(member.get('group_nickname'))
+            if member.get('completed_time') != None: sql += ' COMPLETED_TIME = ?,'; params.append(member.get('completed_time'))
+            # if member.get('today_date') != None: sql += ' TODAY_DATE = ?,'; params.append(member.get('today_date'))
+            if member.get('today_word_count') != None: sql += ' WORD_COUNT = ?,'; params.append(member.get('today_word_count'))
+            if member.get('today_study_cheat') != None: sql += ' STUDY_CHEAT = ?,'; params.append(member.get('today_study_cheat'))
+            if member.get('completed_times') != None: sql += ' COMPLETED_TIMES = ?,'; params.append(member.get('completed_times'))
+            if member.get('duration_days') != None: sql += ' DURATION_DAYS = ?,'; params.append(member.get('duration_days'))
+            if member.get('book_name') != None: sql += ' BOOK_NAME = ?,'; params.append(member.get('book_name'))
+            # if member.get('group_id') != None: sql += ' GROUP_ID = ?,'; params.append(member.get('group_id'))
+            if member.get('group_name') != None: sql += ' GROUP_NAME = ?,'; params.append(member.get('group_name'))
+            if member.get('avatar') != None: sql += ' AVATAR = ?,'; params.append(member.get('avatar'))
+            if member.get('data_time') != None: sql += ' DATA_TIME = ?,'; params.append(member.get('data_time'))
+            sql = sql.strip(',')
+            sql += ' WHERE USER_ID = ? AND TODAY_DATE = ? AND GROUP_ID = ?'
+            params.append(member['id'])
+            params.append(member['today_date'])
+            params.append(member['group_id'])
             cursor.execute(sql, params)
         conn.commit()
 
@@ -404,10 +434,15 @@ class SQLite:
             'groups': self.getDistinctGroupName()
         }
 
-    def getMemberDataCount(self) -> int:
-        return self.read(
-            f'SELECT COUNT(*) FROM MEMBERS'
-        )[0][0]
+    def getMemberDataCount(self, union_temp: bool = True) -> int:
+        if union_temp:
+            return self.read(
+                f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS)'
+            )[0][0]
+        else:
+            return self.read(
+                f'SELECT COUNT(*) FROM MEMBERS'
+            )[0][0]
 
     def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> dict:
         '''查询用户信息表
@@ -510,6 +545,22 @@ class SQLite:
             param.append(page_count)
         search_sql += sql
         result = self.read(search_sql, param)
+        keys = [
+            'id',
+            'nickname',
+            'group_nickname',
+            'completed_time',
+            'today_date',
+            'today_word_count',
+            'today_study_cheat',
+            'completed_times',
+            'duration_days',
+            'book_name',
+            'group_id',
+            'group_name',
+            'avatar',
+            'data_time',
+        ]
         if header:
             result = [[
                 '用户ID',

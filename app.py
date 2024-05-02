@@ -5,7 +5,7 @@ import logging
 from flask import Flask, Response, render_template, send_file, jsonify, redirect, request
 from werkzeug.serving import WSGIRequestHandler, _log
 
-from src.bcz import BCZ, recordInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
+from src.bcz import BCZ, recordInfo, verifyInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
 from src.config import Config
 from src.sqlite import SQLite
 from src.xlsx import Xlsx
@@ -54,10 +54,6 @@ def group():
 def details(id=None):
     return render_template('details.html')
 
-@app.route('/search', methods=['GET'])
-def search():
-    return render_template('search.html')
-
 @app.route('/data', methods=['GET'])
 def data():
     return render_template('data.html')
@@ -78,7 +74,7 @@ def download():
         xlsx.write('用户信息', result[0])
         xlsx.save()
     except Exception as e:
-        return restful(500, f'下载数据时发生错误: {e}')
+        return restful(500, f'下载数据时发生错误(X_X): {e}')
     finally:
         processing = False
     return send_file(config.output_file)
@@ -104,20 +100,16 @@ def observe_group():
         '''获取关注小班列表'''
         group_id = request.args.get('id', '')
         try:
-            if group_id:
-                full_info = True
-            else:
-                full_info = False
-            group_list = sqlite.queryObserveGroupInfo(group_id)
-            group_list = bcz.updateGroupInfo(group_list, full_info)
-            sqlite.updateObserveGroupInfo(group_list)
+            group_list = refreshTempMemberTable(bcz, sqlite, group_id, all=False, latest=True)
             for group in group_list:
                 group['auth_token'] = len(group['auth_token']) * '*'
-            if not group_list:
+                if not group_id:
+                    group.pop('members')
+            if group_id and not group_list:
                 return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
             return restful(200, '', group_list)
         except Exception as e:
-            return restful(400, str(e))
+            return restful(400, f'查询小班时发生错误(X_X): {e}')
 
     elif request.method == 'POST':
         '''添加或修改关注小班列表'''
@@ -159,7 +151,7 @@ def query_group_details():
             return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
         return restful(200, '', group_list)
     except Exception as e:
-        return restful(400, str(e))
+        return restful(400, f'查询小班信息时发生错误(X_X): {e}')
 
 @app.route('/get_group_details_option', methods=['GET'])
 def get_group_details_option():
@@ -184,7 +176,7 @@ def query_member_table():
         result['data'] = data
         return restful(200, '', result)
     except Exception as e:
-        return restful(500, f'{e}')
+        return restful(500, f'查询数据时发生错误(X_X): {e}')
 
 @app.route('/search_group', methods=['GET'])
 def search_group():
@@ -202,7 +194,7 @@ def search_group():
             return restful(200, '', result)
         return restful(404, '未搜索到符合条件的小班 (ᗜ ˰ ᗜ)"')
     except Exception as e:
-        return restful(400, f'{e}')
+        return restful(400, f'搜索小班时发生错误(X_X): {e}')
 
 @app.route('/configure', methods=['GET', 'POST'])
 def configure():
@@ -216,7 +208,7 @@ def configure():
         try:
             config.modify(request.json)
         except Exception as e:
-            return restful(400, str(e))
+            return restful(400, f'修改配置时发生错误(X_X): {e}')
         return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
 
 
@@ -235,4 +227,6 @@ if __name__ == '__main__':
     logging.info('BCZ-Group-Manger 启动中...')
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
+    if config.daily_verify:
+        Schedule(config.daily_verify, lambda: verifyInfo(bcz, sqlite))
     app.run(config.host, config.port, request_handler=MyRequestHandler)
