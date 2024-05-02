@@ -3,6 +3,7 @@ __pycache__
 xlsx
 build
 dist
+*.txt
 *.json
 *.db
 *.xlsx

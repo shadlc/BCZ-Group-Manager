@@ -1,0 +1,428 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Page Layout</title>
+
+    <!-- background: url('https://gd-hbimg.huaban.com/12cb5733c7538d2b13a823c7ba4c40953e0575effe811-PbmtTv_fw1200') no-repeat center center fixed;   -->
+    <!-- background-size: cover;  -->
+
+
+
+    <!-- 总体大框架样式，只有card有背景色，其他元素都没有 -->
+    <!-- frame和tag可以反复嵌套，其中frame是垂直，tag是水平，实现不同层级的样式控制 -->
+    <style>
+        body,
+        html {
+            margin: 0;
+            padding: 0;
+            height: 4000px;
+            overflow-y: auto;
+
+            display: flex;
+            flex-direction: column;
+
+        }
+
+        body {
+            background: rgba(41, 226, 255, 0.7)
+        }
+
+        .container {
+            padding-top: 150px;
+            display: inline-flex;
+            flex-wrap: nowrap;
+            position: relative;
+            justify-content: space-between;
+            max-width: 1000px;
+            min-width: 400px;
+            width: 90%;
+            margin: 0 auto
+        }
+
+        .left-column {
+            background: rgba(255, 255, 255, 0);
+            padding: 5px;
+            position: absolute;
+            left: 0;
+            top: 150px;
+            width: 30%;
+            animation: Fade 0.5s forwards;
+        }
+
+        .right-column {
+            background: rgba(255, 255, 255, 0);
+            padding: 5px;
+            position: absolute;
+            right: 0;
+            top: 150px;
+            width: 60%;
+            animation: Fade 0.5s forwards;
+            /*默认改为隐藏*/
+        }
+
+        .column-gap {
+            width: 20px;
+        }
+
+        .card {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.6);
+            margin-bottom: 10px;
+            padding: 10px;
+
+            display: flex;
+            flex-direction: column;
+        }
+
+        .frame {
+            display: inline-flex;
+            flex-direction: column;
+            flex-grow: 1;
+        }
+
+        .center-frame {
+            display: inline-flex;
+            flex-direction: column;
+            flex-grow: 1;
+            justify-content: center;
+            align-items: center;
+        }
+
+
+        .tag {
+            display: flex;
+            width: 100%;
+            flex-grow: 1;
+            flex-direction: row;
+        }
+
+        .center-tag {
+            display: flex;
+            flex-direction: row;
+            flex-grow: 1;
+            justify-content: center;
+            align-items: center;
+            height: 100%;
+        }
+    </style>
+    <!-- 动画 -->
+    <style>
+        @keyframes Fade {
+            0% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            20% {
+                opacity: 1;
+                transform: translateX(25px);
+            }
+
+            90% {
+                opacity: 0;
+                transform: translateX(-325px);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(300px);
+            }
+        }
+
+        @keyframes Show {
+            0% {
+                opacity: 0;
+                transform: translateX(300px);
+            }
+
+            20% {
+                opacity: 0;
+                transform: translateX(350px);
+            }
+
+            90% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+        }
+
+        @keyframes FadeRevert {
+            0% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            20% {
+                opacity: 1;
+                transform: translateX(-25px);
+            }
+
+            90% {
+                opacity: 0;
+                transform: translateX(325px);
+            }
+
+            100% {
+                opacity: 0;
+                transform: translateX(-300px);
+            }
+        }
+
+        @keyframes ShowRevert {
+            0% {
+                opacity: 0;
+                transform: translateX(-300px);
+            }
+
+            20% {
+                opacity: 0;
+                transform: translateX(-350px);
+            }
+
+            90% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+
+            100% {
+                opacity: 1;
+                transform: translateX(0px);
+            }
+        }
+    </style>
+    <!-- 头像、标签、按钮、图表样式 -->
+    <style>
+        .avatar {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background-color: #ccc;
+            margin: 2px;
+            display: inline-block;
+        }
+
+        .graph {
+            width: 100%;
+            padding-top: 30%;
+            background-color: #eee;
+            margin: 2px;
+            display: inline-block;
+        }
+
+
+        .checkbox {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+        }
+
+        .button {
+            /* onclick: "createMask(event)" */
+            position: relative;
+            padding: 10px 20px;
+            background-color: #00000000;
+            color: black;
+            border: none;
+            border-radius: 5px;
+            overflow: hidden;
+            cursor: pointer;
+        }
+
+        .button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 0;
+            height: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            border-radius: 50%;
+            opacity: 0;
+            transition: width 0.5s ease, height 0.5s ease, opacity 0.5s ease;
+            pointer-events: none;
+        }
+
+        .button:active::after {
+            width: 500px;
+            height: 500px;
+            opacity: 1;
+        }
+
+        .button:hover {
+            background-color: #00000030;
+        }
+
+        .active {
+            /*被激活的按钮样式*/
+
+            background-color: #00000050;
+            color: white;
+        }
+
+        .separator {
+            /*分割横线*/
+            border-bottom: 1px solid rgb(0, 0, 0);
+            width: 95%;
+            margin: auto;
+        }
+
+        .box-separator {
+            /*分割竖线*/
+            height: 100%;
+            width: 1px;
+            background-color: black;
+            margin: 0 5px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+
+        <div class="left-column homepage-column">
+            <div class="card">
+                <div class="tag" id="userInfo" style="justify-content:start">
+                    <div class="avatar" id="useravatar"></div>
+                    <div class="center-frame">
+                        <div class="center-tag">
+                            <div class="tag" id="name">Username</div>
+                            <div class="checkbox" id="checked"></div>
+                        </div>
+                        <div class="center-tag">
+                            <div class="tag" id="district">District</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="grade">Grade</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="book">Book</div>
+                        </div>
+                        <div class="center-tag">
+                            <div class="tag" id="todayWords">Words</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="totalDakaDays">Checks</div>
+                            <div class="box-separator"></div>
+                            <div class="tag" id="totalDays">Days</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="frame">
+                    <div class="center-tag button " id="account" onclick="manageAccount()">管理账号</div>
+                    <div class="center-tag button " id="export" onclick="exportLog()">导出日志</div>
+                </div>
+
+            </div>
+            <div class="card">
+                <div class="frame" id="operations">
+                    <div class="center-tag button" id="back" onclick="SwitchPop()">返回</div>
+                    <div class="center-tag button" id="history" onclick="noticePage()">历史通知</div>
+                    <div class="center-tag button" id="strategy" onclick="showStrategyPage()">策略</div>
+                    <div class="center-tag button" id="settings" onclick="showSettings()">设置</div>
+                    <!-- 动态添加其他操作项 -->
+                </div>
+            </div>
+            <div class="card">
+                <div class="frame" id="notifications">
+                    <!-- 通知栏内容，动态添加 -->
+
+                </div>
+
+            </div>
+        </div>
+
+
+        <div class="column-gap"></div>
+
+
+        <div class="right-column classinfo-column">
+            <!-- 班级卡片循环开始 -->
+            <div class="card">Class Card</div>
+            <!-- 班级卡片循环结束，根据后台数据重复添加 -->
+        </div>
+        <div class="right-column strategy-column">
+            <!-- 策略卡片循环开始 -->
+            <br>
+            <div class="card">strategy Card</div>
+
+        </div>
+        <div class="right-column edit-board">
+            <br>
+            <br>
+            <div class="card">Edit Board</div>
+        </div>
+        <div class="left-column notice-column">
+            <br>
+            <br>
+            <br>
+            <div class="card">Notice Card</div>
+        </div>
+
+
+    </div>
+</body>
+
+<script>
+    function test() {
+        setTimeout(function () {
+            // 正向轮动
+            document.getElementsByClassName('classinfo-column')[0].style.animation = 'Show 0.5s forwards';
+            document.getElementsByClassName('homepage-column')[0].style.animation = 'Show 0.5s forwards';
+            setTimeout(function () {
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 1000);
+            setTimeout(function () {
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('edit-board')[0].style.animation = 'Show 0.5s forwards';
+            }, 2000);
+            setTimeout(function () {
+                document.getElementsByClassName('edit-board')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 3000);
+            setTimeout(function () {
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('notice-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 4000);
+            setTimeout(function () {
+                document.getElementsByClassName('notice-column')[0].style.animation = 'Fade 0.5s forwards';
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'Show 0.5s forwards';
+            }, 5000);
+
+
+            // 反向轮动
+            setTimeout(function () {
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 6000);
+            setTimeout(function () {
+                document.getElementsByClassName('strategy-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('edit-board')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 7000);
+            setTimeout(function () {
+                document.getElementsByClassName('edit-board')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('classinfo-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 8000);
+            setTimeout(function () {
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('notice-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 9000);
+            setTimeout(function () {
+                document.getElementsByClassName('notice-column')[0].style.animation = 'FadeRevert 0.5s forwards';
+                document.getElementsByClassName('homepage-column')[0].style.animation = 'ShowRevert 0.5s forwards';
+            }, 10000);
+        }, 750);
+
+    }
+
+    window.onload = test()
+</script>
+
+</html>

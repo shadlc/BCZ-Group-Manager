@@ -2,6 +2,8 @@ import re
 import time
 import logging
 import requests
+import asyncio  
+import httpx  
 from datetime import timedelta, date, datetime
 from concurrent.futures import ThreadPoolExecutor
 
@@ -21,6 +23,57 @@ class BCZ:
         self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
         self.get_week_rank_url = 'https://group.baicizhan.com/group/get_week_rank'
 
+    headers = {
+        "default_headers_dict": {
+            "Connection": "keep-alive",
+            "User-Agent": "bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI",
+            "Accept": "*/*",
+            "Origin": "",
+            "X-Requested-With": "",
+            "Sec-Fetch-Site": "same-site",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Dest": "empty",
+            "Referer": "",
+            "Accept-Encoding": "gzip, deflate",
+            "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+            "Cookie": {
+                "access_token": "",
+                "client_time": "",
+                "app_name": "7060100",
+                "bcz_dmid": "2a16dfbb",
+                "channel": "qq",
+                "device_id": "032ae8f8427885d7",
+                # device_id 会根据access_token使用哈希唯一确定
+                "device_name": "android/DCO-AL00-HUAWEI",
+                "device_version": "12",
+                "Pay-Support-H5": "alipay_mob_client"
+            }
+        }
+    }
+    hash_rmb = {}
+    def getHeaders(self, auth_token: str) -> dict:
+        '''获取请求头'''
+        # 实际上不同域名请求有细微差别，这里暂时只使用默认
+        if (auth_token == 'main_token'):
+            auth_token = self.main_token
+
+        current_headers = self.headers['default_headers_dict'].copy()
+
+        if auth_token not in self.hash_rmb:
+            
+            # 使用哈希函数计算字符串的哈希值
+            hash_value = hash(auth_token)
+            # 将哈希值转换为unsigned long long值，然后取反，再转换为16进制字符串
+            hex_string = format((~hash_value) & 0xFFFFFFFFFFFFFFFF, '016X')
+            self.hash_rmb[auth_token] = {'hex_string': hex_string }
+        
+
+        current_headers['Cookie']['device_id'] = f'{self.hash_rmb[auth_token]["hex_string"]}'
+        current_headers['Cookie']['access_token'] = auth_token
+        current_headers['Cookie']['client_time'] = str(int(time.time()))
+        return current_headers
+    
+
     def getInfo(self) -> dict:
         '''获取运行信息'''
         main_info = self.getOwnInfo(self.main_token)
@@ -34,12 +87,12 @@ class BCZ:
         }
 
     def getOwnInfo(self, token: str) -> dict:
-        '''获取当前用户信息'''
+        '''【我的校牌】获取当前用户信息'''
         data = {
             'uid': None,
             'name': None,
         }
-        headers = {'Cookie': f'access_token="{token}"'}
+        headers = self.getHeaders(token)
         response = requests.get(self.own_info_url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'使用token获取用户信息失败!\n{response.text}')
@@ -49,11 +102,11 @@ class BCZ:
         return data
         
     def getUserInfo(self, user_id: str = None) -> dict | None:
-        '''获取指定用户信息'''
+        '''【用户校牌】获取指定用户信息deskmate'''
         if not user_id:
             return
         url = f'{self.user_info_url}?uniqueId={user_id}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = self.getHeaders(self.main_token)
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -63,11 +116,11 @@ class BCZ:
         return user_info
 
     def getUserGroupInfo(self, user_id: str = None) -> dict | None:
-        '''获取我的小班信息'''
+        '''获取【我的小班】信息own_groups'''
         if not user_id:
             return
         url = f'{self.group_list_url}?uniqueId={user_id}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = self.getHeaders(self.main_token)
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -100,18 +153,20 @@ class BCZ:
                 'avatar': group['avatar'],
                 'avatar_frame': avatar_frame,
                 'data_time': self.data_time,
+                'join_days': group['joinDays'],
             })
         return groups
 
     def getGroupInfo(self, share_key: str, auth_token: str = '') -> dict | None:
-        '''获取小班信息'''
+        '''获取【班内主页】信息group/information'''
+        
         group = {}
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         url = f'{self.group_detail_url}?shareKey={share_key}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = self.getHeaders(self.main_token)
         main_response = requests.get(url, headers=headers, timeout=5)
         if auth_token:
-            headers = {'Cookie': f'access_token="{auth_token}"'}
+            headers = self.getHeaders(auth_token)
             auth_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
@@ -122,6 +177,11 @@ class BCZ:
                 'exception': main_response.text,
             }
 
+        return self.parseGroupInfo(main_response, auth_response if auth_response else None, auth_token)
+
+    def parseGroupInfo(self, main_response: dict, auth_response: dict = None, auth_token: str = '') -> dict | None:
+        '''请调用 getGroupInfo 或 getGroupsInfo，此函数仅内部调用，仅用于信息解析'''
+        
         main_data = main_response.json().get('data')
         group_info = main_data.get('groupInfo') if main_data else []
         group_id = group_info['id']
@@ -198,6 +258,37 @@ class BCZ:
 
         return group
 
+    async def fetch_url(url, headers: dict):  
+        '''异步请求，仅内部调用'''
+        async with httpx.AsyncClient() as client:  
+            client.headers = headers  
+            response = await client.get(url)  
+            response.raise_for_status()  # 如果请求失败则抛出异常  
+            return response  
+    
+    async def asyncGroupsInfo(self, share_key: list, auth_token: str = ''):
+        '''请使用下面的getGroupsInfo函数，仅内部调用''' 
+        
+        urls = []
+        for share_key in share_key:
+            urls.push(f'{self.group_detail_url}?shareKey={share_key}')
+        # 使用 asyncio.gather 来并发地执行所有请求  
+        
+        main_headers = self.getHeaders(self.main_token)
+        auth_headers = self.getHeaders(auth_token)
+        auth_response = await asyncio.gather(*[self.fetch_url(url, main_headers) for url in urls])  
+        main_response = await asyncio.gather(*[self.fetch_url(url, auth_headers) for url in urls])  
+
+        group_list = []
+        for i, result in enumerate(auth_response):
+            group_list.push(self.parseGroupInfo(main_response[i], auth_response[i], auth_token))
+
+        return group_list
+
+    def getGroupsInfo(self, share_key: list, auth_token: str = '') -> list:
+        '''【多个 班内主页】并发获取''' 
+        return asyncio.run(self.asyncGroupsInfo(self, share_key, auth_token))
+            
     def getGroupDakaHistory(self, share_key: str) -> dict:
         '''获取小班成员历史打卡信息'''
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
@@ -221,8 +312,8 @@ class BCZ:
             })
         return daka_dict
 
-    def updateGroupInfo(self, group_list: list[dict]) -> list:
-        '''获取最新信息并刷新小班信息列表'''
+    def updateGroupInfo(self, group_list: list[dict], full_info: bool = False) -> list:
+        '''【参数传入的班内主页】获取最新信息并刷新小班信息列表'''
         with ThreadPoolExecutor() as executor:
             futures = []
             for group in group_list:
@@ -244,7 +335,7 @@ class BCZ:
         return group_list
 
     def getUserAllInfo(self, user_id: str = None) -> dict | None:
-        '''获取指定用户所有信息'''
+        '''【用户校牌+所有小班内主页】获取指定用户所有信息'''
         user_info = self.getUserInfo(user_id)
         if not user_info:
             return
