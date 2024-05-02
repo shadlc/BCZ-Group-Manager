@@ -289,13 +289,13 @@ class BCZ:
         '''【多个 班内主页】并发获取''' 
         return asyncio.run(self.asyncGroupsInfo(self, share_key, auth_token))
             
-    def getHistoryWeekRank(self, share_key: str) -> dict:
-        '''获取小班成员历史排行榜信息'''
+    def getGroupDakaHistory(self, share_key: str) -> dict:
+        '''获取小班成员历史打卡信息'''
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
         headers = {'Cookie': f'access_token="{self.main_token}"'}
         week_response = requests.get(f'{url}&week=1', headers=headers, timeout=5)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
-            msg = f'获取分享码为{share_key}的小班成员历史排行榜信息失败! 小班不存在或主授权令牌无效'
+            msg = f'获取分享码为{share_key}的小班成员历史打卡信息失败! 小班不存在或主授权令牌无效'
             logger.warning(f'{msg}\n{week_response.text}')
             return {}
         last_week_response = requests.get(f'{url}&week=2', headers=headers, timeout=5)
@@ -360,8 +360,8 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
     makeup_list = []
     for group in sqlite.queryObserveGroupInfo():
         if group['daily_record']:
-            logger.info(f'正在为小班[{group["name"]}({group["id"]})]的打卡数据进行验证补全')
-            daka_dict = bcz.getHistoryWeekRank(group['share_key'])
+            logger.info(f'正在获取小班[{group["name"]}({group["id"]})]的历史打卡数据')
+            daka_dict = bcz.getGroupDakaHistory(group['share_key'])
             sdate = (datetime.now() - timedelta(days=7*2)).strftime('%Y-%m-%d')
             member_list = sqlite.queryMemberTable(
                 {
@@ -372,10 +372,12 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
                 },
                 header = False,
             )['data']
-            absence_list = {line[0]:line[4] for line in member_list if line[3] == ''}
+            absence_dict = {line[0]:line[4] for line in member_list if line[3] == ''}
+            if not absence_dict:
+                continue
             for id in daka_dict:
                 for daka_date in daka_dict[id]:
-                    if id in absence_list and daka_date in absence_list[id]:
+                    if id in absence_dict and daka_date in absence_dict[id]:
                         makeup_list.append({
                             'id': id,
                             'group_id': group['id'],
@@ -412,6 +414,9 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
     if start_of_week <= date.today() <= end_of_week:
         is_this_week = True
     for group in group_list:
+        if not group.get('members'):
+            continue
+
         group['week'] = week_date
         group['total_times'] = 0
         group['late_count'] = 0
@@ -426,8 +431,6 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
             },
             header = False,
         )
-        if not group.get('members'):
-            continue
 
         today_date = group['members'][0]['today_date']
         member_list = [member['id'] for member in group['members']]
@@ -498,6 +501,8 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                 'late': late,
                 'absence': absence,
             })
+
+        # 删除星期天不在小班的成员贡献的打卡天数
         for member in group['members']:
             if member['data_time'] == '' and edate not in member['daka']:
                 for daka_date in member['daka']:
@@ -506,6 +511,9 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                         group['total_times'] -= 1
                     if group['late_daka_time'] and daka['time'] > group['late_daka_time']:
                         group['late_count'] -= 1
+
+
+        # 对成员进行排序
         list.sort(
             group['members'],
             key = lambda x: [
@@ -517,7 +525,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
         )
     return group_list
 
-def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
+def getWeekOption(date: str = '', range_day: list[int] = [-180, 0]) -> list:
     '''获取指定时间指定范围内所有的周'''
     target_date = datetime.today()
     if date:
@@ -526,7 +534,7 @@ def getWeekOption(date: str = '', range_day: list[int] = [180, 0]) -> list:
         except Exception as e:
             logger.warning(f'转换时间[{date}]出错: {e}')
 
-    start_date = target_date - timedelta(days=range_day[0])
+    start_date = target_date + timedelta(days=range_day[0])
     end_date = target_date + timedelta(days=range_day[1])
     end_date_week_end = end_date - timedelta(days=end_date.weekday()) + timedelta(days=6)
 

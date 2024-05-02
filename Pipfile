@@ -8,7 +8,6 @@ name = "pypi"
 openpyxl = "*"
 requests = "*"
 flask = "*"
-pyinstaller = "*"
 
 [dev-packages]
 
