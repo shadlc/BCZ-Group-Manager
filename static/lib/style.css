@@ -29,6 +29,7 @@
   }
 }
 :root {
+  --white: rgb(255, 252, 244);
   --black: rgb(33, 37, 41);
   --red: rgb(220, 53, 69);
   --green: rgb(25, 135, 84);
@@ -161,7 +162,7 @@ img[src=""] {
   position: absolute;
   font-weight: bold;
   font-size: 2rem;
-  color: white;
+  color: var(--white);
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
@@ -780,7 +781,7 @@ table.simple-table td {
 }
 .blackboard {
   position: relative;
-  color: white;
+  color: var(--white);
   padding: 0.5rem;
   padding-bottom: 1rem;
   margin: 0.5rem auto;
@@ -863,7 +864,7 @@ table.simple-table td {
   border: solid 0.1rem;
   padding: 0.5rem;
   margin: 0.5rem auto -0.1rem auto;
-  background: rgb(255, 252, 244);
+  background: var(--white);
   border-radius: 0.5rem 0.5rem 0 0;
 }
 .paper::before {
@@ -872,7 +873,7 @@ table.simple-table td {
   position: absolute;
   top: 1rem;
   left: -0.6rem;
-  background: rgb(255, 252, 244);
+  background: var(--white);
   border: solid 0.1rem;
   border-radius: 0.5rem 0.5rem 0 0;
   width: calc(100% + 1rem);
@@ -1022,7 +1023,7 @@ table.simple-table td {
 }
 .group {
   position: relative;
-  background: rgb(255, 252, 244);
+  background: var(--white);
   padding: 0.5rem;
   padding-bottom: 0;
   margin: 0 0.3rem 1rem 0.3rem;
@@ -1125,6 +1126,19 @@ table.simple-table td {
   right: 0.5rem;
   top: 50%;
   transform: translateY(-50%);
+}
+.group-favorite {
+  position: absolute;
+  left: 0.5rem;
+  bottom: 0.5rem;
+  font-size: 1.6rem;
+  color: var(--white);
+  text-shadow: 0 0 0.1rem black;
+  transition: all 0.5s;
+  user-select: none;
+}
+.group-favorite.checked {
+  color: var(--yellow);
 }
 .avatar {
   display: flex;
@@ -1370,19 +1384,19 @@ table.simple-table td {
   background: var(--yellow);
 }
 .red-bg {
-  color: white;
+  color: var(--white);
   background: var(--red);
 }
 .red-bg {
-  color: white;
+  color: var(--white);
   background: var(--green);
 }
 .blue-bg {
-  color: white;
+  color: var(--white);
   background: var(--blue);
 }
 .purple-bg {
-  color: white;
+  color: var(--white);
   background: var(--purple);
 }
 .border {
@@ -1487,7 +1501,7 @@ table.simple-table td {
   text-align: center;
   width: 2rem;
   height: 2rem;
-  background: rgb(255, 252, 244);
+  background: var(--white);
   border: solid 0.2rem black;
   border-radius: 100%;
   cursor: pointer;
@@ -1562,7 +1576,7 @@ footer{
 }
 .info {
   display: flex;
-  background: rgb(255, 252, 244);
+  background: var(--white);
   align-items: center;
   position: relative;
   overflow: hidden;

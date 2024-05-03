@@ -122,6 +122,10 @@
         }
         for (let i in groups) {
           let group = groups[i];
+          let favorite_checked = '';
+          if (group.favorite) {
+            favorite_checked = 'checked';
+          }
           let group_content = `
             <div class="info-table">
               <div class="avatar">
@@ -138,6 +142,7 @@
               <div class="door-knob"></div>
               <img class="rank-flag" src="img/s`+group.rank+`.png"/>
             </div>
+            <span class="group-favorite `+favorite_checked+`" onclick="addFavorite(event, '`+group.name+`', '`+group.id+`')" >★</span>
           `
           let group_div = document.createElement('div');
           group_div.className = 'group';
@@ -147,6 +152,11 @@
           }
           group_div.innerHTML = group_content;
           group_div.addEventListener('click', (e)=>{
+          if (e?.target) {
+            if (e?.target.classList.contains('group-favorite')) {
+              return;
+            }
+          }
             window.location.href = 'group/' + group.id;
           });
           container.insertBefore(group_div, empty_group);
@@ -293,6 +303,31 @@
           + `</div>`;
       showModal(content, '添加小班', ()=>{
         let payload = {'share_key': group.share_key};
+        fetch('observe_group', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        })
+        .then(response => {
+          return response.json();
+        })
+        .then(data => {
+          notify(data.msg);
+        });
+      });
+    }
+
+    // 收藏小班
+    function addFavorite(event, group_name, group_id) {
+      let element = event.target;
+      let content = `<line>是否收藏小班[`+group_name+`]?</line><line>收藏后即可显示在最上端</line>`;
+      let favorite = 1;
+      if (element.classList.contains('checked')) {
+        content = `<line>是否取消收藏小班[`+group_name+`]?`;
+        favorite = 0;
+      }
+      showModal(content, '收藏小班', ()=>{
+        let payload = {'id': group_id, 'favorite': favorite};
         fetch('observe_group', {
           method: 'POST',
           headers: {'Content-Type': 'application/json'},

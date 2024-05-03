@@ -86,6 +86,7 @@ class SQLite:
                 DAILY_RECORD INTEGER,               -- 每日记录
                 LATE_DAKA_TIME TEXT,                -- 晚打卡时间
                 AUTH_TOKEN TEXT,                    -- 授权令牌
+                FAVORITE INTEGER,                   -- 收藏标识
                 VALID INTEGER                       -- 是否有效
             );'''
         ]
@@ -231,6 +232,7 @@ class SQLite:
                     group_info.get('daily_record', 1),
                     group_info.get('late_daka_time', ''),
                     group_info.get('auth_token', ''),
+                    group_info.get('favorite', 0),
                     group_info.get('valid', 1),
                 )
             )
@@ -272,6 +274,7 @@ class SQLite:
             if group_info.get('daily_record') != None: sql += ' DAILY_RECORD = ?,'; params.append(group_info.get('daily_record'))
             if group_info.get('late_daka_time') != None: sql += ' LATE_DAKA_TIME = ?,'; params.append(group_info.get('late_daka_time'))
             if group_info.get('auth_token') != None: sql += ' AUTH_TOKEN = ?,'; params.append(group_info.get('auth_token'))
+            if group_info.get('favorite') != None: sql += ' FAVORITE = ?,'; params.append(group_info.get('favorite'))
             if group_info.get('valid') != None: sql += ' VALID = ?,'; params.append(group_info.get('valid'))
             sql = sql.strip(',')
             sql += ' WHERE GROUP_ID = ?'
@@ -317,7 +320,7 @@ class SQLite:
         if group_id:
             sql += ' AND GROUP_ID = ?'
             params.append(group_id)
-        sql += ' ORDER BY GROUP_ID ASC'
+        sql += ' ORDER BY FAVORITE DESC, GROUP_ID ASC'
         result = self.read(sql, params)
         result_keys = [
             'id',
@@ -339,6 +342,7 @@ class SQLite:
             'daily_record',
             'late_daka_time',
             'auth_token',
+            'favorite',
             'valid',
         ]
         group_info = []
@@ -531,7 +535,7 @@ class SQLite:
         page_max = 1
         page_num = 1
         page_count = 'unlimited'
-        if payload.get('page_count', '') != 'unlimited':
+        if payload.get('page_count', '') != '':
             page_count = payload.get('page_count', 20)
             page_num = payload.get('page_num', 1)
             page_num = page_num if page_num else 1
