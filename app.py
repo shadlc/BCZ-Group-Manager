@@ -69,9 +69,9 @@ def download():
         return restful(403, '有正在处理的下载，请稍后再试 (ᗜ ˰ ᗜ)"')
     processing = True
     try:
-        result = sqlite.queryMemberTable(request.json)
+        result = sqlite.queryMemberTable(request.json, union_temp=True)
         xlsx = Xlsx(config)
-        xlsx.write('用户信息', result[0])
+        xlsx.write('用户信息', result['data'])
         xlsx.save()
     except Exception as e:
         return restful(500, f'下载数据时发生错误(X_X): {e}')

@@ -367,7 +367,7 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
                 {
                     'group_id': group['id'],
                     'sdate': sdate,
-                    'page_count': 'unlimited',
+                    'page_count': '',
                     
                 },
                 header = False,
@@ -426,7 +426,6 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
                 'group_id': group['id'],
                 'sdate': sdate,
                 'edate': edate,
-                'page_count': 'unlimited',
                 
             },
             header = False,
