@@ -1,11 +1,10 @@
 import re
 import time
+import httpx
+import asyncio
 import logging
 import requests
-import asyncio  
-import httpx  
 from datetime import timedelta, date, datetime
-from concurrent.futures import ThreadPoolExecutor
 
 from src.config import Config
 from src.sqlite import SQLite
@@ -23,37 +22,38 @@ class BCZ:
         self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
         self.get_week_rank_url = 'https://group.baicizhan.com/group/get_week_rank'
 
-    headers = {
-        "default_headers_dict": {
-            "Connection": "keep-alive",
-            "User-Agent": "bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI",
-            "Accept": "*/*",
-            "Origin": "",
-            "X-Requested-With": "",
-            "Sec-Fetch-Site": "same-site",
-            "Sec-Fetch-Mode": "cors",
-            "Sec-Fetch-Dest": "empty",
-            "Referer": "",
-            "Accept-Encoding": "gzip, deflate",
-            "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
-            "Cookie": {
-                "access_token": "",
-                "client_time": "",
-                "app_name": "7060100",
-                "bcz_dmid": "2a16dfbb",
-                "channel": "qq",
-                "device_id": "032ae8f8427885d7",
-                # device_id 会根据access_token使用哈希唯一确定
-                "device_name": "android/DCO-AL00-HUAWEI",
-                "device_version": "12",
-                "Pay-Support-H5": "alipay_mob_client"
+        self.headers = {
+            "default_headers_dict": {
+                "Connection": "keep-alive",
+                "User-Agent": "bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI",
+                "Accept": "*/*",
+                "Origin": "",
+                "X-Requested-With": "",
+                "Sec-Fetch-Site": "same-site",
+                "Sec-Fetch-Mode": "cors",
+                "Sec-Fetch-Dest": "empty",
+                "Referer": "",
+                "Accept-Encoding": "gzip, deflate",
+                "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7",
+                "Cookie": {
+                    "access_token": "",
+                    "client_time": "",
+                    "app_name": "7060100",
+                    "bcz_dmid": "2a16dfbb",
+                    "channel": "qq",
+                    "device_id": "032ae8f8427885d7",
+                    # device_id 会根据access_token使用哈希唯一确定
+                    "device_name": "android/DCO-AL00-HUAWEI",
+                    "device_version": "12",
+                    "Pay-Support-H5": "alipay_mob_client"
+                }
             }
         }
-    }
-    hash_rmb = {}
+        self.hash_rmb = {}
+
     def getHeaders(self, auth_token: str) -> dict:
         '''获取请求头'''
-        # 实际上不同域名请求有细微差别，这里暂时只使用默认
+        # TODO 实际上不同域名请求有细微差别，这里暂时只使用默认
         if (auth_token == 'main_token'):
             auth_token = self.main_token
 
@@ -72,7 +72,14 @@ class BCZ:
         current_headers['Cookie']['access_token'] = auth_token
         current_headers['Cookie']['client_time'] = str(int(time.time()))
         return current_headers
-    
+
+    async def fetch_url(url: str, headers: dict) -> httpx.Response:  
+        '''异步请求，仅内部调用'''
+        async with httpx.AsyncClient() as client:  
+            client.headers = headers  
+            response = await client.get(url)  
+            response.raise_for_status()  # 如果请求失败则抛出异常  
+            return response
 
     def getInfo(self) -> dict:
         '''获取运行信息'''
@@ -115,10 +122,10 @@ class BCZ:
         user_info = response.json().get('data')
         return user_info
 
-    def getUserGroupInfo(self, user_id: str = None) -> dict | None:
+    def getUserGroupInfo(self, user_id: str = None) -> list[dict]:
         '''获取【我的小班】信息own_groups'''
         if not user_id:
-            return
+            return {}
         url = f'{self.group_list_url}?uniqueId={user_id}'
         headers = self.getHeaders(self.main_token)
         response = requests.get(url, headers=headers, timeout=5)
@@ -157,32 +164,61 @@ class BCZ:
             })
         return groups
 
-    def getGroupInfo(self, share_key: str, auth_token: str = '') -> dict | None:
+    def getGroupInfo(self, share_key: str, auth_token: str = '') -> dict:
         '''获取【班内主页】信息group/information'''
-        
-        group = {}
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         url = f'{self.group_detail_url}?shareKey={share_key}'
         headers = self.getHeaders(self.main_token)
         main_response = requests.get(url, headers=headers, timeout=5)
-        if auth_token:
-            headers = self.getHeaders(auth_token)
-            auth_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
-            msg = f'获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
+            msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
             logger.warning(f'{msg}\n{main_response.text}')
             # raise Exception(msg)
             return {
                 'share_key': share_key,
                 'exception': main_response.text,
             }
+        main_data = main_response.json()['data']
+        auth_data = {}
+        if auth_token:
+            headers = self.getHeaders(auth_token)
+            auth_response = requests.get(url, headers=headers, timeout=5)
+            if auth_response.status_code != 200 or main_response.json().get('code') != 1:
+                msg = f'使用内部授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或内部授权令牌无效'
+                logger.warning(f'{msg}\n{main_response.text}')
+            auth_data = auth_response.json()['data']
 
-        return self.parseGroupInfo(main_response, auth_response if auth_response else None, auth_token)
+        return self.parseGroupInfo(main_data, auth_data)
 
-    def parseGroupInfo(self, main_response: dict, auth_response: dict = None, auth_token: str = '') -> dict | None:
+    def getGroupsInfo(self, groups: list[dict]) -> list:
+        '''【多个 班内主页】并发获取''' 
+        async def asyncGroupsInfo(groups: list[dict]) -> list[dict]:
+            urls = []
+            for share_key in share_key:
+                urls.append(f'{self.group_detail_url}?shareKey={share_key}')
+            main_headers = self.getHeaders(self.main_token)
+            main_response: list[httpx.Response] = await asyncio.gather(*[self.fetch_url(url, auth_headers) for url in urls])
+            for i, response in enumerate(main_response):
+                if response.status_code != 200 or response.json().get('code') != 1:
+                    msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
+                    logger.warning(f'{msg}\n{main_response.text}')
+                    urls.pop(i)
+            auth_headers = self.getHeaders(groups['auth_token'])
+            auth_response = await asyncio.gather(*[self.fetch_url(url, main_headers) for url in urls])
+
+            groups = []
+            for i, response in enumerate(auth_response):
+                main_data = main_response[i]
+                auth_data = auth_response[i]
+                groups.append(self.parseGroupInfo(main_data, auth_data))
+
+            return groups
+        return asyncio.run(asyncGroupsInfo(self, groups))
+    
+    def parseGroupInfo(self, main_data: dict, auth_data: dict) -> dict:
         '''请调用 getGroupInfo 或 getGroupsInfo，此函数仅内部调用，仅用于信息解析'''
-        
-        main_data = main_response.json().get('data')
+        if not main_data:
+            return {}
         group_info = main_data.get('groupInfo') if main_data else []
         group_id = group_info['id']
         group_name = re.sub(self.invalid_pattern, '', group_info['name']) if group_info['name'] else ''
@@ -240,10 +276,7 @@ class BCZ:
                 group['leader'] = member['nickname']
                 group['leader_id'] = member_id
 
-        if auth_token:
-            if auth_response.status_code != 200 or auth_response.json().get('code') != 1:
-                group['token_invalid'] = True
-            auth_data = auth_response.json().get('data')
+        if auth_data:
             auth_member_list = auth_data.get('members') if auth_data else []
             for member in auth_member_list:
                 member_id = member['uniqueId']
@@ -251,6 +284,8 @@ class BCZ:
                 for member_info in members:
                     if member_id == member_info['id'] and member_info['nickname'] != nickname:
                         member_info['group_nickname'] = member['nickname']
+        else:
+            group['token_invalid'] = True
 
         if today_daka_count != 0:
             group['today_daka_count'] = today_daka_count
@@ -258,37 +293,6 @@ class BCZ:
 
         return group
 
-    async def fetch_url(url, headers: dict):  
-        '''异步请求，仅内部调用'''
-        async with httpx.AsyncClient() as client:  
-            client.headers = headers  
-            response = await client.get(url)  
-            response.raise_for_status()  # 如果请求失败则抛出异常  
-            return response  
-    
-    async def asyncGroupsInfo(self, share_key: list, auth_token: str = ''):
-        '''请使用下面的getGroupsInfo函数，仅内部调用''' 
-        
-        urls = []
-        for share_key in share_key:
-            urls.push(f'{self.group_detail_url}?shareKey={share_key}')
-        # 使用 asyncio.gather 来并发地执行所有请求  
-        
-        main_headers = self.getHeaders(self.main_token)
-        auth_headers = self.getHeaders(auth_token)
-        auth_response = await asyncio.gather(*[self.fetch_url(url, main_headers) for url in urls])  
-        main_response = await asyncio.gather(*[self.fetch_url(url, auth_headers) for url in urls])  
-
-        group_list = []
-        for i, result in enumerate(auth_response):
-            group_list.push(self.parseGroupInfo(main_response[i], auth_response[i], auth_token))
-
-        return group_list
-
-    def getGroupsInfo(self, share_key: list, auth_token: str = '') -> list:
-        '''【多个 班内主页】并发获取''' 
-        return asyncio.run(self.asyncGroupsInfo(self, share_key, auth_token))
-            
     def getGroupDakaHistory(self, share_key: str) -> dict:
         '''获取小班成员历史打卡信息'''
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
@@ -312,42 +316,31 @@ class BCZ:
             })
         return daka_dict
 
-    def updateGroupInfo(self, group_list: list[dict], full_info: bool = False) -> list:
+    def updateGroupInfo(self, groups: list[dict]) -> list:
         '''【参数传入的班内主页】获取最新信息并刷新小班信息列表'''
-        with ThreadPoolExecutor() as executor:
-            futures = []
-            for group in group_list:
-                if not group.get('valid'):
-                    continue
-                future = executor.submit(
-                    lambda argv: self.getGroupInfo(argv[0], argv[1]),
-                    (group['share_key'], group['auth_token'])
-                )
-                futures.append(future)
-
-        for future in futures:
-            result = future.result()
-            for group_info in group_list:
+        for group in groups:
+            if not group.get('valid'):
+                groups.pop(group)
+        results = self.getGroupsInfo(groups)
+        for result in results:
+            for group_info in groups:
                 if group_info['id'] == result.get('id'):
                      group_info.update(result)
                 elif group_info['share_key'] == result.get('share_key'):
                      group_info.update(result)
-        return group_list
+        return groups
 
-    def getUserAllInfo(self, user_id: str = None) -> dict | None:
+    def getUserAllInfo(self, user_id: str = None) -> dict:
         '''【用户校牌+所有小班内主页】获取指定用户所有信息'''
         user_info = self.getUserInfo(user_id)
         if not user_info:
-            return
-        user_group_dict = self.getUserGroupInfo(user_id)
-        group_dict = {}
-        for group_id, group in user_group_dict.items():
-            group_dict[group_id] = self.getGroupInfo(group['share_key'])
-        user_info['group_dict'] = group_dict
+            return {}
+        groups = self.getUserGroupInfo(user_id)
+        user_info['group_dict'] = self.getGroupsInfo(groups)
         return user_info
 
 def recordInfo(bcz: BCZ, sqlite: SQLite):
-    '''记录用户信息'''
+    '''记录小班信息'''
     group_info_list = []
     for group in sqlite.queryObserveGroupInfo():
         if group['daily_record']:
@@ -367,7 +360,6 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
                 {
                     'group_id': group['id'],
                     'sdate': sdate,
-                    'page_count': '',
                     
                 },
                 header = False,
