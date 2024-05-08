@@ -92,13 +92,15 @@ class SQLite:
         ]
         self.init()
 
-    def connect(self, db_path) -> sqlite3.Connection:
-        '''连接数据库，并返回连接态'''
+    def connect(self, db_path: str = '') -> sqlite3.Connection:
+        '''连接数据库，并返回连接态(记得手动关闭)'''
+        if not db_path:
+            db_path = self.db_path
         try:
             if path := os.path.dirname(db_path):
                 os.makedirs(path, exist_ok=True)
             conn = sqlite3.connect(db_path)
-            conn.set_trace_callback(lambda statement: logger.debug(f'在{self.db_path}执行SQLite指令: {statement}'))
+            conn.set_trace_callback(lambda statement: logger.debug(f'在{db_path}执行SQLite指令: {statement}'))
             return conn
         except sqlite3.Error:
             logger.error('数据库读取异常...无法正常运行，程序会在5秒后自动退出')
@@ -112,6 +114,7 @@ class SQLite:
         for sql in self.init_sql:
             cursor.execute(sql)
             conn.commit()
+        conn.close()
 
     def read(self, sql: str, param: list | tuple = ()) -> list:
         '''SQL执行读数据操作'''
@@ -119,7 +122,9 @@ class SQLite:
             conn = self.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute(sql, param)
-            return cursor.fetchall()
+            result = cursor.fetchall()
+            conn.close()
+            return result
         except sqlite3.DatabaseError as e:
             logger.error(f'读取数据库{self.db_path}出错: {e}')
             raise e
@@ -131,6 +136,7 @@ class SQLite:
             cursor = conn.cursor()
             cursor.execute(sql, param)
             conn.commit()
+            conn.close()
             return True
         except sqlite3.DatabaseError as e:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
@@ -171,6 +177,7 @@ class SQLite:
                 )
             )
             conn.commit()
+            conn.close()
             self.saveMemberInfo(group_info['members'])
 
     def saveMemberInfo(self, members: list, temp: bool = False) -> None:
@@ -201,6 +208,7 @@ class SQLite:
                 )
             )
         conn.commit()
+        conn.close()
 
     def addObserveGroupInfo(self, group_list: list[dict]) -> None:
         '''增加关注小班信息'''
@@ -237,6 +245,7 @@ class SQLite:
                 )
             )
         conn.commit()
+        conn.close()
 
     def disableObserveGroupInfo(self, group_id) -> None:
         '''禁用关注小班'''
@@ -247,6 +256,7 @@ class SQLite:
             (group_id)
         )
         conn.commit()
+        conn.close()
 
     def updateObserveGroupInfo(self, group_list: list[dict]) -> None:
         '''更新关注小班信息'''
@@ -281,6 +291,7 @@ class SQLite:
             params.append(group_info['id'])
             cursor.execute(sql, params)
         conn.commit()
+        conn.close()
 
     def updateMemberInfo(self, member_list: list[dict]) -> None:
         '''更新关注小班信息'''
@@ -310,6 +321,7 @@ class SQLite:
             params.append(member['group_id'])
             cursor.execute(sql, params)
         conn.commit()
+        conn.close()
 
     def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> dict:
         '''查询关注小班信息'''
@@ -611,3 +623,4 @@ class SQLite:
         cursor = conn.cursor()
         cursor.execute(sql, params)
         conn.commit()
+        conn.close()
