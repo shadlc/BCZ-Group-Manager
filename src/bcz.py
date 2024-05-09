@@ -22,6 +22,7 @@ class BCZ:
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
         self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
         self.get_week_rank_url = 'https://group.baicizhan.com/group/get_week_rank'
+        self.remove_members_url = 'https://group.baicizhan.com/group/remove_members'
 
     headers = {
         "default_headers_dict": {
@@ -73,6 +74,32 @@ class BCZ:
         current_headers['Cookie']['client_time'] = str(int(time.time()))
         return current_headers
     
+    # 移除成员
+    def removeMembers(self, user_id: list, share_key: str, access_token: str) -> None:
+        
+        url = f"{self.remove_members_url}?shareKey={share_key}"
+        # 暂不确定url格式，稍后测试
+        headers = self.getHeaders(access_token)
+        headers["Access-Control-Request-Method"] = "POST"
+        headers["Access-Control-Request-Headers"] = "content-type"
+        headers["Origin"] = "https://activity.baicizhan.com"
+        headers["Referer"] = "https://activity.baicizhan.com"
+        
+        response = requests.options(url, headers = headers, timeout = 5)# 先发一个OPTIONS测跨域POST
+        json =  {
+            "memberIds": user_id,
+            "shareKey": share_key,
+        }
+
+        headers = self.getHeaders(access_token)
+        headers["Content-Type"] = "application/json"
+        headers["Origin"] = "https://activity.baicizhan.com"
+        headers["Referer"] = "https://activity.baicizhan.com"
+        response = requests.post(url, headers = headers, json = json, timeout = 5)
+        if response.json().get("code",0) != 1:
+            print("出现异常，请检查")
+            # 2024.2.23 15:39 成功第一次
+        
 
     def getInfo(self) -> dict:
         '''获取运行信息'''
@@ -82,7 +109,7 @@ class BCZ:
             token_valid = True
         return {
             'token_valid': token_valid,
-            'uid': main_info['uid'],
+            'uid': main_info['uid'], 
             'name': main_info['name'],
         }
 

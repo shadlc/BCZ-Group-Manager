@@ -28,40 +28,41 @@ class SQLite:
                 TODAY_DAKA INTEGER,                 -- 今日打卡数
                 FINISHING_RATE REAL,                -- 打卡率
                 CREATED_TIME TEXT,                  -- 建立时间
-                RANK INTEGER,                       -- 段位排行
+                RANK INTEGER,                       -- 段位
+                RANKING INTEGER,                    -- 段位 排名(区分，暂时不用)
                 GROUP_TYPE INTEGER,                 -- 小班类型
                 AVATAR TEXT,                        -- 小班头像
                 AVATAR_FRAME TEXT,                  -- 小班像框
                 DATA_TIME TEXT                      -- 采集时间
             );''',
-            '''CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表
-                USER_ID INTEGER,                    -- 用户ID
+            '''CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表（以用户 + 小班 + 日期 为主键）
+                USER_ID INTEGER UNIQUE,             -- 用户ID   *
                 NICKNAME TEXT,                      -- 用户昵称
-                GROUP_NICKNAME TEXT,                -- 班内昵称
+                GROUP_NICKNAME TEXT,                -- 班内昵称(直接覆盖旧的)
                 COMPLETED_TIME TEXT,                -- 打卡时间
-                TODAY_DATE TEXT,                    -- 记录日期
+                TODAY_DATE TEXT UNIQUE,             -- 记录日期 *
                 WORD_COUNT INTEGER,                 -- 今日词数
                 STUDY_CHEAT INTEGER,                -- 是否作弊
                 COMPLETED_TIMES INTEGER,            -- 打卡天数
                 DURATION_DAYS INTEGER,              -- 入班天数
                 BOOK_NAME TEXT,                     -- 学习词书
-                GROUP_ID INTEGER,                   -- 小班ID
+                GROUP_ID INTEGER UNIQUE,            -- 小班ID   *
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
                 DATA_TIME TEXT                      -- 采集时间
             );''',
             '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
-                USER_ID INTEGER,                    -- 用户ID
+                USER_ID INTEGER UNIQUE,             -- 用户ID   *
                 NICKNAME TEXT,                      -- 用户昵称
-                GROUP_NICKNAME TEXT,                -- 班内昵称
+                GROUP_NICKNAME TEXT,                -- 班内昵称(直接覆盖旧的)
                 COMPLETED_TIME TEXT,                -- 打卡时间
-                TODAY_DATE TEXT,                    -- 记录日期
+                TODAY_DATE TEXT UNIQUE,             -- 记录日期 *
                 WORD_COUNT INTEGER,                 -- 今日词数
                 STUDY_CHEAT INTEGER,                -- 是否作弊
                 COMPLETED_TIMES INTEGER,            -- 打卡天数
                 DURATION_DAYS INTEGER,              -- 入班天数
                 BOOK_NAME TEXT,                     -- 学习词书
-                GROUP_ID INTEGER,                   -- 小班ID
+                GROUP_ID INTEGER UNIQUE,            -- 小班ID   *
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
                 DATA_TIME TEXT                      -- 采集时间
@@ -135,16 +136,21 @@ class SQLite:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
         return False
 
-    def saveGroupInfo(self, group_list: list[dict], temp: bool = False) -> None:
-        '''保存小班数据'''
+    def saveGroupInfo(self, group_list: list[dict], temp: bool = False, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None ) -> None:
+        '''保存小班数据 + 保存成员信息'''
+        if not cursor:
+            # 筛选时读写较多，因此重用连接
+            conn = self.connect(self.db_path)
+            cursor = conn.cursor()
         if temp:
             for group_info in group_list:
                 if group_info.get('exception'):
                     continue
-                self.saveMemberInfo(group_info['members'], temp)
+                if not group_info.get('members', None):
+                    return
+                self.saveMemberInfo(group_info['members'], group_info['groupInfo']['id'], temp, cursor, conn)
+                # 临时信息仅保存成员信息，不保存小班信息
             return
-        conn = self.connect(self.db_path)
-        cursor = conn.cursor()
         for group_info in group_list:
             if group_info.get('exception'):
                 continue
@@ -170,22 +176,30 @@ class SQLite:
                 )
             )
             conn.commit()
-            self.saveMemberInfo(group_info['members'])
+            if not group_info.get('members', None):
+                return 
+            self.saveMemberInfo(group_info['members'],group_info['groupInfo']['id'])
 
-    def saveMemberInfo(self, members: list, temp: bool = False) -> None:
+    def saveMemberInfo(self, members: list, temp: bool = False, cursor: sqlite3.Cursor = None, conn: sqlite3.Connection = None) -> None:
         '''仅保存成员详情'''
+        if not cursor:
+            # 筛选时读写较多，因此重用连接
+            conn = self.connect(self.db_path)
+            cursor = conn.cursor()
         table_name = 'MEMBERS'
         if temp:
             table_name = 'T_' + table_name
-        conn = self.connect(self.db_path)
-        cursor = conn.cursor()
         for member in members:
+            recorded_time = cursor.execute(f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = {member['uniqueId']} AND GROUP_ID = {group_id}').fetchone()
+            if recorded_time[0] != 0 and recorded_time[0] < member['completed_time']:
+                member['completed_time'] = recorded_time[0]
+                # 可能加入新的小班后，会产生更晚的时间，以早的为准
             cursor.execute(
-                f'INSERT OR IGNORE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                f'INSERT OR REPLACE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
                     member['id'],
                     member['nickname'],
-                    member['group_nickname'],
+                    member['group_nickname'], # 如果当天改名，则覆盖旧的
                     member['completed_time'],
                     member['today_date'],
                     member['today_word_count'],
@@ -199,6 +213,7 @@ class SQLite:
                     member['data_time'],
                 )
             )
+            # 有个备注：踢出操作的有效期必须是当次，否则会影响手动通过的有效性
         conn.commit()
 
     def addObserveGroupInfo(self, group_list: list[dict]) -> None:
@@ -444,6 +459,185 @@ class SQLite:
                 f'SELECT COUNT(*) FROM MEMBERS'
             )[0][0]
 
+    def differMemberData(self, field_index: int, time_index: int, sqlite_result: dict, no_splice: bool = False) -> dict:
+        '''内部函数，获取字典中指定字段数据，返回随时间的变化
+        return {
+            '%YY-%mm-%dd': value1,
+            '%YY-%mm-%dd': value2,
+            (value2≠value1)
+            ...
+        }
+        '''
+        data = {}
+        latest_value = None
+        for item in sqlite_result:
+            time = item[time_index]
+            value = item[field_index]
+            if no_splice:
+                # 不删除时间上的重复数据
+                data[time] = value
+            else:
+                # 如果数据跟前面的不一样才记录
+                if value != latest_value:
+                    latest_value = value
+                    data[time] = value
+        return data
+    
+    def queryMemberGroup(self, user_id: str = None, group_id: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict: # 获取指定成员 + 小班的所有信息
+        '''获取指定成员 -- 小班的所有信息，若果没有指定则返回所有MEMBERS表记录过的信息'''
+        if not conn or not cursor:
+            conn = self.connect(self.db_path)
+            cursor = conn.cursor()
+        if not user_id and not group_id:
+            # 获取所有成员信息
+            result = cursor.execute(
+                f'''
+                    SELECT DISTINCT
+                        USER_ID,
+                        GROUP_ID,
+                    FROM MEMBERS
+                ''',
+            ).fetchall()
+            members = {}
+            for item in result:
+                member = self.queryMemberInfo(item[0], item[1], conn, cursor)
+                members[item[0]] = member
+            return members
+        else: # 获取指定成员 + 小班的所有信息
+            latest_data_time = cursor.execute(
+                f'''
+                    SELECT
+                        MAX(DATA_TIME)
+                    FROM MEMBERS
+                    WHERE USER_ID = ? AND GROUP_ID = ?
+                ''',
+                [user_id, group_id]
+            ).fetchone()
+            if not latest_data_time:
+                return {}
+            latest_data_time = latest_data_time[0]
+            # 获取最新数据（属性类）
+            result_keys = [
+                'id',
+                'today_date',
+                'completed_times',
+                'duration_days',
+                'group_id',
+                'avatar',
+                'data_time',
+            ]
+            result = cursor.execute(
+                f'''
+                    SELECT
+                        USER_ID,
+                        TODAY_DATE,
+                        COMPLETED_TIMES,
+                        DURATION_DAYS,
+                        GROUP_ID,
+                        AVATAR,
+                        DATA_TIME
+                    FROM MEMBERS
+                    WHERE USER_ID = ? AND GROUP_ID = ? AND DATA_TIME = ?
+                ''',
+                [user_id, group_id, latest_data_time]
+            ).fetchone()
+            member = dict(zip(result_keys, result))
+            
+            # 获取历史数据集
+            result = cursor.execute(
+                f'''
+                    SELECT
+                        TODAY_DATE,
+                        NICKNAME,
+                        GROUP_NICKNAME,
+                        COMPLETED_TIME,
+                        WORD_COUNT,
+                        STUDY_CHEAT,
+                        DURATION_DAYS,
+                        COMPLETED_TIMES,
+                        BOOK_NAME,
+                        GROUP_NAME,
+                    FROM MEMBERS
+                    WHERE USER_ID = ? AND GROUP_ID = ? ORDER BY DATA_TIME ASC
+                ''',
+                [user_id, group_id]
+            ).fetchall()
+            if not result:
+                return {}
+            member['nickname'] = self.differMemberData(1, 0, result)
+            member['group_nickname'] = self.differMemberData(2, 0, result)
+            member['completed_time'] = self.differMemberData(3, 0, result)
+            member['word_count'] = self.differMemberData(4, 0, result)
+            total_study_cheat = 0
+            total_stay_days = 0
+            total_completed_times = 0
+            longest_stay_days = 0 # 最长停留天数
+            longest_completed_times = 0
+            for item in result:
+                total_study_cheat += item[5]
+                if item[6] > longest_stay_days:
+                    longest_stay_days = item[6]
+                    longest_completed_times = item[7]
+                else:
+                    total_stay_days += longest_stay_days
+                    total_completed_times += longest_completed_times
+                    if longest_stay_days >= 10:
+                        member['duration_completed'].append((longest_stay_days, longest_completed_times))
+                    longest_stay_days = 0
+                    longest_completed_times = 0
+            # 最后一组数据
+            total_stay_days += longest_stay_days
+            total_completed_times += longest_completed_times
+            if longest_stay_days >= 10:
+                member['duration_completed'].append((longest_stay_days, longest_completed_times))
+            member['total_study_cheat'] = total_study_cheat
+            member['total_stay_days'] = total_stay_days
+            member['total_completed_times'] = total_completed_times
+            # 按完成率排序
+            member['duration_completed'] = sorted(member['duration_completed'], key=lambda x: x[1]/x[0], reverse=True)
+            return member
+        
+    def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> None:
+        '''保存筛选日志'''
+
+    def queryFilterLog(self, user_id: str = None, group_id: str = None, today_date: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
+        '''获取筛选日志'''
+
+        
+    
+    # def queryMemberGroupList(self, user_id: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
+    #     '''获取成员的小班列表
+    #     return[group_id]'''
+    #     if not conn or not cursor:
+    #         conn = self.connect(self.db_path)
+    #         cursor = conn.cursor()
+    #     group_list = []
+    #     group_list = cursor.execute(
+    #         f'''
+    #             SELECT DISDINCT
+    #                 GROUP_ID
+    #             FROM MEMBERS
+    #             WHERE USER_ID = ?
+    #         ''',
+    #         [user_id]
+    #     ).fetchall()
+    #     return group_list
+    
+    # def queryMemberList(self, group_id: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
+    #     '''获取数据库中MEMBERS表记录过的所有成员列表'''
+
+    #     if not conn or not cursor:
+    #         conn = self.connect(self.db_path)
+    #         cursor = conn.cursor()
+    #     result = cursor.execute(
+    #         f'''
+    #             SELECT DISTINCT
+    #                 USER_ID
+    #             FROM MEMBERS
+    #         ''',
+    #     ).fetchall()
+    #     return [item[0] for item in result]
+
     def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> dict:
         '''查询用户信息表
 
@@ -483,6 +677,9 @@ class SQLite:
                 GROUP_ID,
                 GROUP_NAME,
                 AVATAR,
+                OPERATION,
+                VALIDITY,
+                STRATEGY_NAME,
                 DATA_TIME
             FROM MEMBERS WHERE 1=1
         '''

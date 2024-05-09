@@ -1,5 +1,5 @@
 [[source]]
-url = "https://pypi.tuna.tsinghua.edu.cn/simple/"
+url = "https://mirrors.cernet.edu.cn/pypi/web/simple"
 # url = "https://pypi.org/simple"
 verify_ssl = true
 name = "pypi"
@@ -8,6 +8,9 @@ name = "pypi"
 openpyxl = "*"
 requests = "*"
 flask = "*"
+websockets = "*"
+gevent-websocket = "*"
+flask-sockets = "*"
 
 [dev-packages]
 

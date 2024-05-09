@@ -3,147 +3,129 @@
 # from config import Config
 import threading
 import logging
+import datetime
+from flask_sockets import Sockets 
+
 import time
 from config import Strategy
+from operator import itemgetter
+from sqlite import SQLite
 from bcz import BCZ
+import sqlite3
 
-
-class FilterAgent:
-    # 这个功能跟BCZ类功能类似，BCZ类就用来现有的每日获取，而FilterAgent类则用来筛选
-    def __init__(self, strategy: dict, shareKey: str, strategy_index: str) -> None:
-        self.strategy = strategy
+# 努力理解了一下BCZ类，还是可以用的
 class Filter:
-    def __init__(self, strategy: dict, shareKey: str, strategy_index: str) -> None:
-        # 每个filter对应一个班级，但是strategy因为要前端更新，所以由外部传入
-        self.strategy = strategy
-        self.shareKey = shareKey
-        self.strategy_index = strategy_index
+    def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite) -> None:
+        # filter类全局仅一个，每个班级一个线程（当成局域网代理设备），但是strategy因为要前端更新，所以只储存Strategy类地址
+        self.strategy_class = strategy_class
+        self.main_token = bcz.main_token
+        self.strategy_index = 0
+        self.bcz = bcz
+        self.sqlite = sqlite
 
-        self.activate = False
+        self.activate_groups = {}
         
-    def getState(self) -> bool:
-        return self.activate
+    def getState(self, shareKey: str) -> bool:
+        '''获取指定班筛选器状态：是否运行，筛选层次和进度'''
+        return self.activate_groups
+
+
+
+    # def updateConnectedClients(self, shareKey: str, connected_websockets: list) -> None:
+    #     '''更新已连接客户端'''
+    #     self.connected_websockets = connected_websockets
     
-    def applyStrategy(self, strategy_index: str) -> None:
-        # 设置策略
-        self.strategy_index = strategy_index
-
-
-    def stop(self) -> None:
-        # 停止筛选，不再分开monitor和activate功能
-        if not hasattr(self, "tids"):
-            return # 筛选线程没有运行
-        self.rlock.acquire()
-        self.activate = False
-        self.rlock.release()
-        self.tids.join()
-        del self.tids
-
-    def 
-    def __checkUserProfile(self, refer_dict:dict, member_dict: dict, strata_name: str, unauthorized_token: str) -> None:
-        # 通信等价操作：点击了用户主页
-        # 本函数不可直接调用，请调用check
-        # <重要变量1> member_dict是这个用户在self.my_group_dict中截取出的，用户在我的班级的信息，是单个用户的
-        self.personal_dict = self.bcz.getUserInfoRAW(member_dict["uniqueId"], unauthorized_token)
-        # <重要变量2> self.personal_dict 是通过uniqueId得到的， 这个用户的个人信息，也是单个用户的
-        time.sleep(3)
-        # print(self.personal_dict["tag"])
-        print (f'<1>原名{self.personal_dict["name"]}，同桌{self.personal_dict["deskmateDays"]}天，\
-            打卡/入班时间{time.strftime("%Y-%m-%d %H:%M:%S", time.gmtime(member_dict["completedTime"]+28800))}，总卡{self.personal_dict["dakaDays"]},\
-            {"对方将您拉黑," if self.personal_dict["userInHisBlackList"]  else ""},\
-            {"违规," if self.personal_dict["todayStudyCheat"]  else ""},\
-            {"已点赞," if self.personal_dict["todayLikedState"]  else ""},\
-            总赞{self.personal_dict["likedCount"]},\
-            {"未组队," if self.personal_dict["tag"] == -1 else ""},\
-            {"靠谱," if self.personal_dict["tag"] == 3 else ""},\
-            {""}')
-
-        # 默认gmtime总是比北京时间少8个小时（28800秒）
-
-        return 
-
-
-
-    def __checkUserGroups(self, refer_dict:dict, member_dict: dict, strata_name: str, unauthorized_token: str, durationDays_min: int) -> None:
-        # 通信等价操作：进入了用户小班主页，但没有加入其小班，不过过程少了一些包
-        # 本函数不可直接调用，请调用check
-        strat = self.strategies[strata_name]
-        logging("__checkUserGroups")
+    # def dispatchNewMessages(self, share_key: str, new_messages: list) -> None:
+        # '''每次有新消息到来时，向所有已连接的客户端发送消息，并清空消息队列'''
         
-        durationDays_min = strat["their_cls_chk_min"]# 只有他在展示班大于该值，才会继续验证他的展示班打卡数
+        # for ws in self.connected_websockets:
+        #     for message in self.new_messages:
+        #         ws.send({'type':'message', 'content': message})
+        # self.messages.append(self.new_messages)
+        # new_messages = []
 
-        # 以下巨大的代码块作用：找用户在其他小班内打卡/加入天数，储存到self.their_classes，C++风格（逃）
-        self.their_classes = {}
-        # <重要变量3> self.their_classes则负责保存找到的有用的信息，而class_detail只是依次读取这个用户的小班，储存他在别的班级的打卡数据
-        if self.personal_dict["userPrivacy"] == None:
-            show_group_id = self.personal_dict["list"][0]["id"]
-            show_group_or_not = True
-        else:
-            show_group_id = self.personal_dict["userPrivacy"]["groupId"]
-            show_group_or_not = self.personal_dict["userPrivacy"]["showGroup"]
-        # 如果userPrivacy是NULL，那么就是第一个小班
-
-        print("<2>")
-        if (strat.get("experimental", False)):
-        # 实验功能：警告！请勿滥用实验功能，否则可能触发包括不限于反爬、封禁bcz账号或ip、追究法律责任等等后果
-        # 实验功能：警告！请勿滥用实验功能，否则可能触发包括不限于反爬、封禁bcz账号或ip、追究法律责任等等后果
-        # 实验功能：警告！请勿滥用实验功能，否则可能触发包括不限于反爬、封禁bcz账号或ip、追究法律责任等等后果
-            refer_dict["experimental"] = True
-            for personal_class in self.personal_dict["list"]:
-                refer_dict[f'class{personal_class["id"]} joinDays'] = personal_class["joinDays"]
-                if personal_class["id"] == show_group_id: # 用户展示的小班，额外拉取，另，即使开隐私groupId也会有
-                    print("下面这行是用户展示的小班")
-                if personal_class["joinDays"] < durationDays_min : 
-                    refer_dict[f'class{personal_class["id"]} skip too short'] = True
-                    print(f'{personal_class["joinDays"]}天，跳过')
-                    continue # 没到最低标准，不验
-
-                class_detail = self.bcz.getMemberInfoRAW( unauthorized_token, personal_class["shareKey"])
-                time.sleep(3) # 每验一个等一秒
-                for person_in_their_class_dict in class_detail["members"]: # 获取用户在他的小班中的数据
-                    if person_in_their_class_dict["uniqueId"] == self.personal_dict["uniqueId"]: # 用uniqueid识别
-                        print(f'在别班{person_in_their_class_dict["completedTimes"]}/{person_in_their_class_dict["durationDays"]}')
-                        # 此处不加refer_dict，返回去还要
-                        self.their_classes[personal_class["id"]] = {
-                            "completedTimes": person_in_their_class_dict["completedTimes"],
-                            "durationDays" : person_in_their_class_dict["durationDays"],
-                            "finishingRate" : person_in_their_class_dict["completedTimes"]*1.000/person_in_their_class_dict["durationDays"],
-                            "rank" : personal_class["rank"] # 1-7青铜-王者，0教师
-                        }
-        else: # 传统模式：使用所有本来就能看到的信息进行筛选
-            # experimental = 0
-            if show_group_or_not == 1: # 用户展示小班
-            # 如果userPrivacy是NULL，那么就是第一个小班，也就是展示
-                for personal_class in self.personal_dict["list"]:
-                    refer_dict[f'class{personal_class["id"]} joinDays'] = personal_class["joinDays"]
-                    # 简略变量：personal_class 这个人的class在其主页的概括信息，含有他加入了多少天等等简略信息
-                    if personal_class["id"] == show_group_id: # 只请求用户展示的小班
-                        if personal_class["joinDays"] < durationDays_min : 
-                            refer_dict[f'class{personal_class["id"]} skip too short'] = True
-                            print(f'展示班{personal_class["joinDays"]}天，跳过')
-                            break # 没到最低标准，不验了
-
-                        # 验证小班内他的打卡天数
-                        class_detail = self.bcz.getMemberInfoRAW( unauthorized_token, personal_class["shareKey"])
-                        # 遍历变量： class_detail 是这个人的每个小班的group_dict遍历变量
-                        time.sleep(3)
-                        for person_in_their_class_dict in class_detail["members"]: # 获取用户在他的小班中的数据
-                            # 遍历变量：person_in_their_class_dict 如上
-                            if person_in_their_class_dict["uniqueId"] == self.personal_dict["uniqueId"]: # 用uniqueid识别
-                                print(f'在别班{person_in_their_class_dict["completedTimes"]}/{person_in_their_class_dict["durationDays"]}')
-                                self.their_classes[personal_class["id"]] = {
-                                    "completedTime": person_in_their_class_dict["completedTimes"],
-                                    "durationDays" : person_in_their_class_dict["durationDays"],
-                                    "finishingRate" : person_in_their_class_dict["completedTimes"]*1.000/person_in_their_class_dict["durationDays"],
-                                    "rank" : personal_class["rank"] # 1-7青铜-王者，0教师
-                                }
-        return 
+    
+    def stop(self, shareKey) -> None:
+        # 停止筛选，不再分开monitor和activate功能
+        if not self.activate_groups.get(shareKey, None):
+            return # 筛选线程没有运行
+        
+        self.activate_groups[shareKey]['stop'] = True
+        self.activate_groups[shareKey]['tids'].join()
+        self.activate_groups.pop(shareKey)
+        print(f'筛选线程已停止，shareKey = {shareKey}')
 
 
-    def check(self, member_dict: dict,strata_name:str, authorized_token: str, unauthorized_token: str, share_key: str) -> None:
-        # 通信等价操作：本函数先根据已有数据判断，需要更多资料时调用checkUserProfile和checkUserGroups 
-        # 通过任意一个子条件，那么在status:dict中储存对应信息方便上一级程序处理
-        # 如果不符合任何一个子条件，那么直接退出
+
+    def info(self, uniqueId: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict:
+        '''查询【校牌+加入小班+加入10天以上班内主页】'''
+        # 内存缓存结构：
+        # member_dict = {
+        #     "uniqueId": {
+        #        "today_date": 用户校牌获取的时间
+        #        "list": [
+        #            {
+        #                queryMemberGroup返回的字典，内含该信息时间
+        #            },
+        # queryMemberGroup获得的信息可能是别的成员查询时顺便写入的，但用户校牌必须当天获取一次
+
+        # 数据库缓存结构： MEMBERS TABLE主键是用户 + 小班 + 采集日期，不储存用户校牌
+        # 
+
+        
+        if not conn or cursor:
+            conn = sqlite3.connect(self.sqlite.db_path)
+            cursor = conn.cursor()
+        
+        # 先查询内存中是否有缓存（仅当日缓存有效）member_dict在start时初始化为空
+        today_date = time.strftime("%Y-%m-%d", time.localtime())
+        member_info = self.member_dict.get(uniqueId, None)
+        if not member_info or self.member_dict[uniqueId]['today_date'] != today_date:
+            # 缓存过期，再尝试数据库
+            member_info = self.sqlite.queryMemberGroup(uniqueId, conn, cursor)
+            if not member_info:
+                # 数据库中没有缓存，再去BCZ获取
+                member_info = self.bcz.getUserGroupInfo(uniqueId)
+                if not member_info:
+                    return None
+                self.sqlite.saveGroupInfo(member_dict['data']['list'], conn, cursor)
+            self.member_dict[uniqueId] = member_info
+        
+        # 再将每个组的信息按如上过程查询
+        for group_introduction in member['data']['list']:
+            if group_introduction['joinDays'] >= 10:
+                group_info = self.group_dict[group_introduction['id']]
+                if not group_info:
+                    group_info = self.sqlite.q
+                    if not group_info:
+        
+        
+
+
+        user_info = self.bcz.getUserInfo(uniqueId)
+        user_group_info = self.bcz.getUserGroupInfo(uniqueId)
+
+        groups_to_be_updated = []
+        for group in user_group_info:
+            if group["joinDays"] >= 10:
+                groups_to_be_updated.append(group)
+        groups_info = self.bcz.getGroupsInfo(groups_to_be_updated)
+        
+        # 将其他用户的信息先存进数据库，节省以后的查询
+        for group in groups_info:
+            for member in group["members"]:
+
+        # 将本用户的信息提取出来返回
+        member_dict = {}
+        for group in groups_info:
+            for member in group["members"]:
+                if member["uniqueId"] == uniqueId:
+                    member_dict.push({f'{group["id"]}', member})
+                    break
+        return member_dict
+
+    def check(self, member_dict: dict,substrategy_dict :dict, authorized_token: str) -> bool:
+        '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         print (f'正在验证{member_dict["nickname"]},id = {member_dict["uniqueId"]}')
         # strategies:很多策略的集合，strat：一个策略,sub_strat:一个策略下的子策略
         strat = self.strategies[strata_name]
@@ -357,6 +339,9 @@ class Filter:
                                     print(f'failed:小班不符合要求，total{required_durationDays_min}rate{required_finishingRate_min}')
                                     break
 
+
+                if sub_strat_dict["needconfirm"] > 0 :
+                        self.log(f"请确认{member_dict['nickname']}是否踢出小班", sub_strat_dict["needconfirm"], client_socket)
                         
                 if o == 1:
                     print(f"符合标准{strata_name}-{sub_strata_name}")
@@ -382,117 +367,125 @@ class Filter:
         return 
 
 
-    def run(self, authorized_token: str, unauthorized_token: str, share_key: str, strata_name: str) -> None:
-        
+# strategy_class列表（strategy_dict是其中指定字典）
+# default_list = [
+#     {
+#         "name": "策略一",
+#         "weekDays": ["周一", "周三"],
+#         "timeStart": "09:00",
+#         "timeEnd": "10:00",
+#         "subItems": [
+#             {
+#                 "name": "子条目1",
+#                 "operation": "接受",
+#                 "minPeople": 199,
+#                 "conditions": [
+#                     {"name": "同桌天数", "value": 5, "operator": "大于", "equality": False},
+#                     # ... 其他条件  
+#                 ]
+#             },
+#             # ... 其他子条目  
+#         ]
+#     },
+#     {
+#         "name": "策略二",
+#         "weekDays": ["周二", "周四"],
+#         "timeStart": "10:00",
+#         "timeEnd": "11:00",
+#         "subItems": [
+#             {
+#                 "name": "子条目1",
+#                 "operation": "拒绝",
+#                 "recheck": True, # 踢出前再次检查，防止数据更新
+#                 "needconfirm": 10, # 踢出前需要确认并等待10s
+#                 "minPeople": 199,
+#                 "conditions": [
+#                     {"name": "同桌天数", "value": 3, "operator": "大于", "equality": False},
+#                     # ... 其他条件  
+#                 ]
+#             },
+#             # ... 其他子条目  
+#         ]
+#     },
+#     # ... 其他策略  
+# ]
+    def log(self, client_socket: Sockets, message:str, await_time: int = 0, member_dict: dict = None, group_dict: dict = None) -> None:
+        '''向启动本筛选器的客户端发送日志，若await_time不为0，则等待若干秒'''
+        for client in self.connected_clients:
+
+
+
+
+    def run(self, authorized_token: str, share_key: str, strategy_dict: dict, client_socket: Sockets) -> None:
+        '''每个小班启动筛选的时候创建线程运行本函数'''
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
         self.prev_my_group_dict = {} # 上一个
 
-        self.rlock.acquire()
-        self.activate = True
-        # 监听标志，self.active是筛选激活标志
-        self.rlock.release()
-
-        strat = self.strategies.get(strata_name,{})
-        # print(strat)
-        print(strata_name)
-
-        delay1 = self.strategies[strata_name]["delay1"]
-        delay2 = self.strategies[strata_name]["delay2"] # 在小班档案页面和成员管理页面分别停留的时间，单位s
-        if (delay1 < 3): delay1 = 3 # 保护措施，不知道会不会触发反爬措施
+        delay1 = strategy_dict.get("delay1", 3)
+        delay2 = strategy_dict.get("delay2", 3) # 在小班档案页面和成员管理页面分别停留的时间，单位s
+        if (delay1 < 3): delay1 = 3 # 保护措施
         if (delay2 < 3): delay2 = 3 
 
-        start_time_h = strat.get("start_time_h", 0)
-        start_time_m = strat.get("start_time_m", 0)
-
-        while self.monitor :
-            # print(unauthorized_token)
-            self.prev_my_group_dict = self.my_group_dict # 上一次查询的
-            self.my_group_dict = self.bcz.getMemberInfoRAW(unauthorized_token, share_key)
-            # 推荐全部使用unauth 方便对比班内昵称
-            self.my_rank_dict = self.bcz.getRankInfoRAW(authorized_token, share_key)
+        # 暂时不实现自动启动时间，全部手动启动
+        
+        verdict_dict = {}
+        verdict_list = []
+        group_dict = {}
+        while self.activate_groups[share_key]['stop'] == False:
+            
+            # 对每个成员，先判断是否已决策（仅本次运行期间有效，局部储存）
             time.sleep(delay1)
-            for member_dict in self.my_group_dict["members"]:
+            group_dict = self.bcz.getGroupInfo(share_key, authorized_token)
+            for member_dict in group_dict["members"]:
+                if self.activate_groups[share_key]['stop'] == True:
+                    break
+                # verdict 含义：None-未决策，0...n-已决策，符合子条目的序号（越小越优先）
+                verdict = verdict_dict.get(member_dict['uniqueId'], None)
+                if not verdict:
+                    # 先检查是否满足条件，满足则写入verdict_dict
+                    for index,sub_strat_dict in strategy_dict["subItems"].items():
+                        if self.check(member_dict, sub_strat_dict, authorized_token):
+                            verdict_dict[member_dict['uniqueId']] = index
+                            verdict_list.append({"uniqueId":member_dict['uniqueId'],"verdict":index})
+                            break
 
-                now = datetime.datetime.now() # datetime可以直接获得int值
-                
-                # 本回合可以踢出的人数，根据priority从小到大踢出
+            # 排序，优先级高的先踢
+            verdict_list = sorted(verdict_list, key = itemgetter("verdict"), reverse = False)
+            current_people_cnt = group_dict['memberCount']
+            remain_people_cnt = current_people_cnt
+            remove_list = []
+            for index, verdict_dict in enumerate(verdict_list):
+                sub_strat_dict = strategy_dict["subItems"][verdict_dict['verdict']]
+                if sub_strat_dict['operation'] == '拒绝' and sub_strat_dict["minPeople"] < remain_people_cnt:
+                    remain_people_cnt -= 1
+                    remove_list.append(verdict_dict['uniqueId'])
+                    
+                    
+            # 踢人
+            self.bcz.removeMembers(remove_list, share_key, authorized_token)
 
-                self.check(member_dict, strata_name, authorized_token, unauthorized_token, share_key)
-
-
-            # print(BCZ.config.status)
-            # print(BCZ.config.status.items())
-
-            # sort_list = []
-            # for uniqueId, personal_status in BCZ.config.status.items():
-            #     sort_list.append({"uniqueId":uniqueId,"priority":personal_status["priority"],"sub_strata_name":personal_status["sub_strata_name"]})
-            # sort_list = sorted(sort_list, key = itemgetter("priority","sub_strata_name"), reverse = False)
-            # print(sort_list)
-            # return
-
-            # BCZ.config.status = sorted(BCZ.config.status, key = itemgetter("priority","sub_strata_name"), reverse = False)
-            # # 报错TypeError: string indices must be integers, not 'str'
-            # BCZ.config.status = sorted(BCZ.config.status.items(), key = itemgetter("priority","sub_strata_name"), reverse = False)
-            # # 报错TypeError: tuple indices must be integers or slices, not str
-            # BCZ.config.status = sorted(dict(BCZ.config.status), key = itemgetter("priority","sub_strata_name"), reverse = False)
-            # BCZ.config.status = sorted(BCZ.config.status.items(), key = lambda x:x[0], reverse = False)
-            # print(BCZ.config.status)
-            
-            kickcount = self.my_group_dict["groupInfo"]["memberCount"] - strat["membercnt_min"]
-
-            kickcount = 3
-
-            BCZ.config.status = OrderedDict(sorted(BCZ.config.status.items(), key=lambda x: x[0]))
-
-            for uniqueId_tag, member_status in BCZ.config.status.items():
-
-                
-                # 重要变量 member_status 是在check完后生成的结果
-                actiondelay = strat[member_status["sub_strata_name"]].get("delay", 0)
-                # 不写delay 默认立即执行，因为操作人数多，这个不太好delay
-                if member_status["action"] == "accept":
-                    print("✓ Accepted")
-                    time.sleep(actiondelay)
-
-                elif member_status["action"] == "kick":
-                    if not self.active:
-                        print ("× Since not activated, the person will not be kicked.")
-                    elif now.hour < start_time_h or now.minute < start_time_m:
-                        print(f"× Not started yet.Time{now.hour}{now.minute}，start@{start_time_h}{start_time_m}")
-                    elif kickcount > 0:
-                        kickcount -= 1
-                        time.sleep(actiondelay)
-                        # self.bcz.removeMembers([member_dict["id"]], share_key, authorized_token)
-                        # 保护措施，先不真正执行
-                        print ("踢出了！")
-                        # self.prev_my_group_dict = self.bcz.getMemberInfoRAW()
-
-            
             # self.my_group_dict = self.bcz.getMemberInfoRAW(unauthorized_token, share_key)
             time.sleep(delay2)
 
-        self.rlock.acquire()
-        self.monitor = False
-        self.rlock.release()
-            
 
 
 
-
-
-    def start(self, authorized_token: str, unauthorized_token: str, share_key: str, strata_name: str) -> None:
+    def start(self, authorized_token: str, share_key: str, strategy_index: int, client_socket: Sockets) -> None:
         # 是否验证？待测试，如果没有那就可怕了
-        self.stop() # 防止重复运行
+        self.stop(share_key) # 防止重复运行
+        self.activate_groups[share_key]['stop'] = False
+        
+        # 从数据库加载已有成员小班数据，无参即为全选
+        self.member_dict = self.sqlite.queryMemberGroup()
+        
+        # 每次启动更新一次self.strategies列表
+        strategy_dict = self.strategy_class.get(strategy_index)
 
-        # print(unauthorized_token)
-        # 仅此处允许复制一次BCZ.config.config的self.strategies字典
-        self.strategies = BCZ.config.config["default_strategies"]
-
-        if self.strategies.get(strata_name,  "") == "":
-            print(f"无名为{strata_name}策略，请设置")
+        if not strategy_dict:
+            print(f"策略索引无效")
         else:
-            self.tids = threading.Thread(target=self.run, args=(authorized_token, unauthorized_token, share_key, strata_name))
+            self.tids = threading.Thread(target=self.run, args=(authorized_token, self.bcz.main_token, share_key, strategy_dict, client_socket))
             self.tids.start()
 
 

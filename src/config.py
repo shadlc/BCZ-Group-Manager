@@ -141,22 +141,18 @@ class Config:
 
 
 class Strategy:
-    default_dict = {
-        "totalStrategies": 3,
-        "strategies": [
+    default_list = [
             {
                 "name": "策略一",
                 "weekDays": ["周一", "周三"],
                 "timeStart": "09:00",
                 "timeEnd": "10:00",
-                "subItemsCount": 2,
                 "subItems": [
                     {
                         "name": "子条目1",
                         "operation": "接受",
                         "validity": "本周",
                         "minPeople": 199,
-                        "conditionsCount": 3,
                         "conditions": [
                             {"name": "同桌天数", "value": 5, "operator": "大于", "equality": False},
                             # ... 其他条件  
@@ -170,14 +166,12 @@ class Strategy:
                 "weekDays": ["周二", "周四"],
                 "timeStart": "10:00",
                 "timeEnd": "11:00",
-                "subItemsCount": 1,
                 "subItems": [
                     {
                         "name": "子条目1",
                         "operation": "拒绝",
                         "minPeople": 199,
                         "validity": "本周",
-                        "conditionsCount": 2,
                         "conditions": [
                             {"name": "同桌天数", "value": 3, "operator": "大于", "equality": False},
                             # ... 其他条件  
@@ -188,7 +182,7 @@ class Strategy:
             },
             # ... 其他策略  
         ]
-    }
+    
     def __init__(self) -> None:
         '''初始化配置文件'''
         self.file_path = f'./strategy.json'
@@ -198,17 +192,17 @@ class Strategy:
                 os.makedirs(path, exist_ok=True)
             self.json_data = json.read(self.file_path, encoding='utf-8')
         except:
-            json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            json.dump(self.default_list, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
             logger.info('初次启动，已在当前执行目录生成配置文件')
         
     def read(self: str = '') -> None:
         '''从文件中更新，一般不需使用'''
         self.json_data = json.load(open(self.file_path, encoding='utf-8'))
     
-    def get(self: str = '', key: str = '') -> list | dict | str | int | bool:
+    def get(self: str = '', index: int = None) -> list | dict | str | int | bool:
         '''获取指定配置'''
-        if key:
-            return self.json_data.get(key)
+        if index:
+            return self.json_data.get(index)
         else:
             return self.json_data
         
