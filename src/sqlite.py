@@ -177,8 +177,8 @@ class SQLite:
                 )
             )
             conn.commit()
-            conn.close()
             self.saveMemberInfo(group_info['members'])
+        conn.close()
 
     def saveMemberInfo(self, members: list, temp: bool = False) -> None:
         '''仅保存成员详情'''
