@@ -87,18 +87,21 @@ class SQLite:
                 DAILY_RECORD INTEGER,               -- 每日记录
                 LATE_DAKA_TIME TEXT,                -- 晚打卡时间
                 AUTH_TOKEN TEXT,                    -- 授权令牌
+                FAVORITE INTEGER,                   -- 收藏标识
                 VALID INTEGER                       -- 是否有效
             );'''
         ]
         self.init()
 
-    def connect(self, db_path) -> sqlite3.Connection:
-        '''连接数据库，并返回连接态'''
+    def connect(self, db_path: str = '') -> sqlite3.Connection:
+        '''连接数据库，并返回连接态(记得手动关闭)'''
+        if not db_path:
+            db_path = self.db_path
         try:
             if path := os.path.dirname(db_path):
                 os.makedirs(path, exist_ok=True)
             conn = sqlite3.connect(db_path)
-            conn.set_trace_callback(lambda statement: logger.debug(f'在{self.db_path}执行SQLite指令: {statement}'))
+            conn.set_trace_callback(lambda statement: logger.debug(f'在{db_path}执行SQLite指令: {statement}'))
             return conn
         except sqlite3.Error:
             logger.error('数据库读取异常...无法正常运行，程序会在5秒后自动退出')
@@ -112,6 +115,7 @@ class SQLite:
         for sql in self.init_sql:
             cursor.execute(sql)
             conn.commit()
+        conn.close()
 
     def read(self, sql: str, param: list | tuple = ()) -> list:
         '''SQL执行读数据操作'''
@@ -119,7 +123,9 @@ class SQLite:
             conn = self.connect(self.db_path)
             cursor = conn.cursor()
             cursor.execute(sql, param)
-            return cursor.fetchall()
+            result = cursor.fetchall()
+            conn.close()
+            return result
         except sqlite3.DatabaseError as e:
             logger.error(f'读取数据库{self.db_path}出错: {e}')
             raise e
@@ -131,6 +137,7 @@ class SQLite:
             cursor = conn.cursor()
             cursor.execute(sql, param)
             conn.commit()
+            conn.close()
             return True
         except sqlite3.DatabaseError as e:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
@@ -176,9 +183,8 @@ class SQLite:
                 )
             )
             conn.commit()
-            if not group_info.get('members', None):
-                return 
-            self.saveMemberInfo(group_info['members'],group_info['groupInfo']['id'])
+            conn.close()
+            self.saveMemberInfo(group_info['members'])
 
     def saveMemberInfo(self, members: list, temp: bool = False, cursor: sqlite3.Cursor = None, conn: sqlite3.Connection = None) -> None:
         '''仅保存成员详情'''
@@ -215,6 +221,7 @@ class SQLite:
             )
             # 有个备注：踢出操作的有效期必须是当次，否则会影响手动通过的有效性
         conn.commit()
+        conn.close()
 
     def addObserveGroupInfo(self, group_list: list[dict]) -> None:
         '''增加关注小班信息'''
@@ -224,7 +231,7 @@ class SQLite:
             cursor.execute('DELETE FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', [group_info.get('id', 0)])
             cursor.execute(
                 '''
-                    INSERT OR REPLACE INTO OBSERVED_GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT OR REPLACE INTO OBSERVED_GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''',
                 (
                     group_info.get('id', 0),
@@ -246,10 +253,12 @@ class SQLite:
                     group_info.get('daily_record', 1),
                     group_info.get('late_daka_time', ''),
                     group_info.get('auth_token', ''),
+                    group_info.get('favorite', 0),
                     group_info.get('valid', 1),
                 )
             )
         conn.commit()
+        conn.close()
 
     def disableObserveGroupInfo(self, group_id) -> None:
         '''禁用关注小班'''
@@ -260,6 +269,7 @@ class SQLite:
             (group_id)
         )
         conn.commit()
+        conn.close()
 
     def updateObserveGroupInfo(self, group_list: list[dict]) -> None:
         '''更新关注小班信息'''
@@ -287,12 +297,14 @@ class SQLite:
             if group_info.get('daily_record') != None: sql += ' DAILY_RECORD = ?,'; params.append(group_info.get('daily_record'))
             if group_info.get('late_daka_time') != None: sql += ' LATE_DAKA_TIME = ?,'; params.append(group_info.get('late_daka_time'))
             if group_info.get('auth_token') != None: sql += ' AUTH_TOKEN = ?,'; params.append(group_info.get('auth_token'))
+            if group_info.get('favorite') != None: sql += ' FAVORITE = ?,'; params.append(group_info.get('favorite'))
             if group_info.get('valid') != None: sql += ' VALID = ?,'; params.append(group_info.get('valid'))
             sql = sql.strip(',')
             sql += ' WHERE GROUP_ID = ?'
             params.append(group_info['id'])
             cursor.execute(sql, params)
         conn.commit()
+        conn.close()
 
     def updateMemberInfo(self, member_list: list[dict]) -> None:
         '''更新关注小班信息'''
@@ -322,8 +334,9 @@ class SQLite:
             params.append(member['group_id'])
             cursor.execute(sql, params)
         conn.commit()
+        conn.close()
 
-    def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> dict:
+    def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> list[dict]:
         '''查询关注小班信息'''
         sql = f'SELECT * FROM OBSERVED_GROUPS WHERE 1 = 1'
         params = []
@@ -332,7 +345,7 @@ class SQLite:
         if group_id:
             sql += ' AND GROUP_ID = ?'
             params.append(group_id)
-        sql += ' ORDER BY GROUP_ID ASC'
+        sql += ' ORDER BY FAVORITE DESC, GROUP_ID ASC'
         result = self.read(sql, params)
         result_keys = [
             'id',
@@ -354,14 +367,15 @@ class SQLite:
             'daily_record',
             'late_daka_time',
             'auth_token',
+            'favorite',
             'valid',
         ]
-        group_info = []
+        groups = []
         for item in result:
-            group_info.append(dict(zip(result_keys, item)))
-        for group in group_info:
+            groups.append(dict(zip(result_keys, item)))
+        for group in groups:
             group['members'] = []
-        return group_info
+        return groups
 
     def getDays(self) -> int:
         '''获取数据记录总天数'''
@@ -727,8 +741,8 @@ class SQLite:
         sql += ' ORDER BY GROUP_ID ASC, DATA_TIME DESC'
         page_max = 1
         page_num = 1
-        page_count = 'unlimited'
-        if payload.get('page_count', '') != 'unlimited':
+        page_count = ''
+        if payload.get('page_count', '') != '':
             page_count = payload.get('page_count', 20)
             page_num = payload.get('page_num', 1)
             page_num = page_num if page_num else 1
@@ -804,3 +818,4 @@ class SQLite:
         cursor = conn.cursor()
         cursor.execute(sql, params)
         conn.commit()
+        conn.close()
