@@ -453,7 +453,7 @@ class SQLite:
     def getMemberDataCount(self, union_temp: bool = True) -> int:
         if union_temp:
             return self.read(
-                f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS)'
+                f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION ALL SELECT * FROM T_MEMBERS)'
             )[0][0]
         else:
             return self.read(
@@ -503,8 +503,8 @@ class SQLite:
             FROM MEMBERS WHERE 1=1
         '''
         if union_temp:  
-            count_sql = f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS) WHERE 1=1'
-            search_sql = f'SELECT * FROM (SELECT * FROM MEMBERS UNION SELECT * FROM T_MEMBERS) WHERE 1=1'
+            count_sql = f'SELECT COUNT(*) FROM (SELECT * FROM MEMBERS UNION ALL SELECT * FROM T_MEMBERS) WHERE 1=1'
+            search_sql = f'SELECT * FROM (SELECT * FROM MEMBERS UNION ALL SELECT * FROM T_MEMBERS) WHERE 1=1'
         sql = ''
         param = []
         user_id = payload.get('user_id', '')
