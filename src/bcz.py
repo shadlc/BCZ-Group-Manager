@@ -379,6 +379,7 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
 def verifyInfo(bcz: BCZ, sqlite: SQLite):
     '''通过小班成员排行榜补全打卡信息'''
     makeup_list = []
+    quantity = 0
     for group in sqlite.queryObserveGroupInfo():
         if group['daily_record']:
             logger.info(f'正在获取小班[{group["name"]}({group["id"]})]的历史打卡数据')
@@ -405,6 +406,8 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
                             'completed_time': '晚于记录时间',
                             'today_word_count': '?',
                         })
+                        quantity += 1
+    logger.info(f'本次历史打卡数据补齐{quantity}条')
     sqlite.updateMemberInfo(makeup_list)
 
 def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', all: bool = True, latest: bool = False) -> list[dict]:
