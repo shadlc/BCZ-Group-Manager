@@ -2,7 +2,6 @@
 
 ### A small group management tool for Chinese vocabulary software which  called [Bai Ci Zhan](https://www.baicizhan.com/), depends on [Flask](https://github.com/pallets/flask).
 
-[![GitHub All Releases](https://img.shields.io/github/downloads/shadlc/BCZ-Group-Manager/total)](../../releases)
 ![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/shadlc/BCZ-Group-Manager)
 ![Scc Count Badge](https://sloc.xyz/github/shadlc/BCZ-Group-Manager)
 ![GitHub repo size](https://img.shields.io/github/repo-size/shadlc/BCZ-Group-Manager)

@@ -185,6 +185,7 @@ def search_group():
     try:
         if share_key:
             group_info = bcz.getGroupInfo(share_key)
+            group_info.pop('members')
             result = {group_info['id']: group_info}
         elif user_id:
             result = bcz.getUserGroupInfo(user_id)

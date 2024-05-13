@@ -8,6 +8,7 @@ name = "pypi"
 openpyxl = "*"
 requests = "*"
 flask = "*"
+httpx = "*"
 
 [dev-packages]
 

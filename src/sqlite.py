@@ -323,7 +323,7 @@ class SQLite:
         conn.commit()
         conn.close()
 
-    def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> dict:
+    def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> list[dict]:
         '''查询关注小班信息'''
         sql = f'SELECT * FROM OBSERVED_GROUPS WHERE 1 = 1'
         params = []
@@ -357,12 +357,12 @@ class SQLite:
             'favorite',
             'valid',
         ]
-        group_info = []
+        groups = []
         for item in result:
-            group_info.append(dict(zip(result_keys, item)))
-        for group in group_info:
+            groups.append(dict(zip(result_keys, item)))
+        for group in groups:
             group['members'] = []
-        return group_info
+        return groups
 
     def getDays(self) -> int:
         '''获取数据记录总天数'''
