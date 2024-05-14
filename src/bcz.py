@@ -356,14 +356,13 @@ class BCZ:
 
 def recordInfo(bcz: BCZ, sqlite: SQLite):
     '''记录用户信息'''
-    group_info_list = []
     groups = sqlite.queryObserveGroupInfo()
     for i, group in enumerate(groups):
         if not group['daily_record']:
             groups.pop(i)
     groups = bcz.getGroupsInfo(groups)
     member_count = sum([len(group.get('members', '')) for group in groups])
-    sqlite.saveGroupInfo(group_info_list)
+    sqlite.saveGroupInfo(groups)
     logger.info(f'每日记录已完成, 已记录{len(groups)}个小班, 共{member_count}条数据')
 
 def verifyInfo(bcz: BCZ, sqlite: SQLite):

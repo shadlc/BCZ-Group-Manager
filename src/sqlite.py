@@ -142,42 +142,42 @@ class SQLite:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
         return False
 
-    def saveGroupInfo(self, group_list: list[dict], temp: bool = False) -> None:
+    def saveGroupInfo(self, groups: list[dict], temp: bool = False) -> None:
         '''保存小班数据'''
         if temp:
-            for group_info in group_list:
-                if group_info.get('exception'):
+            for group in groups:
+                if group.get('exception'):
                     continue
-                self.saveMemberInfo(group_info['members'], temp)
+                self.saveMemberInfo(group['members'], temp)
             return
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        for group_info in group_list:
-            if group_info.get('exception'):
+        for group in groups:
+            if group.get('exception'):
                 continue
             cursor.execute(
                 f'INSERT OR IGNORE INTO GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
-                    group_info['id'],
-                    group_info['name'],
-                    group_info['share_key'],
-                    group_info['introduction'],
-                    group_info['leader'],
-                    group_info['leader_id'],
-                    group_info['member_count'],
-                    group_info['count_limit'],
-                    group_info['today_daka_count'],
-                    group_info['finishing_rate'],
-                    group_info['created_time'],
-                    group_info['rank'],
-                    group_info['type'],
-                    group_info['avatar'],
-                    group_info['avatar_frame'],
-                    group_info['data_time'],
+                    group['id'],
+                    group['name'],
+                    group['share_key'],
+                    group['introduction'],
+                    group['leader'],
+                    group['leader_id'],
+                    group['member_count'],
+                    group['count_limit'],
+                    group['today_daka_count'],
+                    group['finishing_rate'],
+                    group['created_time'],
+                    group['rank'],
+                    group['type'],
+                    group['avatar'],
+                    group['avatar_frame'],
+                    group['data_time'],
                 )
             )
             conn.commit()
-            self.saveMemberInfo(group_info['members'])
+            self.saveMemberInfo(group['members'])
         conn.close()
 
     def saveMemberInfo(self, members: list, temp: bool = False) -> None:
