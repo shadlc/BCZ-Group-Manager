@@ -18,7 +18,7 @@ class Config:
             'output_file': './小班数据.xlsx',
             'daily_record': '59 23 * * *',
             'daily_verify': '00 04 * * *',
-            'cache_second': 60,
+            'cache_second': 600,
         }
         self.initConfig()
         self.raw = self.read()

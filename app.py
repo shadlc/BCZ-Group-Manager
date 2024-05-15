@@ -100,7 +100,14 @@ def observe_group():
         '''获取关注小班列表'''
         group_id = request.args.get('id', '')
         try:
-            group_list = refreshTempMemberTable(bcz, sqlite, group_id, all=False, latest=True)
+            group_list = refreshTempMemberTable(
+                bcz,
+                sqlite,
+                group_id,
+                all=False,
+                latest=True,
+                with_auth=False
+            )
             for group in group_list:
                 group['auth_token'] = len(group['auth_token']) * '*'
                 if not group_id:

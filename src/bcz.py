@@ -187,7 +187,7 @@ class BCZ:
 
         return self.parseGroupInfo(main_data, auth_data)
 
-    def getGroupsInfo(self, groups: list[dict]) -> list:
+    def getGroupsInfo(self, groups: list[dict], with_auth: bool = True) -> list:
         '''批量获取小班信息'''
         async def asyncGroupsInfo(groups: list[dict]) -> list[dict]:
             group_fetch_list = []
@@ -198,16 +198,18 @@ class BCZ:
                 })
             main_headers = self.getHeaders(self.main_token)
             main_future = asyncio.gather(*[self.fetchUrl(i['url'], main_headers) for i in group_fetch_list])
-            auth_future = asyncio.gather(*[self.fetchUrl(i['url'], self.getHeaders(i['auth_token'])) for i in group_fetch_list if i['auth_token']] )
+            auth_response_list = []
+            if with_auth:
+                auth_future = asyncio.gather(*[self.fetchUrl(i['url'], self.getHeaders(i['auth_token'])) for i in group_fetch_list if i['auth_token']] )
+                auth_response_list: list[httpx.Response] = await auth_future
             main_response_list: list[httpx.Response] = await main_future
-            auth_response_list: list[httpx.Response] = await auth_future
             groups_result = []
             for i, response in enumerate(main_response_list):
                 if response.status_code != 200 or response.json().get('code') != 1:
                     msg = f'获取小班{groups[i]["name"]}的信息失败! 小班不存在或主授权令牌无效'
                     logger.warning(f'{msg}\n{response.text}')
-                main_data = main_response_list[i].json().get('data', '')
-                auth_data = '' if groups[i]['auth_token'] else None
+                main_data: dict = main_response_list[i].json().get('data', '')
+                auth_data: dict = '' if groups[i]['auth_token'] else None
                 if main_data:
                     for auth_response in auth_response_list:
                         if auth_response.status_code != 200 or auth_response.json().get('code') != 1:
@@ -259,7 +261,7 @@ class BCZ:
 
         today_date = main_data.get('todayDate') if main_data else ''
         today_daka_count = 0
-        main_member_list = main_data.get('members') if main_data else []
+        main_member_list = main_data.get('members', []) if main_data else []
         members = []
         for member in main_member_list:
             member_id = member['uniqueId']
@@ -323,23 +325,24 @@ class BCZ:
             daka_dict[id] = member['weekDakaDates']
         for member in last_week_data.get('list', []):
             id = member['uniqueId']
-            daka_dict.update({
-                id: member['weekDakaDates']
-            })
+            if id in daka_dict:
+                daka_dict[id] += member['weekDakaDates']
+            else:
+                daka_dict[id] = member['weekDakaDates']
         return daka_dict
 
-    def updateGroupInfo(self, groups: list[dict]) -> list:
+    def updateGroupInfo(self, groups: list[dict], with_auth: bool = True) -> list:
         '''获取最新信息并刷新小班信息列表'''
         for i, group in enumerate(groups):
             if not group.get('valid'):
                 groups.pop(i)
-        results = self.getGroupsInfo(groups)
+        results = self.getGroupsInfo(groups, with_auth)
         for result in results:
-            for group_info in groups:
-                if group_info['id'] == result.get('id'):
-                     group_info.update(result)
-                elif group_info['share_key'] == result.get('share_key'):
-                     group_info.update(result)
+            for group in groups:
+                if group['id'] == result.get('id'):
+                     group.update(result)
+                elif group['share_key'] == result.get('share_key'):
+                     group.update(result)
         return groups
 
     def getUserAllInfo(self, user_id: str = None) -> dict | None:
@@ -386,27 +389,32 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
             absence_dict = {line[0]:line[4] for line in member_list if line[3] == ''}
             if not absence_dict:
                 continue
-            for id in daka_dict:
-                for daka_date in daka_dict[id]:
-                    if id in absence_dict and daka_date in absence_dict[id]:
-                        makeup_list.append({
-                            'id': id,
-                            'group_id': group['id'],
-                            'today_date': daka_date,
-                            'completed_time': '晚于记录时间',
-                            'today_word_count': '?',
-                        })
-                        quantity += 1
-    logger.info(f'本次历史打卡数据补齐{quantity}条')
+            for id, daka_date in absence_dict.items():
+                if id in daka_dict and daka_date in daka_dict[id]:
+                    makeup_list.append({
+                        'id': id,
+                        'group_id': group['id'],
+                        'today_date': daka_date,
+                        'completed_time': '晚于记录时间',
+                        'today_word_count': '?',
+                    })
+                    quantity += 1
+    logger.info(f'本次检测并补齐历史打卡数据{quantity}条')
     sqlite.updateMemberInfo(makeup_list)
 
-def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', all: bool = True, latest: bool = False) -> list[dict]:
+def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', all: bool = True, latest: bool = False, with_auth: bool = True) -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
     data_time = sqlite.queryTempMemberCacheTime()
     group_list = sqlite.queryObserveGroupInfo(group_id, all=all)
     if latest or (int(time.time()) - data_time > sqlite.cache_second or group_id):
-        group_list = bcz.updateGroupInfo(group_list)
+        group_list = bcz.updateGroupInfo(group_list, with_auth)
         sqlite.updateObserveGroupInfo(group_list)
+        today =  time.strftime('%Y-%m-%d', time.localtime())
+        temp_data_date = sqlite.queryTempMemberCacheDate()
+        if today != temp_data_date:
+            data_date_list = sqlite.queryMemberDataDateList()
+            if temp_data_date not in data_date_list:
+                sqlite.mergeTempMemberInfo()
         sqlite.deleteTempMemberTable(group_id)
         sqlite.saveGroupInfo(group_list, temp=True)
     return group_list

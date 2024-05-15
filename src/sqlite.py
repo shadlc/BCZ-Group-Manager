@@ -32,7 +32,7 @@ class SQLite:
                 GROUP_TYPE INTEGER,                 -- 小班类型
                 AVATAR TEXT,                        -- 小班头像
                 AVATAR_FRAME TEXT,                  -- 小班像框
-                DATA_TIME TEXT                      -- 采集时间
+                DATA_TIME TEXT                      -- 记录时间
             );''',
             '''CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表
                 USER_ID INTEGER,                    -- 用户ID
@@ -48,7 +48,7 @@ class SQLite:
                 GROUP_ID INTEGER,                   -- 小班ID
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
-                DATA_TIME TEXT                      -- 采集时间
+                DATA_TIME TEXT                      -- 记录时间
             );''',
             '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
                 USER_ID INTEGER,                    -- 用户ID
@@ -64,7 +64,7 @@ class SQLite:
                 GROUP_ID INTEGER,                   -- 小班ID
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
-                DATA_TIME TEXT                      -- 采集时间
+                DATA_TIME TEXT                      -- 记录时间
             );''',
             '''CREATE TABLE IF NOT EXISTS OBSERVED_GROUPS (                   -- 关注小班表
                 GROUP_ID INTEGER,                   -- 小班ID
@@ -592,7 +592,7 @@ class SQLite:
                 '小班ID',
                 '小班名称',
                 '用户头像',
-                '采集时间',
+                '记录时间',
             ]] + result
         return {
             'data': result,
@@ -602,7 +602,7 @@ class SQLite:
             'page_count': page_count,
         }
 
-    def queryTempMemberCacheTime(self) -> list:
+    def queryTempMemberCacheTime(self) -> int:
         '''获取成员临时表的最新缓存数据时间'''
         result = self.read(
             f'SELECT DATA_TIME FROM T_MEMBERS ORDER BY DATA_TIME DESC LIMIT 1'
@@ -611,6 +611,36 @@ class SQLite:
         if result:
             data_time = int(datetime.strptime(result[0][0], '%Y-%m-%d %H:%M:%S').timestamp())
         return data_time
+
+    def queryMemberDataDateList(self, range: int = 7) -> list:
+        '''获取成员临时表指定天数内的缓存数据日期列表'''
+        result = self.read(
+            f'SELECT TODAY_DATE FROM MEMBERS LIMIT {range}'
+        )
+        data_date_list = result[0]
+        return data_date_list
+
+    def queryMemberCacheDate(self) -> str:
+        '''获取成员临时表的最新缓存数据日期'''
+        result = self.read(
+            f'SELECT TODAY_DATE FROM MEMBERS ORDER BY TODAY_DATE DESC LIMIT 1'
+        )
+        today_date = result[0][0]
+        return today_date
+
+    def queryTempMemberCacheDate(self) -> str:
+        '''获取成员临时表的最新缓存数据日期'''
+        result = self.read(
+            f'SELECT TODAY_DATE FROM T_MEMBERS ORDER BY TODAY_DATE DESC LIMIT 1'
+        )
+        today_date = result[0][0]
+        return today_date
+
+    def mergeTempMemberInfo(self) -> bool:
+        '''把成员临时表中的数据合并到成员表'''
+        return self.write(
+            f'INSERT INTO MEMBERS SELECT * FROM T_MEMBERS'
+        )
 
     def deleteTempMemberTable(self, group_id: str = '') -> None:
         '''清除成员临时表数据'''
