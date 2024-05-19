@@ -615,9 +615,9 @@ class SQLite:
     def queryMemberDataDateList(self, range: int = 7) -> list:
         '''获取成员临时表指定天数内的缓存数据日期列表'''
         result = self.read(
-            f'SELECT TODAY_DATE FROM MEMBERS LIMIT {range}'
+            f'SELECT DISTINCT TODAY_DATE FROM MEMBERS ORDER BY TODAY_DATE DESC LIMIT {range}'
         )
-        data_date_list = result[0]
+        data_date_list = [i[0] for i in result]
         return data_date_list
 
     def queryMemberCacheDate(self) -> str:
