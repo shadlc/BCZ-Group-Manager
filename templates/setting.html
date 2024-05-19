@@ -54,20 +54,38 @@
               <span class="setting-desc">在[数据查询]页面查询时, 本程序会对今日数据进行一次查询, 为减少不必要的请求对源数据服务器造成负担, 设置数据缓存时长（单位：秒）, 只有经过该时间后才会进行新一轮的数据查询</span>
 
               <div class="input">
+                <label>实时获取数据</label>
+                <div id="real_time_cache_favorite" class="btn-group">
+                  <div class="checkbox">
+                    <input type="radio" id="real_time_cache_favorite_true" name="real_time_cache_favorite" value="true"/>
+                    <label for="real_time_cache_favorite_true">是</label>
+                  </div>
+                  <div class="checkbox">
+                    <input type="radio" id="real_time_cache_favorite_false" name="real_time_cache_favorite" value="false" />
+                    <label for="real_time_cache_favorite_false">否</label>
+                  </div>
+                </div>
+              </div>
+              <span class="setting-desc">开启此选项后，每次进入主页时，都会对所有已收藏(标星)小班进行一次实时查询, 方便实时观察打卡数据变化</span>
+
+              <div class="input">
                 <label for="daily_record_input">记录定时任务</label>
                 <input id="daily_record_input" type="text" />
               </div>
-              <span class="setting-desc">即每日定时保存数据的时间, 默认为“59 23 * * *”, 即每晚23点59分保存数据, 具体语法请参考[Crontab]</span>
+              <span class="setting-desc">即每日定时保存数据的时间, 默认为“59 23 * * *”, 即每晚23点59分保存数据, 具体语法请参考[Crontab], 此处修改不会立刻生效，请联系管理员重启应用</span>
+
               <div class="input">
                 <label for="main_token_input">主授权令牌</label>
                 <input id="main_token_input" type="text" />
               </div>
               <span class="setting-desc"><strong>非常重要!</strong> 本程序用以获取所有基础数据的授权令牌，建议该用户不应加入任何小班</span>
+
               <div class="input">
                 <label for="output_file_input">下载文件名</label>
                 <input id="output_file_input" type="text" />
               </div>
               <span class="setting-desc">在[数据查询]页面查询得到结果后,点击下载获取的表格文件的文件名</span>
+
               <div class="btn-group">
                 <div id="save_btn" class="btn" onclick="saveConfig()">保存</div>
               </div>
@@ -103,11 +121,14 @@
   </body>
   <script src="lib/script.js"></script>
   <script>
-    let cache_second_input = document.querySelector('#cache_second_input');
-    let daily_record_input = document.querySelector('#daily_record_input');
-    let main_token_input = document.querySelector('#main_token_input');
-    let output_file_input = document.querySelector('#output_file_input');
+    let cache_second_input = document.getElementById('cache_second_input');
+    let real_time_cache_favorite_true = document.getElementById('real_time_cache_favorite_true');
+    let real_time_cache_favorite_false = document.getElementById('real_time_cache_favorite_false');
+    let daily_record_input = document.getElementById('daily_record_input');
+    let main_token_input = document.getElementById('main_token_input');
+    let output_file_input = document.getElementById('output_file_input');
     let past_cache_second = "";
+    let past_real_time_cache_favorite = "";
     let past_daily_record = "";
     let past_main_token = "";
     let past_output_file = "";
@@ -136,6 +157,12 @@
         }
         past_cache_second = data.data.cache_second;
         cache_second_input.value = past_cache_second;
+        past_real_time_cache_favorite = data.data.real_time_cache_favorite;
+        if (data.data.real_time_cache_favorite) {
+          real_time_cache_favorite_true.checked = true;
+        } else {
+          real_time_cache_favorite_false.checked = true;
+        }
         past_daily_record = data.data.daily_record;
         daily_record_input.value = past_daily_record;
         past_main_token = data.data.main_token;
@@ -167,12 +194,17 @@
     function postConfig() {
       let payload = {};
       let cache_second = cache_second_input.value;
+      let real_time_cache_favorite = document.querySelector('input[name=real_time_cache_favorite]:checked')?.value == 'true' ? true : false;
       let daily_record = daily_record_input.value;
       let main_token = main_token_input.value;
       let output_file = output_file_input.value;
       if (past_cache_second != cache_second) {
         payload.cache_second = cache_second;
         past_cache_second = cache_second;
+      }
+      if (past_real_time_cache_favorite != real_time_cache_favorite) {
+        payload.real_time_cache_favorite = real_time_cache_favorite;
+        past_real_time_cache_favorite = real_time_cache_favorite;
       }
       if (past_daily_record != daily_record) {
         payload.daily_record = daily_record;
@@ -186,7 +218,7 @@
         payload.output_file = output_file;
         past_output_file = output_file;
       }
-      return fetch('../configure', {
+      return fetch('configure', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload)

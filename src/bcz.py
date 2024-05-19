@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 class BCZ:
     def __init__(self, config: Config) -> None:
         '''小班解析类'''
-        self.main_token = config.main_token
+        self.config = config
         self.invalid_pattern = r'[\000-\010]|[\013-\014]|[\016-\037]'
         self.own_info_url = 'https://social.baicizhan.com/api/deskmate/home_page'
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
@@ -48,24 +48,24 @@ class BCZ:
         }
         self.hash_rmb = {}
 
-    def getHeaders(self, auth_token: str) -> dict:
+    def getHeaders(self, token: str = '') -> dict:
         '''获取请求头'''
         # TODO 实际上不同域名请求有细微差别，这里暂时只使用默认
-        if (auth_token == 'main_token'):
-            auth_token = self.main_token
+        if (not token):
+            token = self.config.main_token
 
         current_headers = self.default_headers.copy()
 
-        if auth_token not in self.hash_rmb:
+        if token not in self.hash_rmb:
             # 使用哈希函数计算字符串的哈希值
-            hash_value = hash(auth_token)
+            hash_value = hash(token)
             # 将哈希值转换为unsigned long long值，然后取反，再转换为16进制字符串
             hex_string = format((~hash_value) & 0xFFFFFFFFFFFFFFFF, '016X')
-            self.hash_rmb[auth_token] = {'hex_string': hex_string }
+            self.hash_rmb[token] = {'hex_string': hex_string }
 
         current_cookie = self.default_cookie.copy()
-        current_cookie['device_id'] = f'{self.hash_rmb[auth_token]["hex_string"]}'
-        current_cookie['access_token'] = auth_token
+        current_cookie['device_id'] = f'{self.hash_rmb[token]["hex_string"]}'
+        current_cookie['access_token'] = token
         current_cookie['client_time'] = str(int(time.time()))
         current_headers['Cookie'] = ''
         for key, value in current_cookie.items():
@@ -82,7 +82,7 @@ class BCZ:
 
     def getInfo(self) -> dict:
         '''获取运行信息'''
-        main_info = self.getOwnInfo(self.main_token)
+        main_info = self.getOwnInfo(self.config.main_token)
         token_valid = False
         if main_info['uid']:
             token_valid = True
@@ -112,7 +112,7 @@ class BCZ:
         if not user_id:
             return
         url = f'{self.user_info_url}?uniqueId={user_id}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = {'Cookie': f'access_token="{self.config.main_token}"'}
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -126,7 +126,7 @@ class BCZ:
         if not user_id:
             return
         url = f'{self.group_list_url}?uniqueId={user_id}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = {'Cookie': f'access_token="{self.config.main_token}"'}
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -165,7 +165,7 @@ class BCZ:
     def getGroupInfo(self, share_key: str, auth_token: str = '') -> dict | None:
         '''获取小班信息'''
         url = f'{self.group_detail_url}?shareKey={share_key}'
-        headers = self.getHeaders(self.main_token)
+        headers = self.getHeaders()
         main_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
@@ -187,20 +187,28 @@ class BCZ:
 
         return self.parseGroupInfo(main_data, auth_data)
 
-    def getGroupsInfo(self, groups: list[dict], with_auth: bool = True) -> list:
+    def getGroupsInfo(self, groups: list[dict], with_auth: bool = True, only_favorite: bool = False) -> list:
         '''批量获取小班信息'''
         async def asyncGroupsInfo(groups: list[dict]) -> list[dict]:
             group_fetch_list = []
             for group in groups:
+                if only_favorite and not group.get('favorite'):
+                    continue
                 group_fetch_list.append({
                     'url': f'{self.group_detail_url}?shareKey={group["share_key"]}',
                     'auth_token': group['auth_token'],
                 })
-            main_headers = self.getHeaders(self.main_token)
-            main_future = asyncio.gather(*[self.fetchUrl(i['url'], main_headers) for i in group_fetch_list])
+            main_headers = self.getHeaders()
+            main_future = asyncio.gather(*[
+                self.fetchUrl(i['url'], main_headers)
+                for i in group_fetch_list
+            ])
             auth_response_list = []
             if with_auth:
-                auth_future = asyncio.gather(*[self.fetchUrl(i['url'], self.getHeaders(i['auth_token'])) for i in group_fetch_list if i['auth_token']] )
+                auth_future = asyncio.gather(*[
+                    self.fetchUrl(i['url'], self.getHeaders(i['auth_token']))
+                    for i in group_fetch_list if i['auth_token']
+                ] )
                 auth_response_list: list[httpx.Response] = await auth_future
             main_response_list: list[httpx.Response] = await main_future
             groups_result = []
@@ -310,7 +318,7 @@ class BCZ:
     def getGroupDakaHistory(self, share_key: str) -> dict:
         '''获取小班成员历史打卡信息'''
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
-        headers = {'Cookie': f'access_token="{self.main_token}"'}
+        headers = {'Cookie': f'access_token="{self.config.main_token}"'}
         week_response = requests.get(f'{url}&week=1', headers=headers, timeout=5)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班成员历史打卡信息失败! 小班不存在或主授权令牌无效'
@@ -331,12 +339,12 @@ class BCZ:
                 daka_dict[id] = member['weekDakaDates']
         return daka_dict
 
-    def updateGroupInfo(self, groups: list[dict], with_auth: bool = True) -> list:
+    def updateGroupInfo(self, groups: list[dict], with_auth: bool = True, only_favorite: bool = False) -> list:
         '''获取最新信息并刷新小班信息列表'''
         for i, group in enumerate(groups):
             if not group.get('valid'):
                 groups.pop(i)
-        results = self.getGroupsInfo(groups, with_auth)
+        results = self.getGroupsInfo(groups, with_auth, only_favorite)
         for result in results:
             for group in groups:
                 if group['id'] == result.get('id'):
@@ -402,24 +410,33 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
     logger.info(f'本次检测并补齐历史打卡数据{quantity}条')
     sqlite.updateMemberInfo(makeup_list)
 
-def refreshTempMemberTable(bcz: BCZ, sqlite: SQLite, group_id: str = '', all: bool = True, latest: bool = False, with_auth: bool = True) -> list[dict]:
+def refreshTempMemberTable(
+        bcz: BCZ,
+        sqlite: SQLite,
+        group_id: str = '',
+        only_valid: bool = True,
+        latest: bool = False,
+        with_auth: bool = True,
+        only_favorite: bool = False
+    ) -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
     data_time = sqlite.queryTempMemberCacheTime()
-    group_list = sqlite.queryObserveGroupInfo(group_id, all=all)
-    if latest or (int(time.time()) - data_time > sqlite.cache_second or group_id):
-        group_list = bcz.updateGroupInfo(group_list, with_auth)
-        sqlite.updateObserveGroupInfo(group_list)
+    groups = sqlite.queryObserveGroupInfo(group_id, only_valid=only_valid)
+    group_id_list = [group['id'] for group in groups if not (only_favorite and not group['favorite'])]
+    if latest or (int(time.time()) - data_time > sqlite.config.cache_second or group_id):
+        groups = bcz.updateGroupInfo(groups, with_auth, only_favorite=only_favorite)
+        sqlite.updateObserveGroupInfo(groups)
         today =  time.strftime('%Y-%m-%d', time.localtime())
         temp_data_date = sqlite.queryTempMemberCacheDate()
         if today != temp_data_date:
             data_date_list = sqlite.queryMemberDataDateList()
             if temp_data_date not in data_date_list:
                 sqlite.mergeTempMemberInfo()
-        sqlite.deleteTempMemberTable(group_id)
-        sqlite.saveGroupInfo(group_list, temp=True)
-    return group_list
+        sqlite.deleteTempMemberTable(group_id_list)
+        sqlite.saveGroupInfo(groups, temp=True)
+    return groups
 
-def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> list[dict]:
+def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[dict]:
     '''分析打卡数据并返回'''
     if week_date:
         year, week = map(int, week_date.split('-W'))
@@ -434,7 +451,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
     is_this_week = False
     if start_of_week <= date.today() <= end_of_week:
         is_this_week = True
-    for group in group_list:
+    for group in groups:
         if not group.get('members'):
             continue
 
@@ -543,7 +560,7 @@ def analyseWeekInfo(group_list: list[dict], sqlite: SQLite, week_date: str) -> l
             ],
             reverse=True
         )
-    return group_list
+    return groups
 
 def getWeekOption(date: str = '', range_day: list[int] = [-180, 0]) -> list:
     '''获取指定时间指定范围内所有的周'''

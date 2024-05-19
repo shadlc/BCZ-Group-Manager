@@ -9,16 +9,17 @@ logger = logging.getLogger(__name__)
 class Config:
     def __init__(self) -> None:
         '''配置类'''
-        self.config_file = f'./config.json'
+        self.config_file = f'config.json'
         self.default_config_dict = {
             'host': '127.0.0.1',
             'port': 8840,
-            'database_path': './data.db',
+            'database_path': 'data.db',
             'main_token': '',
-            'output_file': './小班数据.xlsx',
+            'output_file': '小班数据.xlsx',
             'daily_record': '59 23 * * *',
             'daily_verify': '00 04 * * *',
             'cache_second': 600,
+            'real_time_cache_favorite': False,
         }
         self.initConfig()
         self.raw = self.read()
@@ -30,6 +31,7 @@ class Config:
         self.daily_record = self.raw.get('daily_record', '')
         self.daily_verify = self.raw.get('daily_verify', '')
         self.cache_second = self.raw.get('cache_second', '')
+        self.real_time_cache_favorite = self.raw.get('real_time_cache_favorite', '')
         self.verify()
 
     def initConfig(self):
@@ -108,6 +110,11 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.cache_second = value
+        if self.real_time_cache_favorite == '':
+            key = 'real_time_cache_favorite'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.real_time_cache_favorite = value
 
     def getInfo(self) -> dict:
         '''获取配置文件相关状态信息'''
@@ -116,6 +123,7 @@ class Config:
             'output_file': self.output_file,
             'daily_record': self.daily_record,
             'cache_second': self.cache_second,
+            'real_time_cache_favorite': self.real_time_cache_favorite,
         }
 
     def modify(self, configure: dict) -> None:
@@ -137,3 +145,7 @@ class Config:
                 self.cache_second = int(configure[key])
                 self.raw[key] = int(configure[key])
                 self.save(key, self.cache_second)
+            elif key == 'real_time_cache_favorite':
+                self.real_time_cache_favorite = configure[key]
+                self.raw[key] = configure[key]
+                self.save(key, self.real_time_cache_favorite)

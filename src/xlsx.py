@@ -8,8 +8,8 @@ from src.config import Config
 class Xlsx:
     def __init__(self, config: Config) -> None:
         '''表格数据操作类'''
-        self.file_path = config.output_file
-        if path := os.path.dirname(self.file_path):
+        self.config = config
+        if path := os.path.dirname(self.config.output_file):
             os.makedirs(path, exist_ok=True)
 
     def write(self, sheet_name: str, data: list, overwrite: bool = True) -> bool:

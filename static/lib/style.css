@@ -1496,7 +1496,7 @@ table.simple-table td {
   z-index: 10;
   position: fixed;
   right: -4rem;
-  bottom: 1rem;
+  bottom: 0.75rem;
   font-size: 1.3rem;
   text-align: center;
   width: 2rem;
@@ -1509,7 +1509,7 @@ table.simple-table td {
   transition: all 0.5s ease;
 }
 #scroll_top_btn.show {
-  right: 1rem;
+  right: 0.75rem;
 }
 
 /* Loader */

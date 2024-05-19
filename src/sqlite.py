@@ -13,8 +13,8 @@ logger = logging.getLogger(__name__)
 class SQLite:
     def __init__(self, config: Config) -> None:
         '''数据库类'''
+        self.config = config
         self.db_path = config.database_path
-        self.cache_second = config.cache_second
         self.init_sql = [
             '''CREATE TABLE IF NOT EXISTS GROUPS (                   -- 小班表
                 GROUP_ID INTEGER,                   -- 小班ID
@@ -210,11 +210,11 @@ class SQLite:
         conn.commit()
         conn.close()
 
-    def addObserveGroupInfo(self, group_list: list[dict]) -> None:
+    def addObserveGroupInfo(self, groups: list[dict]) -> None:
         '''增加关注小班信息'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        for group_info in group_list:
+        for group_info in groups:
             cursor.execute('DELETE FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', [group_info.get('id', 0)])
             cursor.execute(
                 '''
@@ -258,11 +258,11 @@ class SQLite:
         conn.commit()
         conn.close()
 
-    def updateObserveGroupInfo(self, group_list: list[dict]) -> None:
+    def updateObserveGroupInfo(self, groups: list[dict]) -> None:
         '''更新关注小班信息'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        for group_info in group_list:
+        for group_info in groups:
             sql = f'UPDATE OBSERVED_GROUPS SET'
             params = []
             # if group_info.get('id') != None: sql += ' GROUP_ID = ?,'; params.append(group_info.get('id'))
@@ -323,11 +323,11 @@ class SQLite:
         conn.commit()
         conn.close()
 
-    def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> list[dict]:
+    def queryObserveGroupInfo(self, group_id: str = '', only_valid: bool = True) -> list[dict]:
         '''查询关注小班信息'''
         sql = f'SELECT * FROM OBSERVED_GROUPS WHERE 1 = 1'
         params = []
-        if not all:
+        if only_valid:
             sql += ' AND VALID = 1'
         if group_id:
             sql += ' AND GROUP_ID = ?'
@@ -642,13 +642,13 @@ class SQLite:
             f'INSERT INTO MEMBERS SELECT * FROM T_MEMBERS'
         )
 
-    def deleteTempMemberTable(self, group_id: str = '') -> None:
+    def deleteTempMemberTable(self, group_id_list: list) -> None:
         '''清除成员临时表数据'''
         sql = 'DELETE FROM T_MEMBERS WHERE 1=1'
         params = []
-        if group_id:
-            sql += ' AND GROUP_ID = ?'
-            params.append(group_id)
+        if group_id_list:
+            sql += f' AND GROUP_ID in ({", ".join(["?"] * len(group_id_list))})'
+            params += group_id_list
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(sql, params)
