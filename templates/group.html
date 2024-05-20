@@ -155,6 +155,9 @@
         }
         let groups = data.data;
         document.getElementById('my_class').innerText = '小班列表(' + groups.length + ')';
+        document.querySelectorAll('.group:not(.empty-group)').forEach((e)=>{
+          e.remove();
+        });
         let container = document.querySelector('.wall-container');
         let empty_group = document.querySelector('.empty-group');
         let group_count = Object.keys(groups).length;
@@ -190,7 +193,7 @@
           `
           let group_div = document.createElement('div');
           group_div.className = 'group';
-          if (group.exception) {
+          if (group.valid == 2) {
             // notify('小班'+group.name+'的数据获取失败! \n原因为: '+group.exception);
             group_div.className += ' invalid';
           }

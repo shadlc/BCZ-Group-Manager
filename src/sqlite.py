@@ -247,13 +247,13 @@ class SQLite:
         conn.commit()
         conn.close()
 
-    def disableObserveGroupInfo(self, group_id) -> None:
-        '''禁用关注小班'''
+    def setObserveGroupValid(self, group_id, valid:str = '0') -> None:
+        '''禁用关注的小班'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
-            'UPDATE OBSERVED_GROUPS SET VALID=0 WHERE GROUP_ID = ?',
-            (group_id)
+            'UPDATE OBSERVED_GROUPS SET VALID=? WHERE GROUP_ID = ?',
+            (valid, group_id)
         )
         conn.commit()
         conn.close()
@@ -328,7 +328,7 @@ class SQLite:
         sql = f'SELECT * FROM OBSERVED_GROUPS WHERE 1 = 1'
         params = []
         if only_valid:
-            sql += ' AND VALID = 1'
+            sql += ' AND VALID <> 0'
         if group_id:
             sql += ' AND GROUP_ID = ?'
             params.append(group_id)
@@ -633,6 +633,9 @@ class SQLite:
         result = self.read(
             f'SELECT TODAY_DATE FROM T_MEMBERS ORDER BY TODAY_DATE DESC LIMIT 1'
         )
+        if not result:
+            return ''
+            
         today_date = result[0][0]
         return today_date
 

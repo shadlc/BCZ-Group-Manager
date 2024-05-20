@@ -230,6 +230,7 @@ class BCZ:
                     main_data = {
                         'share_key': groups[i]['share_key'],
                         'exception': main_response_list[i].text,
+                        'valid': 2,
                     }
                 groups_result.append(self.parseGroupInfo(main_data, auth_data))
 
@@ -428,7 +429,7 @@ def refreshTempMemberTable(
         sqlite.updateObserveGroupInfo(groups)
         today =  time.strftime('%Y-%m-%d', time.localtime())
         temp_data_date = sqlite.queryTempMemberCacheDate()
-        if today != temp_data_date:
+        if temp_data_date and today != temp_data_date:
             data_date_list = sqlite.queryMemberDataDateList()
             if temp_data_date not in data_date_list:
                 sqlite.mergeTempMemberInfo()
