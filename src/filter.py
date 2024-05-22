@@ -1,10 +1,12 @@
 # 4.19计划：完成已经添加的用户(unique_id和accesstoken)、已经添加的班级的同步功能（和bcz.py之间）
 
 # from config import Config
+import json
 import threading
 import logging
 import datetime
 from flask_sockets import Sockets 
+import flask_sse
 
 import time
 from config import Strategy
@@ -14,16 +16,41 @@ from bcz import BCZ
 import sqlite3
 
 # 努力理解了一下BCZ类，还是可以用的
+#
+# 数据示例
+    # 内存缓存结构：
+    # member_dict = {
+    #     "uniqueId": {
+    #        "today_date": 用户校牌获取的时间
+    #        "list": [
+    #            {
+    #                queryMemberGroup返回的字典，内含该信息时间
+    #            },
+    # queryMemberGroup获得的信息可能是别的成员查询时顺便写入的，但用户校牌必须当天获取一次
+
+    # 数据库缓存结构： MEMBERS TABLE主键是用户 + 小班 + 采集日期，不储存用户校牌
+    # GROUPS TABLE 和 OBSERVED_GROUPS TABLE 储存小班信息，此处不需要访问
+    # MEMBERS TABLE 以小班id、用户id和采集日期为主键，作为主要储存单元
+    # FILTER_LOG TABLE 记录历史筛选操作、便于回查（日期、用户id、筛选条件id、结果）
+    # STRATEGY_VERDICT TABLE 记录策略执行结果，以用户id为主键，便于重启、换班时获取上次执行结果，但有效期仅到23:59或策略修改（需要清空）
+    # 以上数据库主要用于节省网络查询开销、线程重复计算开销，但是运行时还是只访问内存
+
 class Filter:
-    def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite) -> None:
+    def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, sse: flask_sse.SSE) -> None:
         # filter类全局仅一个，每个班级一个线程（当成局域网代理设备），但是strategy因为要前端更新，所以只储存Strategy类地址
         self.strategy_class = strategy_class
         self.main_token = bcz.main_token
         self.strategy_index = 0
         self.bcz = bcz
         self.sqlite = sqlite
+        self.sse = sse
+
+        self.lock = threading.Lock()
 
         self.activate_groups = {}
+        # activate_groups内格式：shareKey:{tids, client_id, stop}
+        # client_id: 连接该shareKey的客户端订阅的sse频道
+
         
     def getState(self, shareKey: str) -> bool:
         '''获取指定班筛选器状态：是否运行，筛选层次和进度'''
@@ -52,6 +79,7 @@ class Filter:
         
         self.activate_groups[shareKey]['stop'] = True
         self.activate_groups[shareKey]['tids'].join()
+        self.sendlog(f'筛选线程已停止，shareKey = {shareKey}', self.activate_groups[shareKey]['client_socket'])
         self.activate_groups.pop(shareKey)
         print(f'筛选线程已停止，shareKey = {shareKey}')
 
@@ -59,18 +87,6 @@ class Filter:
 
     def info(self, uniqueId: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict:
         '''查询【校牌+加入小班+加入10天以上班内主页】'''
-        # 内存缓存结构：
-        # member_dict = {
-        #     "uniqueId": {
-        #        "today_date": 用户校牌获取的时间
-        #        "list": [
-        #            {
-        #                queryMemberGroup返回的字典，内含该信息时间
-        #            },
-        # queryMemberGroup获得的信息可能是别的成员查询时顺便写入的，但用户校牌必须当天获取一次
-
-        # 数据库缓存结构： MEMBERS TABLE主键是用户 + 小班 + 采集日期，不储存用户校牌
-        # 
 
         
         if not conn or cursor:
@@ -124,11 +140,11 @@ class Filter:
                     break
         return member_dict
 
-    def check(self, member_dict: dict,substrategy_dict :dict, authorized_token: str) -> bool:
+    def check(self, member_dict: dict,substrategy_dict :dict, authorized_token: str) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
+        # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
         print (f'正在验证{member_dict["nickname"]},id = {member_dict["uniqueId"]}')
         # strategies:很多策略的集合，strat：一个策略,sub_strat:一个策略下的子策略
-        strat = self.strategies[strata_name]
 
         if (BCZ.config.status.get(member_dict["uniqueId"], None ) == None) : 
             print("未检测过")
@@ -409,75 +425,159 @@ class Filter:
 #     },
 #     # ... 其他策略  
 # ]
-    def log(self, client_socket: Sockets, message:str, await_time: int = 0, member_dict: dict = None, group_dict: dict = None) -> None:
+
+    def setLogResult(self, share_key: str, message_id: int, result: str) -> None:
+        '''设置日志结果，由客户端调用'''
+        self.activate_groups[share_key][message_id] = result
+        
+    
+    def sendLog(self, message:str, share_key: str, await_time: int = 0) -> str:
         '''向启动本筛选器的客户端发送日志，若await_time不为0，则等待若干秒'''
-        for client in self.connected_clients:
+
+        client_id = self.activate_groups[share_key]['client_id']
+        message_id = int(time.time())
+        self.sse.publish(channel = client_id, message = json.dumps({
+            "type": "log",
+            "await_time": await_time,
+            "id": # 每个信息的id，暂用时间戳
+            message_id,
+            "content": f'''
+            <div class="log-item">
+                <div class="log-time">
+                    <span class="log-time-value">{message_id}</span>
+                </div>
+                <div class="log-content">
+                    <span class="log-content-value">{message}</span>
+                </div>
+                <div class="log-member">
+                    <span class="log-member-value">测试用，格式稍后补充</span>
+                </div>
+            </div>
+            ''',
+            "confirm_content":f'''
+            <div class="log-item">
+                <div class="log-time">
+                    <span class="log-time-value">{message_id}</span>
+                </div>
+                <div class="log-content">
+                    <span class="log-content-value">{message}</span>
+                </div>
+                <div class="log-member">
+                    <span class="log-member-value">这是confirm</span>
+                </div>
+            </div>
+            '''
+            
+        }))
+        for i in range(await_time):
+            time.sleep(1)
+            result = self.activate_groups[share_key].get(message_id, None)
+            if (result != None):
+                return result 
 
 
+    # 目前决定的数据库结构：
+    # 内存和数据库和网络请求的联系：启动时加载所有数据库，每10s保存一次内存到数据库，内存检查不到就请求网络
+    # 也设置一个STRATEGY、FILTER_LOG表，储存当天对指定成员的判定，普通运行时加载复用，在策略修改/第二天清空
 
+    def update_member_dict(self, member_dict_temp: dict) -> None:
+        with self.lock:
+            self.update_cnt += 1
+            result = {}
+            for personal_dict in member_dict_temp['members']:
+                if key == "members":
+            self.member_dict.update(result)
+    def autosave(self, share_key: str) -> None:
+        '''每10s保存一次内存到数据库'''
+        self.sqlite.saveMemberGroup(self.member_dict)
+        self.sqlite.saveStrategyVerdict(self.verdict_dict)
+        self.sqlite.saveFilterLog(self.filter_log)
 
-    def run(self, authorized_token: str, share_key: str, strategy_dict: dict, client_socket: Sockets) -> None:
+    def run(self, authorized_token: str, share_key: str, strategy_dict: dict, this_verdict_dict: dict, client_socket: Sockets) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
-        self.prev_my_group_dict = {} # 上一个
 
+        today_date = datetime.datetime.now().strftime("%Y-%m-%d")
         delay1 = strategy_dict.get("delay1", 3)
         delay2 = strategy_dict.get("delay2", 3) # 在小班档案页面和成员管理页面分别停留的时间，单位s
         if (delay1 < 3): delay1 = 3 # 保护措施
         if (delay2 < 3): delay2 = 3 
+        # 自动保存间隔
+        autosave_interval = 10
+        autosave_cnt = 0
 
         # 暂时不实现自动启动时间，全部手动启动
         
-        verdict_dict = {}
-        verdict_list = []
-        group_dict = {}
+        kick_list = []
+        member_dict_temp = {} # 中途变量 
         while self.activate_groups[share_key]['stop'] == False:
             
-            # 对每个成员，先判断是否已决策（仅本次运行期间有效，局部储存）
             time.sleep(delay1)
-            group_dict = self.bcz.getGroupInfo(share_key, authorized_token)
-            for member_dict in group_dict["members"]:
+            # 点击成员管理页面
+            member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+            # 合并内存中的成员信息
+            self.update_member_dict(member_dict_temp)
+            for personal_dict_temp in member_dict_temp["members"]:
                 if self.activate_groups[share_key]['stop'] == True:
                     break
+                uniqueId = personal_dict_temp['uniqueId']
+                # 对每个成员，先判断是否已决策（仅本次运行期间有效，局部储存）
                 # verdict 含义：None-未决策，0...n-已决策，符合子条目的序号（越小越优先）
-                verdict = verdict_dict.get(member_dict['uniqueId'], None)
-                if not verdict:
-                    # 先检查是否满足条件，满足则写入verdict_dict
-                    for index,sub_strat_dict in strategy_dict["subItems"].items():
-                        if self.check(member_dict, sub_strat_dict, authorized_token):
-                            verdict_dict[member_dict['uniqueId']] = index
-                            verdict_list.append({"uniqueId":member_dict['uniqueId'],"verdict":index})
-                            break
+                verdict = this_verdict_dict.get(uniqueId, None)
 
-            # 排序，优先级高的先踢
-            verdict_list = sorted(verdict_list, key = itemgetter("verdict"), reverse = False)
-            current_people_cnt = group_dict['memberCount']
+                if not verdict:
+                    # 先检查是否满足条件，满足则写入this_verdict_dict
+                    for index, sub_strat_dict in strategy_dict["subItems"].items():
+                        result = []
+                        result.append(self.check(personal_dict_temp, sub_strat_dict, authorized_token))
+                        if result['result'] == 1:
+                            # 符合该子条目
+                            this_verdict_dict[uniqueId] = index
+                            self.filter_log.append({'uniqueId':uniqueId,'shareKey':share_key,'datetime':datetime.datetime.now(),'strategy':strategy_dict['name'],'subStrategy':sub_strat_dict['name'],'detail':result})
+                            if sub_strat_dict['operation'] == '拒绝':
+                                kick_list.append({"uniqueId":uniqueId,"verdict":index})
+                            break
+                elif strategy_dict["subItems"][this_verdict_dict[uniqueId]]['operation'] == '拒绝':
+                    # 从this_verdict_dict中读取结果
+                    kick_list.append({"uniqueId":uniqueId,"verdict":index})
+
+
+            # 排序，优先级高的先踢(执行)
+            # kick_list 候补踢出列表，remove_list 立刻踢出列表
+            kick_list = sorted(kick_list, key = itemgetter("verdict"), reverse = False)
+            current_people_cnt = member_dict_temp['memberCount']
             remain_people_cnt = current_people_cnt
             remove_list = []
-            for index, verdict_dict in enumerate(verdict_list):
-                sub_strat_dict = strategy_dict["subItems"][verdict_dict['verdict']]
-                if sub_strat_dict['operation'] == '拒绝' and sub_strat_dict["minPeople"] < remain_people_cnt:
+            for index, this_verdict_dict in enumerate(kick_list):
+                sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
+                if sub_strat_dict["minPeople"] < remain_people_cnt:
                     remain_people_cnt -= 1
-                    remove_list.append(verdict_dict['uniqueId'])
+                    remove_list.append(this_verdict_dict['uniqueId'])
+                    self.filter_log.append({'uniqueId':uniqueId,'shareKey':share_key,'datetime':datetime.datetime.now(),'strategy':strategy_dict['name'],'subStrategy':sub_strat_dict['name'],'detail':{'result':1,'reason':'踢出小班'}})
                     
                     
             # 踢人
             self.bcz.removeMembers(remove_list, share_key, authorized_token)
-
-            # self.my_group_dict = self.bcz.getMemberInfoRAW(unauthorized_token, share_key)
+            autosave_cnt += 1
+            if autosave_cnt > autosave_interval:
+                autosave_cnt = 0
+                self.autosave()
             time.sleep(delay2)
 
 
 
 
-    def start(self, authorized_token: str, share_key: str, strategy_index: int, client_socket: Sockets) -> None:
+    def start(self, authorized_token: str, share_key: str, strategy_index: int, client_id: str) -> None:
         # 是否验证？待测试，如果没有那就可怕了
         self.stop(share_key) # 防止重复运行
         self.activate_groups[share_key]['stop'] = False
+        self.activate_groups[share_key]['client_id'] = client_id
         
         # 从数据库加载已有成员小班数据，无参即为全选
         self.member_dict = self.sqlite.queryMemberGroup()
+        this_verdict_dict = self.sqlite.queryStrategyVerdict(strategy_index)
+
         
         # 每次启动更新一次self.strategies列表
         strategy_dict = self.strategy_class.get(strategy_index)
@@ -485,7 +585,7 @@ class Filter:
         if not strategy_dict:
             print(f"策略索引无效")
         else:
-            self.tids = threading.Thread(target=self.run, args=(authorized_token, self.bcz.main_token, share_key, strategy_dict, client_socket))
-            self.tids.start()
+            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, self.bcz.main_token, share_key, strategy_dict, this_verdict_dict, client_socket))
+            self.activate_groups[share_key]['tids'].start()
 
 

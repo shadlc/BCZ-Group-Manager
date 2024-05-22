@@ -4,7 +4,9 @@ import logging
 
 from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request
 from werkzeug.serving import WSGIRequestHandler, _log
-from flask_sockets import Sockets  
+# from flask_sockets import Sockets  
+# from flask_socketio import SocketIO
+from flask_sse import sse
 
 from src.bcz import BCZ, recordInfo, verifyInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
 from src.config import Config, Strategy
@@ -31,7 +33,6 @@ class MyRequestHandler(WSGIRequestHandler):
 
 
 app = Flask(__name__, static_folder='static', static_url_path='/')
-sockets = Sockets(app)  
 app.json.ensure_ascii = False
 
 config = Config()
@@ -39,7 +40,7 @@ strategy = Strategy()
 bcz = BCZ(config)
 xlsx = Xlsx(config)
 sqlite = SQLite(config)
-filter = Filter(config, strategy, bcz, sqlite)
+filter = Filter(config, strategy, bcz, sqlite, sse)
 processing = False
 
 if not config.main_token:
@@ -229,26 +230,13 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     }), code
 
 
-@sockets.route('/a/ws')  
-def echo_socket(ws):  
-    
-    while not ws.closed:  
-        message = ws.receive()  
-        if message is not None:
-            data = json.load(message)  
-            if data['type'] == 'start':
-                share_key = data['share_key']
-                filter_info = sqlite.getFilterInfo(share_key)
-                strategy_index = filter_info['strategy_index']
-                authorized_token = filter_info['authorized_token']
-                if not authorized_token:
-                    ws.send(json.dumps({'type': 'error', 'data': '未授权的小班'}))
-                    continue
-                filter.start(authorized_token, share_key, strategy_index, ws)
-                
-            if data['type'] == 'stop':
-                filter.stop(data['share_key'])
-                
+
+@app.route('/test-notice')
+def test_send() -> None:
+    sse.publish({"content": "Hello, client!"}, type='notice')
+    return 
+
+
 
 if __name__ == '__main__':
     logging.info('BCZ-Group-Manager 启动中...')
@@ -256,4 +244,6 @@ if __name__ == '__main__':
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
     if config.daily_verify:
         Schedule(config.daily_verify, lambda: verifyInfo(bcz, sqlite))
+    
+    app.register_blueprint(sse, url_prefix='/stream')
     app.run(config.host, config.port, request_handler=MyRequestHandler)

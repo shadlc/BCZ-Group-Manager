@@ -11,6 +11,7 @@ flask = "*"
 websockets = "*"
 gevent-websocket = "*"
 flask-sockets = "*"
+flask-sse = "*"
 
 [dev-packages]
 

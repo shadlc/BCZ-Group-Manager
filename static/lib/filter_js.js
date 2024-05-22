@@ -110,6 +110,7 @@ window.onpopstate = function (event) {
     }
 
 };
+// 发送websocket请求
 function wssend(confirmId, operation) {
     if (socket.readyState === 1) {
         socket.send(JSON.stringify({
@@ -119,6 +120,15 @@ function wssend(confirmId, operation) {
     }
     else console.log('socket not ready');
 }
+// websocket的备用方案，轮询服务器获取消息
+function pollServer() {
+    $.getJSON('/stream', function(data) {
+        console.log('Received message:', data.message);
+        pollServer();
+    });
+}
+
+pollServer();
 
 
 /* ---------------- 32 (●´∀｀●) ---------------- (●´∀｀●) ---------------- (●´∀｀●) 32 ---------------- */

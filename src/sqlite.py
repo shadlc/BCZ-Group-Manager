@@ -188,10 +188,12 @@ class SQLite:
 
     def saveMemberInfo(self, members: list, temp: bool = False, cursor: sqlite3.Cursor = None, conn: sqlite3.Connection = None) -> None:
         '''仅保存成员详情'''
+        release = False
         if not cursor:
             # 筛选时读写较多，因此重用连接
             conn = self.connect(self.db_path)
             cursor = conn.cursor()
+            release = True
         table_name = 'MEMBERS'
         if temp:
             table_name = 'T_' + table_name
@@ -221,7 +223,8 @@ class SQLite:
             )
             # 有个备注：踢出操作的有效期必须是当次，否则会影响手动通过的有效性
         conn.commit()
-        conn.close()
+        if release:
+            conn.close()
 
     def addObserveGroupInfo(self, group_list: list[dict]) -> None:
         '''增加关注小班信息'''
@@ -498,10 +501,12 @@ class SQLite:
         return data
     
     def queryMemberGroup(self, user_id: str = None, group_id: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict: # 获取指定成员 + 小班的所有信息
-        '''获取指定成员 -- 小班的所有信息，若果没有指定则返回所有MEMBERS表记录过的信息'''
+        '''获取指定成员 -- 小班的所有信息，若没有指定则返回所有MEMBERS表记录过的信息'''
+        release = False
         if not conn or not cursor:
             conn = self.connect(self.db_path)
             cursor = conn.cursor()
+            release = True
         if not user_id and not group_id:
             # 获取所有成员信息
             result = cursor.execute(
@@ -609,6 +614,8 @@ class SQLite:
             member['total_completed_times'] = total_completed_times
             # 按完成率排序
             member['duration_completed'] = sorted(member['duration_completed'], key=lambda x: x[1]/x[0], reverse=True)
+            if release:
+                conn.close()
             return member
         
     def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> None:
