@@ -19,7 +19,7 @@ class Xlsx:
             self.wb.remove(self.wb['Sheet'])
         else:
             try:
-                self.wb = load_workbook(self.file_path)
+                self.wb = load_workbook(self.config.output_file)
             except FileNotFoundError:
                 self.wb = Workbook()
                 self.wb.remove(self.wb['Sheet'])
@@ -52,7 +52,7 @@ class Xlsx:
         '''保存表格数据到本地'''     
         try:
             self.wb.active = 0
-            self.wb.save(self.file_path)
+            self.wb.save(self.config.output_file)
             self.wb.close()
             return True
         except PermissionError as e:
