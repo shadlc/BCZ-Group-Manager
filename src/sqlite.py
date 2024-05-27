@@ -87,7 +87,7 @@ class SQLite:
                 LATE_DAKA_TIME TEXT,                -- 晚打卡时间
                 AUTH_TOKEN TEXT,                    -- 授权令牌
                 FAVORITE INTEGER,                   -- 收藏标识
-                VALID INTEGER                       -- 是否有效
+                VALID INTEGER                       -- 是否有效(0:已删除, 1:有效, 2:无效)
             );'''
         ]
         self.init()
@@ -429,19 +429,30 @@ class SQLite:
     def getDistinctGroupName(self) -> list:
         return self.read(
             f'''
-                SELECT DISTINCT
-                    A.GROUP_ID,
-                    A.GROUP_ID||'('||A.NAME||')' NAME
-                FROM GROUPS A
-                JOIN (
-                    SELECT
-                    GROUP_ID,
-                    MAX(DATA_TIME) DATA_TIME 
-                    FROM GROUPS 
-                    GROUP BY GROUP_ID
-                ) B ON A.GROUP_ID = B.GROUP_ID
-                    AND A.DATA_TIME = B.DATA_TIME
-                ORDER BY A.GROUP_ID ASC
+                SELECT 
+                    GROUP_ID, 
+                    MAX(NAME) as NAME
+                FROM (
+                    SELECT DISTINCT
+                        A.GROUP_ID,
+                        A.GROUP_ID||'('||A.NAME||')' NAME
+                    FROM GROUPS A
+                    JOIN (
+                        SELECT
+                        GROUP_ID,
+                        MAX(DATA_TIME) DATA_TIME 
+                        FROM GROUPS 
+                        GROUP BY GROUP_ID
+                    ) B ON A.GROUP_ID = B.GROUP_ID
+                        AND A.DATA_TIME = B.DATA_TIME
+                    UNION
+                    SELECT DISTINCT
+                        GROUP_ID,
+                        GROUP_ID||'('||GROUP_NAME||')' NAME
+                    FROM T_MEMBERS
+                )
+                GROUP BY GROUP_ID
+                ORDER BY GROUP_ID ASC
             '''
         )
 

@@ -187,7 +187,7 @@ class BCZ:
 
         return self.parseGroupInfo(main_data, auth_data)
 
-    def getGroupsInfo(self, groups: list[dict], with_auth: bool = True, only_favorite: bool = False) -> list:
+    def getGroupsInfo(self, groups: list[dict], with_nickname: bool = True, only_favorite: bool = False) -> list:
         '''批量获取小班信息'''
         async def asyncGroupsInfo(groups: list[dict]) -> list[dict]:
             group_fetch_list = []
@@ -195,21 +195,28 @@ class BCZ:
                 if only_favorite and not group.get('favorite'):
                     continue
                 group_fetch_list.append({
-                    'url': f'{self.group_detail_url}?shareKey={group["share_key"]}',
+                    'share_key': group["share_key"],
                     'auth_token': group['auth_token'],
                 })
             main_headers = self.getHeaders()
             main_future = asyncio.gather(*[
-                self.fetchUrl(i['url'], main_headers)
+                self.fetchUrl(f'{self.group_detail_url}?shareKey={i["share_key"]}', main_headers)
                 for i in group_fetch_list
             ])
-            auth_response_list = []
-            if with_auth:
-                auth_future = asyncio.gather(*[
-                    self.fetchUrl(i['url'], self.getHeaders(i['auth_token']))
-                    for i in group_fetch_list if i['auth_token']
+            # auth_response_list = []
+            rank_response_list = []
+            if with_nickname:
+                # 利用班内排行榜即可获取小班昵称，因此注释该段
+                # auth_future = asyncio.gather(*[
+                #     self.fetchUrl(i['url'], self.getHeaders(i['auth_token']))
+                #     for i in group_fetch_list if i['auth_token']
+                # ] )
+                # auth_response_list: list[httpx.Response] = await auth_future
+                rank_future = asyncio.gather(*[
+                    self.fetchUrl(f'{self.get_week_rank_url}?shareKey={i["share_key"]}', main_headers)
+                    for i in group_fetch_list
                 ] )
-                auth_response_list: list[httpx.Response] = await auth_future
+                rank_response_list: list[httpx.Response] = await rank_future
             main_response_list: list[httpx.Response] = await main_future
             groups_result = []
             for i, response in enumerate(main_response_list):
@@ -218,26 +225,34 @@ class BCZ:
                     logger.warning(f'{msg}\n{response.text}')
                 main_data: dict = main_response_list[i].json().get('data', '')
                 auth_data: dict = '' if groups[i]['auth_token'] else None
-                if main_data:
-                    for auth_response in auth_response_list:
-                        if auth_response.status_code != 200 or auth_response.json().get('code') != 1:
-                            continue
-                        share_key = main_data.get('groupInfo').get('shareKey')
-                        temp = auth_response.json().get('data', '')
-                        if temp and temp.get('groupInfo').get('shareKey') == share_key:
-                            auth_data = temp
-                else:
+                rank_data: dict = '' if groups[i]['auth_token'] else None
+                if main_data and with_nickname:
+                    # 利用班内排行榜即可获取小班昵称，因此注释该段
+                    # for auth_response in auth_response_list:
+                    #     if auth_response.status_code == 200 or auth_response.json().get('code') == 1:
+                    #         share_key = main_data.get('groupInfo').get('shareKey')
+                    #         temp = auth_response.json().get('data', '')
+                    #         if temp and temp.get('groupInfo').get('shareKey') == share_key:
+                    #             auth_data = temp
+                    rank_response = rank_response_list[i]
+                    if rank_response.status_code == 200 or rank_response.json().get('code') == 1:
+                        rank_data = rank_response.json().get('data', '')
+                elif not main_data:
                     main_data = {
                         'share_key': groups[i]['share_key'],
                         'exception': main_response_list[i].text,
                         'valid': 2,
                     }
-                groups_result.append(self.parseGroupInfo(main_data, auth_data))
+                groups_result.append(self.parseGroupInfo(
+                    main_data,
+                    auth_data,
+                    rank_data
+                ))
 
             return groups_result
         return asyncio.run(asyncGroupsInfo(groups))
 
-    def parseGroupInfo(self, main_data: dict, auth_data: dict) -> dict:
+    def parseGroupInfo(self, main_data: dict, auth_data: dict = {}, rank_data: dict = {}) -> dict:
         '''请调用 getGroupInfo 或 getGroupsInfo，此函数仅内部调用，仅用于信息解析'''
         if not main_data or 'exception' in main_data:
             return main_data
@@ -266,6 +281,7 @@ class BCZ:
             'avatar_frame': avatar_frame,
             'notice': notice,
             'data_time': data_time,
+            'valid': 1,
         }
 
         today_date = main_data.get('todayDate') if main_data else ''
@@ -299,16 +315,26 @@ class BCZ:
                 group['leader'] = member['nickname']
                 group['leader_id'] = member_id
 
-        if auth_data:
-            auth_member_list = auth_data.get('members') if auth_data else []
-            for member in auth_member_list:
+        # 利用班内排行榜即可获取小班昵称，因此注释该段
+        # if auth_data:
+        #     auth_member_list = auth_data.get('members') if auth_data else []
+        #     for member in auth_member_list:
+        #         member_id = member['uniqueId']
+        #         nickname = re.sub(self.invalid_pattern, '', member['nickname'])
+        #         for member_info in members:
+        #             if member_id == member_info['id'] and member_info['nickname'] != nickname:
+        #                 member_info['group_nickname'] = member['nickname']
+        # elif auth_data == '':
+        #     group['token_invalid'] = True
+
+        if rank_data:
+            rank_member_list = rank_data.get('list') if rank_data else []
+            for member in rank_member_list:
                 member_id = member['uniqueId']
                 nickname = re.sub(self.invalid_pattern, '', member['nickname'])
                 for member_info in members:
                     if member_id == member_info['id'] and member_info['nickname'] != nickname:
                         member_info['group_nickname'] = member['nickname']
-        elif auth_data == '':
-            group['token_invalid'] = True
 
         if today_daka_count != 0:
             group['today_daka_count'] = today_daka_count
@@ -340,12 +366,12 @@ class BCZ:
                 daka_dict[id] = member['weekDakaDates']
         return daka_dict
 
-    def updateGroupInfo(self, groups: list[dict], with_auth: bool = True, only_favorite: bool = False) -> list:
+    def updateGroupInfo(self, groups: list[dict], with_nickname: bool = True, only_favorite: bool = False) -> list:
         '''获取最新信息并刷新小班信息列表'''
         for i, group in enumerate(groups):
             if not group.get('valid'):
                 groups.pop(i)
-        results = self.getGroupsInfo(groups, with_auth, only_favorite)
+        results = self.getGroupsInfo(groups, with_nickname, only_favorite)
         for result in results:
             for group in groups:
                 if group['id'] == result.get('id'):
@@ -417,7 +443,7 @@ def refreshTempMemberTable(
         group_id: str = '',
         only_valid: bool = True,
         latest: bool = False,
-        with_auth: bool = True,
+        with_nickname: bool = True,
         only_favorite: bool = False
     ) -> list[dict]:
     '''刷新成员临时表数据并返回小班数据列表'''
@@ -425,7 +451,7 @@ def refreshTempMemberTable(
     groups = sqlite.queryObserveGroupInfo(group_id, only_valid=only_valid)
     group_id_list = [group['id'] for group in groups if not (only_favorite and not group['favorite'])]
     if latest or (int(time.time()) - data_time > sqlite.config.cache_second or group_id):
-        groups = bcz.updateGroupInfo(groups, with_auth, only_favorite=only_favorite)
+        groups = bcz.updateGroupInfo(groups, with_nickname, only_favorite=only_favorite)
         sqlite.updateObserveGroupInfo(groups)
         today =  time.strftime('%Y-%m-%d', time.localtime())
         temp_data_date = sqlite.queryTempMemberCacheDate()

@@ -107,7 +107,7 @@ def observe_group():
                     sqlite,
                     group_id,
                     latest=True,
-                    with_auth=False,
+                    with_nickname=False,
                     only_favorite=not cache_all,
                 )
             else:

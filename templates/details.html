@@ -295,6 +295,28 @@
         }
         week_count_limit = group.count_limit * weekday;
       }
+      let comment_content = '';
+      for (let i in group.members) {
+        let member = group.members[i];
+        if (!member.group_nickname) {
+          continue;
+        }
+        comment_content += `
+        <div class="comment">
+            <div class="avatar">
+              <img src="`+member.avatar+`" />
+            </div>
+            <div class="member-commit">
+              <span>`+member.nickname+`: </span>
+              <span>`+member.group_nickname+`</span>
+            </div>
+            
+          </div>
+        `;
+      }
+      if (group.notice == '') {
+        group.notice = '<span class="center">暂无公告</span>';
+      }
       let group_content = `
         <span class="gloss"></span>
         <span class="eraser" onclick="slideLeft(event)"></span>
@@ -329,6 +351,9 @@
             <div class="modal-title">小班公告</div>
             <div class="modal-body">
               <div class="modal-text">`+group.notice+`</div>
+              <div class="modal-comment">
+                `+comment_content+`
+              </div>
             </div>
           </div>
         </div>
