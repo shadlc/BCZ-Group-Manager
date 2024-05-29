@@ -88,7 +88,12 @@ class SQLite:
                 AUTH_TOKEN TEXT,                    -- 授权令牌
                 FAVORITE INTEGER,                   -- 收藏标识
                 VALID INTEGER                       -- 是否有效(0:已删除, 1:有效, 2:无效)
-            );'''
+            );''',
+            '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
+                ID INTEGER PRIMARY KEY AUTOINCREMENT,   -- 头像ID
+                URL TEXT UNIQUE                         -- 头像链接
+            );
+            ''',
         ]
         self.init()
 

@@ -74,10 +74,27 @@ class BCZ:
             current_headers['Cookie'] += f'{key}={value};'
         return current_headers
 
-    async def fetchUrl(self, url: str, headers: dict) -> httpx.Response:
+
+    def fetch(self, url: str, method: str = 'GET', headers: dict = {}, payload = None) -> httpx.Response:
+        '''网络请求'''
+        with httpx.Client() as client:
+            if method.upper() == 'GET':
+                response = client.get(url, headers=headers)
+            elif method.upper() == 'POST':
+                response = client.post(url, json=payload, headers=headers)
+            else:
+                raise ValueError('不支持的请求协议')
+            return response
+
+    async def asyncFetch(self, url: str, method: str = 'GET', headers: dict = {}, payload = None) -> httpx.Response:
         '''异步网络请求'''
         async with httpx.AsyncClient() as client:
-            response = await client.get(url, headers=headers)
+            if method.upper() == 'GET':
+                response = await client.get(url, headers=headers)
+            elif method.upper() == 'POST':
+                response = await client.post(url, json=payload, headers=headers)
+            else:
+                raise ValueError('不支持的请求协议')
             return response
 
     def getInfo(self) -> dict:
@@ -200,7 +217,7 @@ class BCZ:
                 })
             main_headers = self.getHeaders()
             main_future = asyncio.gather(*[
-                self.fetchUrl(f'{self.group_detail_url}?shareKey={i["share_key"]}', main_headers)
+                self.asyncFetch(f'{self.group_detail_url}?shareKey={i["share_key"]}', headers=main_headers)
                 for i in group_fetch_list
             ])
             # auth_response_list = []
@@ -208,12 +225,12 @@ class BCZ:
             if with_nickname:
                 # 利用班内排行榜即可获取小班昵称，因此注释该段
                 # auth_future = asyncio.gather(*[
-                #     self.fetchUrl(i['url'], self.getHeaders(i['auth_token']))
+                #     self.asyncFetch(i['url'], headers=self.getHeaders(i['auth_token']))
                 #     for i in group_fetch_list if i['auth_token']
                 # ] )
                 # auth_response_list: list[httpx.Response] = await auth_future
                 rank_future = asyncio.gather(*[
-                    self.fetchUrl(f'{self.get_week_rank_url}?shareKey={i["share_key"]}', main_headers)
+                    self.asyncFetch(f'{self.get_week_rank_url}?shareKey={i["share_key"]}', headers=main_headers)
                     for i in group_fetch_list
                 ] )
                 rank_response_list: list[httpx.Response] = await rank_future
