@@ -15,25 +15,72 @@ from sqlite import SQLite
 from bcz import BCZ
 import sqlite3
 
-# 努力理解了一下BCZ类，还是可以用的
 #
-# 数据示例
-    # 内存缓存结构：
-    # member_dict = {
-    #     "uniqueId": {
-    #        "today_date": 用户校牌获取的时间
-    #        "list": [
-    #            {
-    #                queryMemberGroup返回的字典，内含该信息时间
-    #            },
-    # queryMemberGroup获得的信息可能是别的成员查询时顺便写入的，但用户校牌必须当天获取一次
+# 开发思路：
+# 【1】最终目标：自动筛选器 + 完成前端发送的命令
+# 【2】当前问题：筛选器获取到的数据和内存和数据库间的存储问题
+# 【3】当前sub问题：对于筛选器的内存数组三个，如下
+# 【4】其他备忘：1.需要逐步将shareKey替换为更短的groupid与已有代码统一；2.问一下shadlc，她的用户头像存了好多份，差不多删一下
 
-    # 数据库缓存结构： MEMBERS TABLE主键是用户 + 小班 + 采集日期，不储存用户校牌
-    # GROUPS TABLE 和 OBSERVED_GROUPS TABLE 储存小班信息，此处不需要访问
-    # MEMBERS TABLE 以小班id、用户id和采集日期为主键，作为主要储存单元
-    # FILTER_LOG TABLE 记录历史筛选操作、便于回查（日期、用户id、筛选条件id、结果）
-    # STRATEGY_VERDICT TABLE 记录策略执行结果，以用户id为主键，便于重启、换班时获取上次执行结果，但有效期仅到23:59或策略修改（需要清空）
-    # 以上数据库主要用于节省网络查询开销、线程重复计算开销，但是运行时还是只访问内存
+#     verdict_dict = [
+#         (Thread::)this_verdict_dict = {
+#             'date': '%Y-%M-%D',
+#             'uniqueId':strategy_index,
+#         }
+#     ]
+    
+#     filter_log = [
+#         {
+#             'uniqueId':uniqueId,
+#             'shareKey':share_key,
+#             'datetime':datetime.datetime.now(),
+#             'strategy':strategy_dict['name'],
+#             'subStrategy':sub_strat_dict['name'],
+#             'detail':{
+#                 'result':1,
+#                 'reason':'踢出小班'
+#             }
+#         }
+#     ]
+# 重点如下:
+#     member_dict = {
+#         "uniqueId": {
+#             "today_date": 用户校牌获取的时间
+#             以下是用户基本信息，与小班无关的信息
+#             'deskmate_days': 与同桌同学的天数
+#             'daka_today': 今天是否打卡
+#             'team_avatar_frame': 小队头像框，是否靠谱
+#             'this_week_daka_days': 这周打卡天数
+#             'last_week_daka_days': 上周打卡天数
+#             'today_study_cheat': 今天是否学习作弊
+#             queryMemberGroup获得的信息可能是别的成员查询时顺便写入的，但用户校牌必须当天获取一次
+#             "list": [
+#                 queryMemberGroup返回的字典或queryMemberGroups返回父节点列表
+#                 'groupid':{
+#                     'uniqueId':
+#                     'today_date':
+#                     'group_id':
+#                     'completed_times':最新
+#                     'duration_days':最新
+#                     'avatar':仅保留最新，链接
+#                     'nickname': [所有曾用过的昵称]
+#                     'group_nickname': [所有曾用过的小班昵称]
+#                     'completed_time': [所有记录到的完成时间]
+#                     'word_count': [所有记录到的学习字数]
+#                     'duration_completed': [所有在班经历(在班天数,打卡天数),(,)...按照完成率排序]
+#                     'total_study_cheat': [所有记录到的学习作弊次数]
+#                     'total_stay_days': [所有记录到的总学习天数]
+#                     'total_completed_times': [所有记录到的总学习时长]
+#                     
+#                 },
+#    
+#
+#数据库缓存结构： 
+# MEMBERS TABLE(对应内存member_dict，读queryMemberGroup，写saveGroupInfo)主键是用户 + 小班 + 采集日期，不储存用户校牌
+# GROUPS TABLE 和 OBSERVED_GROUPS TABLE(筛选不需要)储存小班信息，此处不需要访问
+# FILTER_LOG TABLE (对应内存filter_log，读queryFilterLog，写saveFilterLog)记录历史筛选操作、便于回查（日期、用户id、筛选条件id、结果）
+# STRATEGY_VERDICT TABLE (对应内存verdict_dict，读queryStrategyVerdict，写saveStrategyVerdict)记录策略执行结果，以用户id为主键，便于重启、换班时获取上次执行结果，但有效期仅到23:59或策略修改（需要清空）
+# 以上数据库主要用于节省网络查询开销、线程重复计算开销，但是运行时还是只访问内存
 
 class Filter:
     def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, sse: flask_sse.SSE) -> None:
@@ -58,18 +105,6 @@ class Filter:
 
 
 
-    # def updateConnectedClients(self, shareKey: str, connected_websockets: list) -> None:
-    #     '''更新已连接客户端'''
-    #     self.connected_websockets = connected_websockets
-    
-    # def dispatchNewMessages(self, share_key: str, new_messages: list) -> None:
-        # '''每次有新消息到来时，向所有已连接的客户端发送消息，并清空消息队列'''
-        
-        # for ws in self.connected_websockets:
-        #     for message in self.new_messages:
-        #         ws.send({'type':'message', 'content': message})
-        # self.messages.append(self.new_messages)
-        # new_messages = []
 
     
     def stop(self, shareKey) -> None:

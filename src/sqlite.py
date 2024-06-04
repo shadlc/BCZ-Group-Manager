@@ -10,6 +10,29 @@ from src.config import Config
 
 logger = logging.getLogger(__name__)
 
+# FILTER_LOG TABLE 和 STRATEGY_VERDICT TABLE 数据示例：
+#     strategy_verdict_dict = [
+#         (Thread::)this_verdict_dict = {
+#             'date': '%Y-%M-%D',
+#             'uniqueId':strategy_index,
+#         }
+#     ]
+    
+#     filter_log = [
+#         {
+#             'uniqueId':uniqueId,
+#             'shareKey':share_key,
+#             'datetime':datetime.datetime.now(),
+#             'strategy':strategy_dict['name'],
+#             'subStrategy':sub_strat_dict['name'],
+#             'detail':{
+#                 'result':1,
+#                 'reason':'踢出小班'
+#             }
+#         }
+#     ]
+
+
 class SQLite:
     def __init__(self, config: Config) -> None:
         '''数据库类'''
@@ -89,7 +112,24 @@ class SQLite:
                 AUTH_TOKEN TEXT,                    -- 授权令牌
                 FAVORITE INTEGER,                   -- 收藏标识
                 VALID INTEGER                       -- 是否有效
-            );'''
+            );''',
+            '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
+                ID INTEGER KEY AUTOINCREMENT,
+                UNIQUE_ID TEXT,                      -- 用户ID
+                GROUP_ID TEXT,                      -- 小班ID
+                DATETIME TEXT,                       -- 操作时间
+                STRATEGY TEXT,                       -- 子策略属于的策略名称
+                SUB_STRATEGY TEXT,                   -- 执行的子策略名称
+                DETAIL TEXT                          -- 筛选细节
+            );''',
+            '''CREATE TABLE IF NOT EXISTS STRATEGY_VERDICT (                   -- 成员在指定策略下的判定结果表，有效期24h
+                UNIQUE_ID TEXT,                      -- 唯一标识
+                DATETIME TEXT,                       -- 记录时间
+                STRATEGY TEXT,                       -- 策略名称                
+                SUB_STRATEGY TEXT,                   -- 子策略名称
+                DETAIL TEXT                          -- 策略执行结果
+            );''',
+   
         ]
         self.init()
 
@@ -477,7 +517,7 @@ class SQLite:
             )[0][0]
 
     def differMemberData(self, field_index: int, time_index: int, sqlite_result: dict, no_splice: bool = False) -> dict:
-        '''内部函数，获取字典中指定字段数据，返回随时间的变化
+        '''queryMemberGroup内部函数，获取字典中指定字段数据，返回随时间的变化
         return {
             '%YY-%mm-%dd': value1,
             '%YY-%mm-%dd': value2,
@@ -501,7 +541,8 @@ class SQLite:
         return data
     
     def queryMemberGroup(self, user_id: str = None, group_id: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict: # 获取指定成员 + 小班的所有信息
-        '''获取指定成员 -- 小班的所有信息，若没有指定则返回所有MEMBERS表记录过的信息'''
+        '''获取指定成员 + 小班的所有信息，若没有指定则返回所有MEMBERS表记录过的信息
+        数据库MEMBER TABLE -> 内存member_dict'''
         release = False
         if not conn or not cursor:
             conn = self.connect(self.db_path)
@@ -543,7 +584,6 @@ class SQLite:
                 'duration_days',
                 'group_id',
                 'avatar',
-                'data_time',
             ]
             result = cursor.execute(
                 f'''
@@ -553,8 +593,7 @@ class SQLite:
                         COMPLETED_TIMES,
                         DURATION_DAYS,
                         GROUP_ID,
-                        AVATAR,
-                        DATA_TIME
+                        AVATAR
                     FROM MEMBERS
                     WHERE USER_ID = ? AND GROUP_ID = ? AND DATA_TIME = ?
                 ''',
@@ -617,47 +656,20 @@ class SQLite:
             if release:
                 conn.close()
             return member
-        
+
     def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> None:
-        '''保存筛选日志'''
+        '''保存筛选日志，详情见filter.py'''
+        conn = self.connect(self.db_path)
 
     def queryFilterLog(self, user_id: str = None, group_id: str = None, today_date: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
-        '''获取筛选日志'''
+        '''获取筛选日志，详情见filter.py'''
 
+    def queryStrategyVerdict(self, strategy_id: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
+        '''获取策略审核结果，详情见filter.py'''
+
+    def saveStrategyVerdict(self, strategy_id: str, verdict: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> None:
+        '''保存策略审核结果，详情见filter.py'''
         
-    
-    # def queryMemberGroupList(self, user_id: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
-    #     '''获取成员的小班列表
-    #     return[group_id]'''
-    #     if not conn or not cursor:
-    #         conn = self.connect(self.db_path)
-    #         cursor = conn.cursor()
-    #     group_list = []
-    #     group_list = cursor.execute(
-    #         f'''
-    #             SELECT DISDINCT
-    #                 GROUP_ID
-    #             FROM MEMBERS
-    #             WHERE USER_ID = ?
-    #         ''',
-    #         [user_id]
-    #     ).fetchall()
-    #     return group_list
-    
-    # def queryMemberList(self, group_id: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
-    #     '''获取数据库中MEMBERS表记录过的所有成员列表'''
-
-    #     if not conn or not cursor:
-    #         conn = self.connect(self.db_path)
-    #         cursor = conn.cursor()
-    #     result = cursor.execute(
-    #         f'''
-    #             SELECT DISTINCT
-    #                 USER_ID
-    #             FROM MEMBERS
-    #         ''',
-    #     ).fetchall()
-    #     return [item[0] for item in result]
 
     def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> dict:
         '''查询用户信息表
