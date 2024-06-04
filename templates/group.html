@@ -67,6 +67,7 @@
           </div>
         </footer>
       </div>
+      <div id="refresh_btn" class="left-corner-btn btn" onclick="refresh_data()">刷新</div>
     </main>
     <div id="group_search_modal" class="modal hide" data-status="hidden" onclick="toggleGroupSearchModal(event)">
       <div class="modal-content">
@@ -88,21 +89,64 @@
   <script>
     onload = ()=>{
       initCloud(10);
-      getGroupList()
-      .then((result)=>{
-        if (!result) return;
+      getInfo()
+      .then((info)=>{
+        if (!info) return;
+        getGroupList();
+        bindScrollToTopBtn(document.querySelector('.wall-container'));
+      });
+    }
+
+    // 获取配置信息
+    function getInfo() {
+      return fetch('configure')
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        return data.data;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
+
+    // 调整小班页面显示
+    function toggle_group_display(show) {
+      if (show) {
         document.querySelectorAll('.loading-text').forEach((e)=>{
           e.classList.add('hide');
+        });
+        document.querySelectorAll('#group_filter').forEach((e)=>{
+          e.classList.remove('hide');
         });
         document.querySelectorAll('.group').forEach((e)=>{
           e.classList.remove('hide');
         });
-      });
+      } else {
+        document.querySelectorAll('.loading-text').forEach((e)=>{
+          e.classList.remove('hide');
+        });
+        document.querySelectorAll('#group_filter').forEach((e)=>{
+          e.classList.add('hide');
+        });
+        document.querySelectorAll('.group').forEach((e)=>{
+          e.classList.add('hide');
+        });
+      }
     }
 
     // 获取小班信息
-    function getGroupList() {
-      return fetch('observe_group')
+    function getGroupList(cache_all=false) {
+      toggle_group_display(show=false);
+      let url = 'observe_group';
+      if (cache_all) {
+        url += '?cache_all=' + cache_all
+      }
+      return fetch(url)
       .then(response => response.json())
       .then(data => {
         if (data.retcode != 0) {
@@ -111,6 +155,9 @@
         }
         let groups = data.data;
         document.getElementById('my_class').innerText = '小班列表(' + groups.length + ')';
+        document.querySelectorAll('.group:not(.empty-group)').forEach((e)=>{
+          e.remove();
+        });
         let container = document.querySelector('.wall-container');
         let empty_group = document.querySelector('.empty-group');
         let group_count = Object.keys(groups).length;
@@ -146,7 +193,7 @@
           `
           let group_div = document.createElement('div');
           group_div.className = 'group';
-          if (group.exception) {
+          if (group.valid == 2) {
             // notify('小班'+group.name+'的数据获取失败! \n原因为: '+group.exception);
             group_div.className += ' invalid';
           }
@@ -161,13 +208,12 @@
           });
           container.insertBefore(group_div, empty_group);
         }
+        toggle_group_display(show=true);
         return true;
       })
       .catch(error => {
         console.error('请求错误:', error);
         notify('请求错误:' + error);
-        let status_text = document.querySelector('#status_text');
-        status_text.innerHTML = '';
       });
     }
 
@@ -255,6 +301,7 @@
               </div>
               <div class="group-info">
                 <span>`+group.name+`</span>
+                <span>小班ID: `+group.id+`</span>
               </div>
               <div class="group-detail">
                 <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`+Math.round(group.finishing_rate * 100)+`%</span>
@@ -352,6 +399,13 @@
         } else {
           e.classList.add('hide');
         }
+      });
+    }
+
+    // 刷新全部小班数据
+    function refresh_data() {
+      showModal('是否为当前页面全部小班获取最新数据?', '刷新全部', ()=>{
+        getGroupList(true);
       });
     }
 

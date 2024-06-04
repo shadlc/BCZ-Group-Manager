@@ -2,7 +2,6 @@
 
 ### A small group management tool for Chinese vocabulary software which  called [Bai Ci Zhan](https://www.baicizhan.com/), depends on [Flask](https://github.com/pallets/flask).
 
-[![GitHub All Releases](https://img.shields.io/github/downloads/shadlc/BCZ-Group-Manager/total)](../../releases)
 ![GitHub Pipenv locked Python version](https://img.shields.io/github/pipenv/locked/python-version/shadlc/BCZ-Group-Manager)
 ![Scc Count Badge](https://sloc.xyz/github/shadlc/BCZ-Group-Manager)
 ![GitHub repo size](https://img.shields.io/github/repo-size/shadlc/BCZ-Group-Manager)
@@ -55,7 +54,7 @@
 - **`output_file`是程序输出Excel文件的指定目录和默认文件名，默认为`小班数据.xlsx`**
 - **`daily_record`以`Crontab`语法自动记录每天数据，默认为晚上23点59分，即`59 23 * * *`**
 - **`daily_verify`晚于自动记录时间后的打卡数据会遗失，因此以`Crontab`语法自动校验本周与上周打卡记录，补上遗失的打卡数据，默认为凌晨4点整，即`00 04 * * *`**
-- **`cache_second`数据查询功能实时数据的查询间隔，设置缓存时间防止过于频繁的实时查询，默认为60秒**
+- **`cache_second`数据查询功能实时数据的查询间隔，设置缓存时间防止过于频繁的实时查询，默认为600秒**
 
 
 ## 🔌 API
@@ -64,6 +63,9 @@
 
 ### 个人主页
 GET `https://social.baicizhan.com/api/deskmate/home_page`
+
+### 账户信息
+GET `https://passport.baicizhan.com/api/unified_user_service/personal_infos`
 
 ### 用户信息
 GET `https://social.baicizhan.com/api/deskmate/personal_details?uniqueId=XXXXXX`
@@ -86,6 +88,9 @@ GET `https://group.baicizhan.com/group/get_week_rank?shareKey=XXXXXX&week=1`
 ### 小班上周打卡详情
 GET `https://group.baicizhan.com/group/get_week_rank?shareKey=XXXXXX&week=2`
 
+### 小班公告与收到成员列表
+GET `https://group.baicizhan.com/group/notice?shareKey=XXXXXX`
+
 ### 小班移除用户
 POST `https://group.baicizhan.com/group/remove_members`
 ```
@@ -96,6 +101,85 @@ POST `https://group.baicizhan.com/group/remove_members`
   ]
 }
 ```
+
+### 加入小班
+POST `https://group.baicizhan.com/group/join`
+```
+{
+  "shareKey":"XXXXXX",
+  "source":"3"
+}
+```
+```
+{
+  "inviteKey":"XXXXXX",
+  "source":"0"
+}
+```
+
+### 退出小班(解散小班)
+GET `https://group.baicizhan.com/group/quit?shareKey=XXXXXX`
+
+### 创建小班
+POST `https://group.baicizhan.com/group/create`
+```
+{
+  "avatar":"/group/avatar/default0.png",
+  "name":"",
+  "introduction":""
+}
+```
+
+### 改变小班加入方式
+GET `https://group.baicizhan.com/group/set_only_public_key_join?shareKey=XXXXXX`
+
+### 设置小班名称(每30天1次)
+POST `https://group.baicizhan.com/group/set_group_name`
+```
+{
+  "shareKey":"XXXXXX",
+  "name":""
+}
+```
+
+### 设置小班介绍(每15天1次)
+POST `https://group.baicizhan.com/group/set_group_introduction`
+```
+{
+  "shareKey":"XXXXXX",
+  "introduction":""
+}
+```
+
+### 设置小班公告(每天1次)
+POST `https://group.baicizhan.com/group/set_notice`
+```
+{
+  "shareKey":"XXXXXX",
+  "notice":""
+}
+```
+
+### 设置自己的班内昵称(每天1次)
+POST `https://group.baicizhan.com/group/set_nickname`
+```
+{
+  "shareKey":"XXXXXX",
+  "nickname":""
+}
+```
+
+### 设置小班二维码
+POST `https://group.baicizhan.com/group/set_group_qr_code?shareKey=XXXXXX&action=1 `
+```
+图片二进制内容
+```
+
+### 获取小班邀请码
+GET `https://group.baicizhan.com/group/invite_key?shareKey=XXXXXX`
+
+### 获取班长排行榜
+GET `https://group.baicizhan.com/group/get_group_leader_rank`
 
 ### 搜索用户
 GET `https://social.baicizhan.com/api/social/get_friend_state?uniqueId=XXXXXX`

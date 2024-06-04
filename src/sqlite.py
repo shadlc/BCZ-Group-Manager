@@ -36,8 +36,8 @@ logger = logging.getLogger(__name__)
 class SQLite:
     def __init__(self, config: Config) -> None:
         '''数据库类'''
+        self.config = config
         self.db_path = config.database_path
-        self.cache_second = config.cache_second
         self.init_sql = [
             '''CREATE TABLE IF NOT EXISTS GROUPS (                   -- 小班表
                 GROUP_ID INTEGER,                   -- 小班ID
@@ -56,7 +56,7 @@ class SQLite:
                 GROUP_TYPE INTEGER,                 -- 小班类型
                 AVATAR TEXT,                        -- 小班头像
                 AVATAR_FRAME TEXT,                  -- 小班像框
-                DATA_TIME TEXT                      -- 采集时间
+                DATA_TIME TEXT                      -- 记录时间
             );''',
             '''CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表（以用户 + 小班 + 日期 为主键）
                 USER_ID INTEGER UNIQUE,             -- 用户ID   *
@@ -72,7 +72,7 @@ class SQLite:
                 GROUP_ID INTEGER UNIQUE,            -- 小班ID   *
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
-                DATA_TIME TEXT                      -- 采集时间
+                DATA_TIME TEXT                      -- 记录时间
             );''',
             '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
                 USER_ID INTEGER UNIQUE,             -- 用户ID   *
@@ -88,7 +88,7 @@ class SQLite:
                 GROUP_ID INTEGER UNIQUE,            -- 小班ID   *
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
-                DATA_TIME TEXT                      -- 采集时间
+                DATA_TIME TEXT                      -- 记录时间
             );''',
             '''CREATE TABLE IF NOT EXISTS OBSERVED_GROUPS (                   -- 关注小班表
                 GROUP_ID INTEGER,                   -- 小班ID
@@ -111,7 +111,7 @@ class SQLite:
                 LATE_DAKA_TIME TEXT,                -- 晚打卡时间
                 AUTH_TOKEN TEXT,                    -- 授权令牌
                 FAVORITE INTEGER,                   -- 收藏标识
-                VALID INTEGER                       -- 是否有效
+                VALID INTEGER                       -- 是否有效(0:已删除, 1:有效, 2:无效)
             );''',
             '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
                 ID INTEGER KEY AUTOINCREMENT,
@@ -129,7 +129,11 @@ class SQLite:
                 SUB_STRATEGY TEXT,                   -- 子策略名称
                 DETAIL TEXT                          -- 策略执行结果
             );''',
-   
+            '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
+                ID INTEGER PRIMARY KEY AUTOINCREMENT,   -- 头像ID
+                URL TEXT UNIQUE                         -- 头像链接
+            );
+            ''',
         ]
         self.init()
 
@@ -190,40 +194,39 @@ class SQLite:
             conn = self.connect(self.db_path)
             cursor = conn.cursor()
         if temp:
-            for group_info in group_list:
-                if group_info.get('exception'):
+            for group in groups:
+                if group.get('exception'):
                     continue
-                if not group_info.get('members', None):
-                    return
                 self.saveMemberInfo(group_info['members'], group_info['groupInfo']['id'], temp, cursor, conn)
-                # 临时信息仅保存成员信息，不保存小班信息
             return
-        for group_info in group_list:
-            if group_info.get('exception'):
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        for group in groups:
+            if group.get('exception'):
                 continue
             cursor.execute(
                 f'INSERT OR IGNORE INTO GROUPS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
-                    group_info['id'],
-                    group_info['name'],
-                    group_info['share_key'],
-                    group_info['introduction'],
-                    group_info['leader'],
-                    group_info['leader_id'],
-                    group_info['member_count'],
-                    group_info['count_limit'],
-                    group_info['today_daka_count'],
-                    group_info['finishing_rate'],
-                    group_info['created_time'],
-                    group_info['rank'],
-                    group_info['type'],
-                    group_info['avatar'],
-                    group_info['avatar_frame'],
-                    group_info['data_time'],
+                    group['id'],
+                    group['name'],
+                    group['share_key'],
+                    group['introduction'],
+                    group['leader'],
+                    group['leader_id'],
+                    group['member_count'],
+                    group['count_limit'],
+                    group['today_daka_count'],
+                    group['finishing_rate'],
+                    group['created_time'],
+                    group['rank'],
+                    group['type'],
+                    group['avatar'],
+                    group['avatar_frame'],
+                    group['data_time'],
                 )
             )
             conn.commit()
-            self.saveMemberInfo(group_info['members'])
+            self.saveMemberInfo(group['members'])
         conn.close()
 
     def saveMemberInfo(self, members: list, temp: bool = False, cursor: sqlite3.Cursor = None, conn: sqlite3.Connection = None) -> None:
@@ -266,11 +269,11 @@ class SQLite:
         if release:
             conn.close()
 
-    def addObserveGroupInfo(self, group_list: list[dict]) -> None:
+    def addObserveGroupInfo(self, groups: list[dict]) -> None:
         '''增加关注小班信息'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        for group_info in group_list:
+        for group_info in groups:
             cursor.execute('DELETE FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', [group_info.get('id', 0)])
             cursor.execute(
                 '''
@@ -303,22 +306,22 @@ class SQLite:
         conn.commit()
         conn.close()
 
-    def disableObserveGroupInfo(self, group_id) -> None:
-        '''禁用关注小班'''
+    def setObserveGroupValid(self, group_id, valid:str = '0') -> None:
+        '''禁用关注的小班'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
-            'UPDATE OBSERVED_GROUPS SET VALID=0 WHERE GROUP_ID = ?',
-            (group_id)
+            'UPDATE OBSERVED_GROUPS SET VALID=? WHERE GROUP_ID = ?',
+            (valid, group_id)
         )
         conn.commit()
         conn.close()
 
-    def updateObserveGroupInfo(self, group_list: list[dict]) -> None:
+    def updateObserveGroupInfo(self, groups: list[dict]) -> None:
         '''更新关注小班信息'''
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        for group_info in group_list:
+        for group_info in groups:
             sql = f'UPDATE OBSERVED_GROUPS SET'
             params = []
             # if group_info.get('id') != None: sql += ' GROUP_ID = ?,'; params.append(group_info.get('id'))
@@ -379,12 +382,12 @@ class SQLite:
         conn.commit()
         conn.close()
 
-    def queryObserveGroupInfo(self, group_id: str = '', all: bool = False) -> list[dict]:
+    def queryObserveGroupInfo(self, group_id: str = '', only_valid: bool = True) -> list[dict]:
         '''查询关注小班信息'''
         sql = f'SELECT * FROM OBSERVED_GROUPS WHERE 1 = 1'
         params = []
-        if not all:
-            sql += ' AND VALID = 1'
+        if only_valid:
+            sql += ' AND VALID <> 0'
         if group_id:
             sql += ' AND GROUP_ID = ?'
             params.append(group_id)
@@ -485,19 +488,30 @@ class SQLite:
     def getDistinctGroupName(self) -> list:
         return self.read(
             f'''
-                SELECT DISTINCT
-                    A.GROUP_ID,
-                    A.GROUP_ID||'('||A.NAME||')' NAME
-                FROM GROUPS A
-                JOIN (
-                    SELECT
-                    GROUP_ID,
-                    MAX(DATA_TIME) DATA_TIME 
-                    FROM GROUPS 
-                    GROUP BY GROUP_ID
-                ) B ON A.GROUP_ID = B.GROUP_ID
-                    AND A.DATA_TIME = B.DATA_TIME
-                ORDER BY A.GROUP_ID ASC
+                SELECT 
+                    GROUP_ID, 
+                    MAX(NAME) as NAME
+                FROM (
+                    SELECT DISTINCT
+                        A.GROUP_ID,
+                        A.GROUP_ID||'('||A.NAME||')' NAME
+                    FROM GROUPS A
+                    JOIN (
+                        SELECT
+                        GROUP_ID,
+                        MAX(DATA_TIME) DATA_TIME 
+                        FROM GROUPS 
+                        GROUP BY GROUP_ID
+                    ) B ON A.GROUP_ID = B.GROUP_ID
+                        AND A.DATA_TIME = B.DATA_TIME
+                    UNION
+                    SELECT DISTINCT
+                        GROUP_ID,
+                        GROUP_ID||'('||GROUP_NAME||')' NAME
+                    FROM T_MEMBERS
+                )
+                GROUP BY GROUP_ID
+                ORDER BY GROUP_ID ASC
             '''
         )
 
@@ -806,7 +820,7 @@ class SQLite:
                 '小班ID',
                 '小班名称',
                 '用户头像',
-                '采集时间',
+                '记录时间',
             ]] + result
         return {
             'data': result,
@@ -816,7 +830,7 @@ class SQLite:
             'page_count': page_count,
         }
 
-    def queryTempMemberCacheTime(self) -> list:
+    def queryTempMemberCacheTime(self) -> int:
         '''获取成员临时表的最新缓存数据时间'''
         result = self.read(
             f'SELECT DATA_TIME FROM T_MEMBERS ORDER BY DATA_TIME DESC LIMIT 1'
@@ -826,13 +840,46 @@ class SQLite:
             data_time = int(datetime.strptime(result[0][0], '%Y-%m-%d %H:%M:%S').timestamp())
         return data_time
 
-    def deleteTempMemberTable(self, group_id: str = '') -> None:
+    def queryMemberDataDateList(self, range: int = 7) -> list:
+        '''获取成员临时表指定天数内的缓存数据日期列表'''
+        result = self.read(
+            f'SELECT DISTINCT TODAY_DATE FROM MEMBERS ORDER BY TODAY_DATE DESC LIMIT {range}'
+        )
+        data_date_list = [i[0] for i in result]
+        return data_date_list
+
+    def queryMemberCacheDate(self) -> str:
+        '''获取成员临时表的最新缓存数据日期'''
+        result = self.read(
+            f'SELECT TODAY_DATE FROM MEMBERS ORDER BY TODAY_DATE DESC LIMIT 1'
+        )
+        today_date = result[0][0]
+        return today_date
+
+    def queryTempMemberCacheDate(self) -> str:
+        '''获取成员临时表的最新缓存数据日期'''
+        result = self.read(
+            f'SELECT TODAY_DATE FROM T_MEMBERS ORDER BY TODAY_DATE DESC LIMIT 1'
+        )
+        if not result:
+            return ''
+            
+        today_date = result[0][0]
+        return today_date
+
+    def mergeTempMemberInfo(self) -> bool:
+        '''把成员临时表中的数据合并到成员表'''
+        return self.write(
+            f'INSERT INTO MEMBERS SELECT * FROM T_MEMBERS'
+        )
+
+    def deleteTempMemberTable(self, group_id_list: list) -> None:
         '''清除成员临时表数据'''
         sql = 'DELETE FROM T_MEMBERS WHERE 1=1'
         params = []
-        if group_id:
-            sql += ' AND GROUP_ID = ?'
-            params.append(group_id)
+        if group_id_list:
+            sql += f' AND GROUP_ID in ({", ".join(["?"] * len(group_id_list))})'
+            params += group_id_list
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(sql, params)

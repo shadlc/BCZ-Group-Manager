@@ -65,6 +65,7 @@ h1 {
 }
 line {
   display: block;
+  flex-basis: 100%;
 }
 select,
 input:focus-visible {
@@ -144,7 +145,9 @@ img[src=""] {
   overflow: auto;
 }
 .center {
-  text-align:center;
+  display: inline-block;
+  text-align: center;
+  width: 100%;
 }
 .float-right {
   float:right;
@@ -158,7 +161,7 @@ img[src=""] {
   filter: grayscale(100%) brightness(50%);
 }
 .invalid::after {
-  content: '无效';
+  content: '失效';
   position: absolute;
   font-weight: bold;
   font-size: 2rem;
@@ -362,13 +365,17 @@ img[src=""] {
   flex-direction: column;
   align-items: center;
   max-height: 70vh;
-  overflow: hidden;
+  overflow: scroll;
 }
 .modal-text {
   font-weight: normal;
   width: 100%;
   white-space: pre-wrap;
-  overflow: scroll;
+}
+.modal-comment {
+  width: 100%;
+  margin-top: 0.5rem;
+  border-top: solid 0.1rem var(--black);
 }
 .loading-text {
   display: flex;
@@ -862,7 +869,7 @@ table.simple-table td {
   width: 90%;
   height: 0%;
   border: solid 0.1rem;
-  padding: 0.5rem;
+  padding: 0 0.5rem;
   margin: 0.5rem auto -0.1rem auto;
   background: var(--white);
   border-radius: 0.5rem 0.5rem 0 0;
@@ -1152,16 +1159,33 @@ table.simple-table td {
   position: absolute;
 }
 .avatar img:nth-child(1) {
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 80%;
+  height: 80%;
   border: solid 0.08rem black;
   border-radius: 50%;
   overflow: hidden;
 }
 .avatar img:nth-child(2) {
-  width: 3rem;
-  height: 3rem;
+  width: 100%;
+  height: 100%;
   border-radius: 50%;
+}
+.comment {
+  display: flex;
+  align-items: center;
+  margin: 0.5rem auto;
+}
+.comment .avatar {
+  width: 2rem;
+  height: 2rem;
+}
+.member-commit {
+  display: flex;
+  flex-direction: column;
+  margin-left: 0.5rem;
+}
+.member-commit :first-child {
+  font-size: x-small;
 }
 .empty-group {
   position: relative;
@@ -1496,7 +1520,7 @@ table.simple-table td {
   z-index: 10;
   position: fixed;
   right: -4rem;
-  bottom: 1rem;
+  bottom: 0.75rem;
   font-size: 1.3rem;
   text-align: center;
   width: 2rem;
@@ -1509,7 +1533,7 @@ table.simple-table td {
   transition: all 0.5s ease;
 }
 #scroll_top_btn.show {
-  right: 1rem;
+  right: 0.75rem;
 }
 
 /* Loader */
@@ -1561,7 +1585,7 @@ table.simple-table td {
 .footer::before {
   content: '';
   position: absolute;
-  top: 0;
+  top: -0.1rem;
   width: calc(100% - 0.2rem);
   height: 0.5rem;
   background: rgb(255, 206, 132);
@@ -1607,13 +1631,14 @@ footer{
   max-width: 90%;
   height: 2rem;
   margin: 1rem;
+  padding-left: 0rem;
   opacity: 0;
   visibility: collapse;
   transition: all 0.6s ease-in-out;
 }
 .info>input:checked~div {
-  text-align: end;
-  width: 22rem;
+  width: 20rem;
+  padding-left: 2.5rem;
   opacity: 1;
   visibility: visible;
 }

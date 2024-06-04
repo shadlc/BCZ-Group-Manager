@@ -8,10 +8,8 @@ name = "pypi"
 openpyxl = "*"
 requests = "*"
 flask = "*"
-websockets = "*"
-gevent-websocket = "*"
-flask-sockets = "*"
 flask-sse = "*"
+httpx = "*"
 
 [dev-packages]
 

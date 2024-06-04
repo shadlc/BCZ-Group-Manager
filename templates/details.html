@@ -87,8 +87,8 @@
           </div>
         </footer>
       </div>
+      <div class="left-corner-btn btn" onclick="history.back()">返回</div>
     </main>
-    <div class="left-corner-btn btn" onclick="history.back()">返回</div>
     <div id="setting_modal" class="modal hide" data-status="hidden" onclick="toggleSettingModal(event)">
       <div class="modal-content">
         <span class="modal-close-btn" onclick="toggleSettingModal()"></span>
@@ -96,11 +96,17 @@
         <div class="modal-body">
           <div class="setting-group">
             <div class="input">
-              <label for="record_select">每日记录开关</label>
-              <select id="record_select">
-                <option value="1">开启</option>
-                <option value="0">关闭</option>
-              </select>
+              <label >每日记录开关</label>
+              <div id="record_select" class="btn-group">
+                <div class="checkbox">
+                  <input type="radio" id="record_select_true" name="record_select" value="1"/>
+                  <label for="record_select_true">开启</label>
+                </div>
+                <div class="checkbox">
+                  <input type="radio" id="record_select_false" name="record_select" value="0" />
+                  <label for="record_select_false">关闭</label>
+                </div>
+              </div>
             </div>
             <div class="input">
               <label for="late_time_input">晚卡时间</label>
@@ -277,7 +283,7 @@
 
     // 通过数据设置展示小班信息
     function setGroupInfo(group) {
-      document.getElementById('record_select').value = group.daily_record;
+      document.querySelector('input[name=record_select][value="'+group.daily_record+'"]').checked = true;
       document.getElementById('late_time_input').value = group.late_daka_time;
       document.getElementById('auth_token_input').value = group.auth_token;
       let container = document.querySelector('.group-info-container');
@@ -289,6 +295,28 @@
         }
         week_count_limit = group.count_limit * weekday;
       }
+      let comment_content = '';
+      for (let i in group.members) {
+        let member = group.members[i];
+        if (!member.group_nickname) {
+          continue;
+        }
+        comment_content += `
+        <div class="comment">
+            <div class="avatar">
+              <img src="`+member.avatar+`" />
+            </div>
+            <div class="member-commit">
+              <span>`+member.nickname+`: </span>
+              <span>`+member.group_nickname+`</span>
+            </div>
+            
+          </div>
+        `;
+      }
+      if (group.notice == '') {
+        group.notice = '<span class="center">暂无公告</span>';
+      }
       let group_content = `
         <span class="gloss"></span>
         <span class="eraser" onclick="slideLeft(event)"></span>
@@ -299,7 +327,7 @@
               <img src="`+group.avatar_frame+`" />
             </div>
             <div class="group-info">
-            <span>`+group.name+`</span>
+              <span>`+group.name+`</span>
             </div>
             <div class="group-detail">
               <span>班长: `+group.leader+`(`+group.leader_id+`)</span>
@@ -323,6 +351,9 @@
             <div class="modal-title">小班公告</div>
             <div class="modal-body">
               <div class="modal-text">`+group.notice+`</div>
+              <div class="modal-comment">
+                `+comment_content+`
+              </div>
             </div>
           </div>
         </div>
@@ -433,7 +464,7 @@
     // 保存小班配置
     function saveConfig() {
       showModal('确保设置无误？该操作不可逆', '修改配置', ()=>{
-        let record_enabled = document.getElementById('record_select')?.value;
+        let record_enabled = document.querySelector('input[name=record_select]:checked')?.value;
         let late_daka_time = document.getElementById('late_time_input')?.value;
         let auth_token = document.getElementById('auth_token_input')?.value;
         if (origin_auth_token != auth_token) {

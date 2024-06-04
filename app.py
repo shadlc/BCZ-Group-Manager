@@ -94,9 +94,9 @@ def get_data_info():
 @app.route('/get_user_group', methods=['GET'])
 def get_user_group():
     user_id = request.args.get('id')
-    group_list = bcz.getUserGroupInfo(user_id)
-    if group_list:
-        return restful(200, '', group_list)
+    groups = bcz.getUserGroupInfo(user_id)
+    if groups:
+        return restful(200, '', groups)
     else:
         return restful(404, '未查询到该用户的小班Σ(っ °Д °;)っ')
 
@@ -105,31 +105,42 @@ def observe_group():
     if request.method == 'GET':
         '''获取关注小班列表'''
         group_id = request.args.get('id', '')
+        cache_all = request.args.get('cache_all', False)
         try:
-            group_list = refreshTempMemberTable(bcz, sqlite, group_id, all=False, latest=True)
-            for group in group_list:
+            if cache_all or config.real_time_cache_favorite:
+                groups = refreshTempMemberTable(
+                    bcz,
+                    sqlite,
+                    group_id,
+                    latest=True,
+                    with_nickname=False,
+                    only_favorite=not cache_all,
+                )
+            else:
+                groups = sqlite.queryObserveGroupInfo(group_id)
+            for group in groups:
                 group['auth_token'] = len(group['auth_token']) * '*'
                 if not group_id:
                     group.pop('members')
-            if group_id and not group_list:
+            if group_id and not groups:
                 return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
-            return restful(200, '', group_list)
+            return restful(200, '', groups)
         except Exception as e:
             return restful(400, f'查询小班时发生错误(X_X): {e}')
 
     elif request.method == 'POST':
         '''添加或修改关注小班列表'''
-        group_list = sqlite.queryObserveGroupInfo()
+        groups = sqlite.queryObserveGroupInfo()
         if 'share_key' in request.json and len(request.json) == 1:
             share_key = request.json.get('share_key')
-            if share_key in [group_info['share_key'] for group_info in group_list]:
+            if share_key in [group['share_key'] for group in groups]:
                 return restful(403, '该小班已存在ヾ(≧▽≦*)o')
             group_info = bcz.getGroupInfo(share_key)
             sqlite.addObserveGroupInfo([group_info])
             msg = '成功添加新的关注小班ヾ(≧▽≦*)o'
         elif 'id' in request.json:
             group_id = request.json.get('id')
-            if int(group_id) not in [group_info['id'] for group_info in group_list]:
+            if int(group_id) not in [group['id'] for group in groups]:
                 return restful(403, '该小班不存在Σ(っ °Д °;)っ')
             group_info = sqlite.queryObserveGroupInfo(group_id=group_id)[0]
             group_info.update(request.json)
@@ -149,13 +160,13 @@ def query_group_details():
     if not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
-        group_list = refreshTempMemberTable(bcz, sqlite, group_id)
-        for group in group_list:
+        groups = refreshTempMemberTable(bcz, sqlite, group_id)
+        for group in groups:
             group['auth_token'] = len(group['auth_token']) * '*'
-        analyseWeekInfo(group_list, sqlite, week)
-        if not group_list:
+        analyseWeekInfo(groups, sqlite, week)
+        if not groups:
             return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
-        return restful(200, '', group_list)
+        return restful(200, '', groups)
     except Exception as e:
         return restful(400, f'查询小班信息时发生错误(X_X): {e}')
 
@@ -191,6 +202,7 @@ def search_group():
     try:
         if share_key:
             group_info = bcz.getGroupInfo(share_key)
+            group_info.pop('members')
             result = {group_info['id']: group_info}
         elif user_id:
             result = bcz.getUserGroupInfo(user_id)

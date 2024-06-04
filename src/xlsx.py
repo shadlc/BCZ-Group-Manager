@@ -8,8 +8,8 @@ from src.config import Config
 class Xlsx:
     def __init__(self, config: Config) -> None:
         '''表格数据操作类'''
-        self.file_path = config.output_file
-        if path := os.path.dirname(self.file_path):
+        self.config = config
+        if path := os.path.dirname(self.config.output_file):
             os.makedirs(path, exist_ok=True)
 
     def write(self, sheet_name: str, data: list, overwrite: bool = True) -> bool:
@@ -19,7 +19,7 @@ class Xlsx:
             self.wb.remove(self.wb['Sheet'])
         else:
             try:
-                self.wb = load_workbook(self.file_path)
+                self.wb = load_workbook(self.config.output_file)
             except FileNotFoundError:
                 self.wb = Workbook()
                 self.wb.remove(self.wb['Sheet'])
@@ -52,7 +52,7 @@ class Xlsx:
         '''保存表格数据到本地'''     
         try:
             self.wb.active = 0
-            self.wb.save(self.file_path)
+            self.wb.save(self.config.output_file)
             self.wb.close()
             return True
         except PermissionError as e:
