@@ -3,15 +3,12 @@
 # from config import Config
 import json
 import threading
-import logging
 import datetime
 import config
-from flask_sockets import Sockets 
 import flask_sse
 
 import time
 from config import Strategy
-from operator import itemgetter
 from sqlite import SQLite
 from bcz import BCZ
 import sqlite3
@@ -74,6 +71,20 @@ import sqlite3
 #                     'total_completed_times': [所有记录到的总学习时长]
 #                     
 #                 },
+#      personal_dict = {
+#         "uniqueId": {
+#             "today_date": 用户校牌获取的时间
+#             "deskmateDays": 与同桌同学的天数
+#             "dependability": 依赖指数
+#             "group_list": [
+#                 {# 全部使用json复制的驼峰命名
+#                     "groupId": 小班id
+#                     "finishingRate": 小班完成率
+#                     "joinDays": 该成员加入小班天数
+#                 }
+#                ]     
+#               }
+#           }
 #    
 #
 #数据库缓存结构： 
@@ -86,150 +97,10 @@ import sqlite3
 # 务必使用bfs方式推进，不可堆太多任务栈
 # 放弃内存方案，全部使用数据库查询，每4s查询二三十条，怎么会想到全部加在内存里？
 # 问题待办：需要写一个线程单独负责写入，其他线程独立读取
+# 
+# DifferMemberData函数：没必要！SELECT DISTINCT 即可，还可以 ORDER BY 时间 ASC
 
 
-
-# 以下函数用于处理数据库提取的raw数据
-# def differMemberData(self, field_index: int, time_index: int, sqlite_result: dict, no_splice: bool = False) -> dict:
-#         '''queryMemberGroup内部函数，获取字典中指定字段数据，返回随时间的变化
-#         return {
-#             '%YY-%mm-%dd': value1,
-#             '%YY-%mm-%dd': value2,
-#             (value2≠value1)
-#             ...
-#         }
-#         '''
-#         data = {}
-#         latest_value = None
-#         for item in sqlite_result:
-#             time = item[time_index]
-#             condition_value= item[field_index]
-#             if no_splice:
-#                 # 不删除时间上的重复数据
-#                 data[time] = value
-#             else:
-#                 # 如果数据跟前面的不一样才记录
-#                 if condition_value!= latest_value:
-#                     latest_value = value
-#                     data[time] = value
-#         return data
-    
-#     def queryMemberGroup(self, user_id: str = None, group_id: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict: # 获取指定成员 + 小班的所有信息
-#         '''获取指定成员 + 小班的所有信息，若没有指定则返回所有MEMBERS表记录过的信息
-#         数据库MEMBER TABLE -> 内存member_dict'''
-#         release = False
-#         if not conn or not cursor:
-#             conn = self.connect(self.db_path)
-#             cursor = conn.cursor()
-#             release = True
-#         if not user_id and not group_id:
-#             # 获取所有成员信息
-#             result = cursor.execute(
-#                 f'''
-#                     SELECT DISTINCT
-#                         USER_ID,
-#                         GROUP_ID,
-#                     FROM MEMBERS
-#                 ''',
-#             ).fetchall()
-#             members = {}
-#             for item in result:
-#                 member = self.queryMemberInfo(item[0], item[1], conn, cursor)
-#                 members[item[0]] = member
-#             return members
-#         else: # 获取指定成员 + 小班的所有信息
-#             latest_data_time = cursor.execute(
-#                 f'''
-#                     SELECT
-#                         MAX(DATA_TIME)
-#                     FROM MEMBERS
-#                     WHERE USER_ID = ? AND GROUP_ID = ?
-#                 ''',
-#                 [user_id, group_id]
-#             ).fetchone()
-#             if not latest_data_time:
-#                 return {}
-#             latest_data_time = latest_data_time[0]
-#             # 获取最新数据（属性类）
-#             result_keys = [
-#                 'id',
-#                 'today_date',
-#                 'completed_times',
-#                 'duration_days',
-#                 'group_id',
-#                 'avatar',
-#             ]
-#             result = cursor.execute(
-#                 f'''
-#                     SELECT
-#                         USER_ID,
-#                         TODAY_DATE,
-#                         COMPLETED_TIMES,
-#                         DURATION_DAYS,
-#                         GROUP_ID,
-#                         AVATAR
-#                     FROM MEMBERS
-#                     WHERE USER_ID = ? AND GROUP_ID = ? AND DATA_TIME = ?
-#                 ''',
-#                 [user_id, group_id, latest_data_time]
-#             ).fetchone()
-#             member = dict(zip(result_keys, result))
-            
-#             # 获取历史数据集
-#             result = cursor.execute(
-#                 f'''
-#                     SELECT
-#                         TODAY_DATE,
-#                         NICKNAME,
-#                         GROUP_NICKNAME,
-#                         COMPLETED_TIME,
-#                         WORD_COUNT,
-#                         STUDY_CHEAT,
-#                         DURATION_DAYS,
-#                         COMPLETED_TIMES,
-#                         BOOK_NAME,
-#                         GROUP_NAME,
-#                     FROM MEMBERS
-#                     WHERE USER_ID = ? AND GROUP_ID = ? ORDER BY DATA_TIME ASC
-#                 ''',
-#                 [user_id, group_id]
-#             ).fetchall()
-#             if not result:
-#                 return {}
-#             member['nickname'] = self.differMemberData(1, 0, result)
-#             member['group_nickname'] = self.differMemberData(2, 0, result)
-#             member['completed_time'] = self.differMemberData(3, 0, result)
-#             member['word_count'] = self.differMemberData(4, 0, result)
-#             total_study_cheat = 0
-#             total_stay_days = 0
-#             total_completed_times = 0
-#             longest_stay_days = 0 # 最长停留天数
-#             longest_completed_times = 0
-#             for item in result:
-#                 total_study_cheat += item[5]
-#                 if item[6] > longest_stay_days:
-#                     longest_stay_days = item[6]
-#                     longest_completed_times = item[7]
-#                 else:
-#                     total_stay_days += longest_stay_days
-#                     total_completed_times += longest_completed_times
-#                     if longest_stay_days >= 10:
-#                         member['duration_completed'].append((longest_stay_days, longest_completed_times))
-#                     longest_stay_days = 0
-#                     longest_completed_times = 0
-#             # 最后一组数据
-#             total_stay_days += longest_stay_days
-#             total_completed_times += longest_completed_times
-#             if longest_stay_days >= 10:
-#                 member['duration_completed'].append((longest_stay_days, longest_completed_times))
-#             member['total_study_cheat'] = total_study_cheat
-#             member['total_stay_days'] = total_stay_days
-#             member['total_completed_times'] = total_completed_times
-#             # 按完成率排序
-#             member['duration_completed'] = sorted(member['duration_completed'], key=lambda x: x[1]/x[0], reverse=True)
-#             if release:
-#                 conn.close()
-#             return member
 
 
 class Filter:
@@ -249,6 +120,7 @@ class Filter:
         self.member_dict = []
         self.filter_log = []
         self.verdict_dict = []
+        self.personal_dict = [] # 缓存个人信息，避免重复请求
 
         # activate_groups内格式：shareKey:{tids, client_id, stop}
         # client_id: 连接该shareKey的客户端订阅的sse频道
@@ -262,115 +134,73 @@ class Filter:
 
 
     
-    def stop(self, shareKey) -> None:
+    def stop(self, shareKey: str = None) -> None:
         # 停止筛选，不再分开monitor和activate功能
+        if shareKey is None:
+            for shareKey in self.activate_groups:
+                self.stop(shareKey)
+            while self.autosave_is_running:
+                time.sleep(1) # 等待autosave线程退出
+            print('autosave已停止')
+            return
         if not self.activate_groups.get(shareKey, None):
             return # 筛选线程没有运行
         
         self.activate_groups[shareKey]['stop'] = True
         self.activate_groups[shareKey]['tids'].join()
-        self.sendlog(f'筛选线程已停止，shareKey = {shareKey}', self.activate_groups[shareKey]['client_socket'])
+        
         self.activate_groups.pop(shareKey)
         print(f'筛选线程已停止，shareKey = {shareKey}')
 
 
 
-    def info(self, uniqueId: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict:
-        '''查询【校牌+加入小班+加入10天以上班内主页】'''
-
-        
-        if not conn or cursor:
-            conn = sqlite3.connect(self.sqlite.db_path)
-            cursor = conn.cursor()
-        
-        # 先查询内存中是否有缓存（仅当日缓存有效）member_dict在start时初始化为空
-        today_date = time.strftime("%Y-%m-%d", time.localtime())
-        member_info = self.member_dict.get(uniqueId, None)
-        if not member_info or self.member_dict[uniqueId]['today_date'] != today_date:
-            # 缓存过期，再尝试数据库
-            member_info = self.sqlite.queryMemberGroup(uniqueId, conn, cursor)
-            if not member_info:
-                # 数据库中没有缓存，再去BCZ获取
-                member_info = self.bcz.getUserGroupInfo(uniqueId)
-                if not member_info:
-                    return None
-                self.sqlite.saveGroupInfo(member_dict['data']['list'], conn, cursor)
-            self.member_dict[uniqueId] = member_info
-        
-        # 再将每个组的信息按如上过程查询
-        for group_introduction in member['data']['list']:
-            if group_introduction['joinDays'] >= 10:
-                group_info = self.group_dict[group_introduction['id']]
-                if not group_info:
-                    group_info = self.sqlite.q
-                    if not group_info:
-        
-        
-
-
-        user_info = self.bcz.getUserInfo(uniqueId)
-        user_group_info = self.bcz.getUserGroupInfo(uniqueId)
-
-        groups_to_be_updated = []
-        for group in user_group_info:
-            if group["joinDays"] >= 10:
-                groups_to_be_updated.append(group)
-        groups_info = self.bcz.getGroupsInfo(groups_to_be_updated)
-        
-        # 将其他用户的信息先存进数据库，节省以后的查询
-        for group in groups_info:
-            for member in group["members"]:
-
-        # 将本用户的信息提取出来返回
-        member_dict = {}
-        for group in groups_info:
-            for member in group["members"]:
-                if member["uniqueId"] == uniqueId:
-                    member_dict.push({f'{group["id"]}', member})
-                    break
-        return member_dict
     def condition(member_dict: dict, refer_dict: dict, condition: dict) -> bool:
         '''条件判断，返回布尔值'''
         name = condition['name']
         member_value = member_dict.get(name, None)
         if member_value is None:    
             return False
-        refer_dict[name] = member_value
         value = condition['value']
         operator = condition['operator']
 
         if operator == "==":
             if member_value != value:
                 print(f'failed: {name}:{member_value} != {value}')
+                refer_dict[name] = f"{member_value} != {value}"
                 return False
             return True
         elif operator == "!=":
             if member_value == value:
                 print(f'failed: {name}:{member_value} == {value}')
+                refer_dict[name] = f"{member_value} == {value}"
                 return False
         elif operator == ">":
             if member_value <= value:
                 print(f'failed: {name}:{member_value} <= {value}')
+                refer_dict[name] = f"{member_value} <= {value}"
                 return False
             return True
         elif operator == "<":
             if member_value >= value:
                 print(f'failed: {name}:{member_value} >= {value}')
+                refer_dict[name] = f"{member_value} >= {value}"
                 return False
             return True
         elif operator == ">=":
             if member_value < value:
                 print(f'failed: {name}:{member_value} < {value}')
+                refer_dict[name] = f"{member_value} < {value}"
                 return False
             return True
         elif operator == "<=":
             if member_value > value:
                 print(f'failed: {name}:{member_value} > {value}')
+                refer_dict[name] = f"{member_value} > {value}"
                 return False
             return True
         
 
-    def check(self, member_dict: dict, week_info: dict,substrategy_dict :dict, authorized_token: str) -> dict:
+    def check(self, member_dict: dict, week_info: dict,substrategy_dict :dict, conn: sqlite3.Connection) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
         print (f'正在验证{member_dict["nickname"]},id = {member_dict["uniqueId"]}')
@@ -390,9 +220,18 @@ class Filter:
                 condition['name'] = 'finishingRate'
                 finishing_rate_condition = condition
                 continue
+            if condition_name == "daka_history_joinDays":
+                condition['name'] = 'joinDays'
+                join_days_condition = condition
+                continue
+            if condition_name == "zaokaRate":
+                zaoka_rate = condition
+            if condition_name == "zaokaDays":
+                zaoka_days = condition
+
                 
 
-            # 【1】基础信息
+            # 【1】班内主页基础信息
             member_dict['finishingRate'] = member_dict['completedTimes'] / member_dict['durationDays']
             if condition_name == "completedTime"\
                 or condition_name == "todayStudyCheat"\
@@ -403,7 +242,7 @@ class Filter:
                     break # 以上都是可以直接查表判断
                 else:continue # 越复杂的判断越靠后
             
-            # 【2】历史信息
+            # 【2】本班两周内历史信息
             # 先获取今日星期，然后计算从该成员上周一到今天打卡天数和漏卡天数，注意上周一之后才入班的情况单独处理
             # week_info示例:['05-24','05-25','05-27']
             weekday_count = int(time.strftime("%w"))
@@ -418,12 +257,35 @@ class Filter:
                     accept = 0
                     break
                 else:continue
+
+            # 【3】外部查询（黑名单）
+            member_dict['blacklisted'] = self.sqlite.queryBlacklist(member_dict['uniqueId'], conn)
+            if condition_name == "blacklisted":
+                if not self.condition(member_dict, refer_dict, condition):
+                    accept = 0
+                    break    
+                else:continue
+
                     
         
-            # 【3】个人信息
+            # 【3】个人校牌信息
             # 调用BCZ接口获取个人信息，并缓存到personal_dict
             # 相当于点击了校牌
-            personal_dict = self.bcz.getUserInfo(member_dict['uniqueId'])
+            # 每次调用bcz接口后需要等待0.5s
+            
+            today_date = time.strftime("%m-%d")
+            personal_dict = self.sqlite.getPersonalInfo(member_dict['uniqueId'], today_date, conn)
+            
+            if personal_dict is None:
+                personal_tosave = True
+                personal_dict = self.bcz.getUserInfo(member_dict['uniqueId'])
+                group_list = self.bcz.getUserGroupInfo(member_dict['uniqueId'])
+                personal_dict['group_list'] = group_list
+                time.sleep(0.5)
+            else:
+                personal_tosave = False
+                group_list = personal_dict.get('group_list', None)
+
 
             if personal_dict["tag"] != -1 and personal_dict["tag"] != 3: # 3靠谱 -1未组队
                 personal_dict["dependability"] = 1 
@@ -442,28 +304,67 @@ class Filter:
                     break
                 else:continue
                 
-            # 【4】小班信息
-            group_list = self.bcz.getGroupInfo(member_dict['groupId'])
-            if condition_name == "daka_history_joinDays":# 下面的缩进块是用来找出self.their_classes中满足指定天数的
+            # 【4】校牌小班信息
+            if condition_name == "group_daka_history":# 下面的缩进块是用来找出self.their_classes中满足指定天数的
                 # 要求：完成率finishing_rate_condition，加入天数other_groups_join_days
 
-                join_days_condition = condition
-                join_days_condition['name'] = 'joinDays'
 
-                member_dict['daka_history'] = 0
+                member_dict['group_daka_history'] = 0
                 for group_info in group_list:
                     if self.condition(group_info, refer_dict, finishing_rate_condition)\
                         and self.condition(group_info, refer_dict, join_days_condition):
-                            member_dict['daka_history'] = 1
+                            member_dict['group_daka_history'] = 1
                             break
-                if not self.condition(member_dict, refer_dict, {'name': 'daka_history', 'value': 1, 'operator': '==', 'equality': True}):
+                if not self.condition(member_dict, refer_dict, {'name': 'group_daka_history', 'value': 1, 'operator': '==', 'equality': True}):
+                    accept = 0
+                    break
+                else:continue
+            
+            # 【5】最长小班主页信息
+            # 数据库历史检测
+            group_history = self.sqlite.queryLongestInfo(member_dict['uniqueId'], member_dict['group_id'], conn)# 满足条件的最近的数据
+            group_tosave = False
+            # 最早的有效日期是3天前
+            valid_date = (datetime.datetime.now() - datetime.timedelta(days = 3)).strftime("%m-%d")
+            if condition_name == "personal_daka_history" and group_history["latestRecord"] <= valid_date:
+                # 查询group_list中的最后一个
+
+                group_dict = self.bcz.getGroupInfo(group_list[-1]['groupId'])
+                group_tosave = True
+
+                group_history['joinDays'] = max(group_history['joinDays'], group_dict['joinDays'])
+                group_history['completedTimes'] = max(group_history['completedTimes'], group_dict['completedTimes'])
+                group_history['finishingRate'] = group_history['completedTimes'] / group_history['durationDays']
+
+
+                member_dict['personal_daka_history'] = 1\
+                    if self.condition(group_history, refer_dict, finishing_rate_condition)\
+                and self.condition(group_history, refer_dict, join_days_condition) else 0
+            
+                if not self.condition(member_dict, refer_dict, {'name': 'personal_daka_history', 'value': 1, 'operator': '==', 'equality': True}):
                     accept = 0
                     break
                 else:continue
                 
+            if condition_name == "zaoka_history":
+                if self.condition(group_history, refer_dict, zaoka_days):
+                    print(f"数据不足{zaoka_days.get('value')}天，不进行判断")
+                    continue
+                else:
+                    if not self.condition(group_history, refer_dict, zaoka_rate):
+                        accept = 0
+                        break
+                    else:continue
+                    
         print(refer_dict)
         print('\n\n\n')
-        return {'result': accept,'reason': '','refer_dict': refer_dict}
+        result = {'result': accept, 'detail': refer_dict}
+        
+        if personal_tosave: # 有新的缓存数据
+            result['personal_dict'] = personal_dict
+        if group_tosave:
+            result['group_dict'] = group_dict
+        return result
 
 
 # strategy_class列表（strategy_dict是其中指定字典）
@@ -514,23 +415,48 @@ class Filter:
         self.activate_groups[share_key][message_id] = result
         
     
-    def sendLog(self, message:str, share_key: str, await_time: int = 0) -> str:
+    def sendLog(self, message: dict, share_key: str, filter_log_tosave: list, conn: sqlite3.Connection, await_time: int = 0) -> str:
         '''向启动本筛选器的客户端发送日志，若await_time不为0，则等待若干秒'''
 
+        connected = self.activate_groups[share_key]['connected']
         client_id = self.activate_groups[share_key]['client_id']
-        message_id = int(time.time())
+
+        if connected == True and not self.sse.is_connected(client_id):
+            print("客户端已断开连接，记录最后时间")
+            
+            time_stamp = time.time()# 所有时间戳以s为单位
+            filter_log_tosave.append({
+                'uniqueId':client_id,
+                'datetime':time_stamp,
+                'detail':f'客户端已断开连接，记录最后时间',
+            })
+            connected = False
+            self.activate_groups[share_key]['connected'] = False
+            return ''
+        
+        if not connected and self.sse.is_connected(client_id):
+            print("客户端已连接，发送历史记录")
+            client_date = self.sqlite.queryFilterLog(user_id = client_id, conn = conn) # 客户端已读日志的时间戳
+            message["history"] = self.sqlite.queryFilterLog(time_start = client_date, time_end = time_stamp, conn = conn) # 客户端已读日志的时间戳
+            connected = True
+            self.activate_groups[share_key]['connected'] = True
+
+        if not connected:
+            return ''
+        
+        message_str = json.dumps(message)
         self.sse.publish(channel = client_id, message = json.dumps({
             "type": "log",
             "await_time": await_time,
             "id": # 每个信息的id，暂用时间戳
-            message_id,
+            time_stamp,
             "value": f'''
             <div class="log-item">
                 <div class="log-time">
-                    <span class="log-time-value">{message_id}</span>
+                    <span class="log-time-value">{time_stamp}</span>
                 </div>
                 <div class="log-value">
-                    <span class="log-value-value">{message}</span>
+                    <span class="log-value-value">{message_str}</span>
                 </div>
                 <div class="log-member">
                     <span class="log-member-value">测试用，格式稍后补充</span>
@@ -540,10 +466,10 @@ class Filter:
             "confirm_value":f'''
             <div class="log-item">
                 <div class="log-time">
-                    <span class="log-time-value">{message_id}</span>
+                    <span class="log-time-value">{time_stamp}</span>
                 </div>
                 <div class="log-value">
-                    <span class="log-value-value">{message}</span>
+                    <span class="log-value-value">{message_str}</span>
                 </div>
                 <div class="log-member">
                     <span class="log-member-value">这是confirm</span>
@@ -554,7 +480,7 @@ class Filter:
         }))
         for i in range(await_time):
             time.sleep(1)
-            result = self.activate_groups[share_key].get(message_id, None)
+            result = self.activate_groups[share_key].get(time_stamp, None)
             if (result != None):
                 return result 
 
@@ -568,25 +494,28 @@ class Filter:
         self.autosave_is_running = True
         while(self.activate_groups):
             time.sleep(self.autosave_interval)
+            conn = self.sqlite.connect()
             with self.lock:
-                self.sqlite.saveMemberGroup(self.member_dict)
+                self.sqlite.saveGroupInfo([self.member_dict], conn = conn)
                 self.sqlite.saveStrategyVerdict(self.verdict_dict)
                 self.sqlite.saveFilterLog(self.filter_log)
+                self.sqlite.savePersonalInfo(self.personal_dict)
                 self.member_dict = []
                 self.verdict_dict = []
                 self.filter_log = []
+                self.personal_dict = [] # 缓存个人信息，避免重复请求
+            conn.close()
         self.autosave_is_running = False
 
-    def run(self, authorized_token: str,strategy_index:int, share_key: str, strategy_dict: dict, client_socket: Sockets) -> None:
+    def run(self, authorized_token: str,strategy_index:int, share_key: str, strategy_dict: dict) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
 
-        today_date = datetime.datetime.now().strftime("%Y-%m-%d")
-        delay1 = strategy_dict.get("delay1", 3)
-        delay2 = strategy_dict.get("delay2", 3) # 在小班档案页面和成员管理页面分别停留的时间，单位s
-        if (delay1 < 3): delay1 = 3 # 保护措施
-        if (delay2 < 3): delay2 = 3 
+        today_date = datetime.datetime.now().strftime("%m-%d")
+        delay = 3
+        delay_delta = 3
+
         
 
         # 暂时不实现自动启动时间，全部手动启动
@@ -596,141 +525,177 @@ class Filter:
         kick_list = []
         member_dict_temp = {} # 中途变量 
         
-        prev_member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+        
+        member_list = [] # 当前成员列表
+        member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+        group_id = member_dict_temp['id']
+        for member_dict in member_dict_temp["members"]:
+                uniqueId = member_dict['uniqueId']
+                member_list.append(uniqueId) # 记录当前成员列表
+
+        group_count_limit = member_dict_temp['count_limit']
+        
+        check_count = 0 # 检查次数，标志成员更新状态
         while self.activate_groups[share_key]['stop'] == False:
             
             
-            time.sleep(delay1)
+            time.sleep(delay)
 
             # 线程上传空间，操作commit后放入共享空间然后清空
             member_dict_tosave = []
             verdict_dict_tosave = []
             filter_log_tosave = []
-            member_list = {} # 成员变动列表
-            conn, cursor = self.sqlite.getConnection() # 方便复用
+            personal_dict_tosave = []
+            conn = self.sqlite.connect() # 每次循环都重新连接数据库
 
 
-            # 【开始筛选】
+            # 【开始筛选，获取信息】
             # 点击成员管理页面
-            member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token) # 包含现有成员信息
-            week_daka_info = self.bcz.getGroupDakaHistory(share_key) # 包含本周和上周的打卡信息
-            # 合并内存中的成员信息
+            member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token) # 包含现有成员信息，结构：{基本信息,"members":{"uniqueId":...}}
+            member_dict_temp["week_daka_info"] = self.bcz.getGroupDakaHistory(share_key) # 本周和上周打卡信息，结构：{12345678:["05-23","05-25",...],...}
             # 先将所有获取到的member储存起来，在autosave时统一保存到数据库
-            # 需要处理：数据库的主键问题，到时要写联合主键（又踩坑）
             member_dict_tosave.append(member_dict_temp)
-
+            # 需要处理：数据库的主键问题，到时要写联合主键（又踩坑）
+            
+            
+            # 【遍历，决策】
+            # 已判断、接受or踢出
+            
+            check_count += 1
+            newbies_count = 0
             for personal_dict_temp in member_dict_temp["members"]:
                 uniqueId = personal_dict_temp['uniqueId']
-                week_daka_info_temp = week_daka_info.get(uniqueId, None)
+                    
+                if self.activate_groups[share_key]['stop'] == True:
+                    break
                 if uniqueId not in member_list:
-                    # 内存加速，只处理新增成员
-                    if self.activate_groups[share_key]['stop'] == True:
-                        break
-                    member_list[uniqueId] = 1
+                    newbies_count += 1 # 新增成员
+                    member_list[uniqueId] = check_count # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
                     
                     
 
                     # 对每个成员，先判断是否已决策（仅本次运行期间有效，局部储存）
                     # verdict 含义：None-未决策，0...n-已决策，符合子条目的序号（越小越优先）
-                    verdict = self.sqlite.getStrategiesVerdict(uniqueId, strategy_index, conn, cursor)
-
+                    
+                    verdict = self.sqlite.getStrategiesVerdict(uniqueId, strategy_index, conn)
+                    result_code = 0
                     if not verdict:
                         # 先检查是否满足条件，满足则堆入待决策列表
-                        results = []
+                        
                         for index, sub_strat_dict in strategy_dict["subItems"].items():
-                            result = self.check(personal_dict_temp, week_daka_info_temp, sub_strat_dict, authorized_token)
+                            
+                            result = self.check(personal_dict_temp, member_dict_temp["week_daka_info"].get(uniqueId, None), sub_strat_dict, authorized_token, conn)
+                            personal_dict_tosave.append(result['personal_dict'])
+                            member_dict_tosave.append(result['group_dict'])
                             if result['result'] == 1:
                                 # 符合该子条目
-                                verdict_dict_tosave[uniqueId] = index
+                                verdict = verdict_dict_tosave[uniqueId] = index
                                 filter_log_tosave.append({
                                     'uniqueId':uniqueId,
-                                    'shareKey':share_key,
+                                    'groupId':group_id,
                                     'datetime':datetime.datetime.now(),
                                     'strategy':strategy_dict['name'],
                                     'subStrategy':sub_strat_dict['name'],
                                     'detail':result,
                                     'minPeople':sub_strat_dict['minPeople'],
-                                    'result':sub_strat_dict['operation'],
+                                    'result':f'成员加入，{sub_strat_dict['operation']}',
                                 })
-                                if sub_strat_dict['operation'] == '拒绝':
-                                    kick_list.append({"uniqueId":uniqueId,"verdict":index})
                                 break
-                    elif strategy_dict["subItems"][this_verdict_dict[uniqueId]]['operation'] == '拒绝':
-                        # 从this_verdict_dict中读取结果
-                        kick_list.append({"uniqueId":uniqueId,"verdict":index})
-            for personal_dict_temp in prev_member_dict_temp["members"]:
+                        if result_code == 0:
+                            print("没有符合条件的子条目，默认接受，请检查策略配置")
+                            filter_log_tosave.append({
+                                    'uniqueId':uniqueId,
+                                    'groupId':group_id,
+                                    'datetime':datetime.datetime.now(),
+                                    'strategy':"",
+                                    'subStrategy':"",
+                                    'detail': None,
+                                    'minPeople':0,
+                                    'result':'成员加入，不符合任何条件，默认接受',
+                                })
+                            continue
+                    result_code = 1 if strategy_dict['subItems'][verdict]['operation'] == '接受' else 2
+                    # 从this_verdict_dict中读取结果
+                    if result_code == 2:
+                        # 加入候补踢出列表，按小到大顺序插入列表
+                        
+                        inserted = 0
+                        for item_index, item in enumerate(kick_list):
+                            if item["verdict"] >= verdict:
+                                # 插入到该位置
+                                kick_list.insert(item_index, {"uniqueId":uniqueId,"verdict":verdict})
+                                inserted = 1
+                                break
+                        if inserted == 0:
+                            # 未找到合适位置，直接加入末尾
+                            kick_list.append({"uniqueId":uniqueId,"verdict":verdict})
 
-                if self.activate_groups[share_key]['stop'] == True:
-                    break
-                uniqueId = personal_dict_temp['uniqueId']
-                if uniqueId not in member_list:
+
+            # 【退班更新】
+            for uniqueId, value in member_list.items():
+                if value != check_count:
                     # 成员退出
                     filter_log_tosave.append({
                         'uniqueId':uniqueId,
-                        'shareKey':share_key,
+                        'groupId':group_id,
                         'datetime':datetime.datetime.now(),
                         'strategy':'',
                         'subStrategy':'',
+                        'detail': {"check_count": value},
                         'result':'成员退出/手动踢出',
                     })
-                else:
                     member_list.pop(uniqueId)
-            # 获取新加入的成员
-            for personal_dict_temp in member_list:
-                if self.activate_groups[share_key]['stop'] == True:
-                    break
-                filter_log_tosave.append({
-                    'uniqueId':uniqueId,
-                    'shareKey':share_key,
-                    'datetime':datetime.datetime.now(),
-                    'strategy':'',
-                    'subStrategy':'',
-                    'result':'成员加入',
-                })
-
-            # 排序，优先级高的先踢(执行)
+                    
+            # 【踢人】
+            # 序号小的先踢(执行)
             # kick_list 候补踢出列表，remove_list 立刻踢出列表
-            kick_list = sorted(kick_list, key = itemgetter("verdict"), reverse = False)
-            current_people_cnt = member_dict_temp['memberCount']
-            remain_people_cnt = current_people_cnt
+            minPeople_min = 200
+            remain_people_cnt = member_cnt = member_dict_temp['memberCount']
             remove_list = []
             for index, this_verdict_dict in enumerate(kick_list):
                 sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
+                minPeople_min = min(minPeople_min, sub_strat_dict["minPeople"]) # 取最小的minPeople
                 if sub_strat_dict["minPeople"] < remain_people_cnt:
                     remain_people_cnt -= 1
-                    remove_list.append(this_verdict_dict['uniqueId'])
+                    uniqueId = this_verdict_dict['uniqueId']
+                    remove_list.append(uniqueId)
                     filter_log_tosave.append({
                         'uniqueId':uniqueId,
-                        'shareKey':share_key,
+                        'groupId':group_id,
                         'datetime':datetime.datetime.now(),
                         'strategy':strategy_dict['name'],
                         'subStrategy':sub_strat_dict['name'],
                         'result':'剩余人数满足要求，踢出小班'
                     })
-                    
+                    member_list.pop(uniqueId)
                     
             # 踢人
             self.bcz.removeMembers(remove_list, share_key, authorized_token)
 
 
-            # 保存到共享空间
+            # 【保存数据】到共享空间
+            self.sendLog(json.dumps(filter_log_tosave), share_key) # 向客户端发送日志
             with self.lock:
                 self.member_dict.append(member_dict_tosave)
+                self.personal_dict.append(personal_dict_tosave) 
                 if self.verdict_dict.get(strategy_index) == None:
                     self.verdict_dict[strategy_index] = []
                 self.verdict_dict[strategy_index].append(verdict_dict_tosave)
                 self.filter_log.append(filter_log_tosave)
-            if self.autosave_is_running == False:
-                threading.Thread(target=self.autosave).start()
+                if self.autosave_is_running == False:
+                    self.autosave_is_running = True
+                    threading.Thread(target=self.autosave).start()
 
-            self.sqlite.closeConnection(conn, cursor) # 关闭数据库连接
-            # 点击小班档案页面
-            time.sleep(delay2)
-            prev_member_dict_temp = member_dict_temp.copy()
+            conn.commit() 
+            conn.close() # 关闭数据库连接
+
+            # 根据加入人数多少，调整延迟
+            # 例如最少是196，则198或以上时延迟减少，否则增加
+            if member_cnt > min(group_count_limit, minPeople_min + 1): # 正在筛选，延迟减少
+                delay = max(delay - delay_delta, 3)
+            else:
+                delay = min(delay + delay_delta, 60) # 筛选暂停，延迟增加
             
-
-
-
 
     def start(self, authorized_token: str, share_key: str, strategy_index: int, client_id: str) -> None:
         # 是否验证？待测试，如果没有那就可怕了
@@ -745,7 +710,7 @@ class Filter:
         if not strategy_dict:
             print(f"策略索引无效")
         else:
-            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, self.config.main_token, share_key, strategy_dict, client_socket))
+            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, self.config.main_token, share_key, strategy_dict))
             self.activate_groups[share_key]['tids'].start()
 
 

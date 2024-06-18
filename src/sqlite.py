@@ -73,6 +73,7 @@ class SQLite:
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
                 DATA_TIME TEXT                      -- 记录时间
+                PRIMARY KEY (USER_ID, TODAY_DATE, GROUP_ID)
             );''',
             '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
                 USER_ID INTEGER UNIQUE,             -- 用户ID   *
@@ -113,21 +114,35 @@ class SQLite:
                 FAVORITE INTEGER,                   -- 收藏标识
                 VALID INTEGER                       -- 是否有效(0:已删除, 1:有效, 2:无效)
             );''',
+            '''CREATE TABLE IF NOT EXISTS PERSONAL_INFO (                -- 个人信息表
+                UNIQUE_ID INTEGER,                  -- 用户ID
+                DATETIME TEXT,                      -- 记录日期和时间
+                DESKMATE_DAYS INTEGER,              -- 同桌天数
+                DEPENDABILITY INTEGER,              -- 靠谱指数
+                GROUP_ID_LIST TEXT,                 -- 加入的小班列表
+                GROUP_JOIN_DAYS_LIST TEXT,          -- 加入小班的天数列表
+                GROUP_FINISHING_RATE_LIST TEXT,     -- 打卡率列表
+            );''',
+            '''CREATE TABLE IF NOT EXISTS BLACKLIST (                   -- 黑名单表
+                UNIQUE_ID INTEGER,                  -- 用户ID
+                DETAIL TEXT,                        -- 备注
+            );''',
             '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
-                ID INTEGER KEY AUTOINCREMENT,
-                UNIQUE_ID TEXT,                      -- 用户ID
-                GROUP_ID TEXT,                      -- 小班ID
-                DATETIME TEXT,                       -- 操作时间
+                UNIQUE_ID TEXT,                      -- 用户ID/client ID
+                GROUP_ID TEXT,                       -- 小班ID
+                DATETIME TEXT,                       -- 操作日期时间
                 STRATEGY TEXT,                       -- 子策略属于的策略名称
                 SUB_STRATEGY TEXT,                   -- 执行的子策略名称
-                DETAIL TEXT                          -- 筛选细节
+                RESULT TEXT,                         -- 筛选结果（中文）
+                DETAIL TEXT                          -- 筛选细节（判断依据）
             );''',
             '''CREATE TABLE IF NOT EXISTS STRATEGY_VERDICT (                   -- 成员在指定策略下的判定结果表，有效期24h
-                UNIQUE_ID TEXT,                      -- 唯一标识
-                DATETIME TEXT,                       -- 记录时间
-                STRATEGY TEXT,                       -- 策略名称                
-                SUB_STRATEGY TEXT,                   -- 子策略名称
-                DETAIL TEXT                          -- 策略执行结果
+                UNIQUE_ID TEXT,                      -- 用户ID
+                STRATEGY_ID,                         -- 策略ID
+                SUB_STRATEGY_ID,                     -- 符合的子策略ID
+                DATETIME TEXT,                       -- 记录日期和时间
+                DETAIL TEXT                          -- 判断依据
+                PRIMARY KEY (UNIQUE_ID, STRATEGY_ID)
             );''',
             '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,   -- 头像ID
@@ -187,20 +202,23 @@ class SQLite:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
         return False
 
-    def saveGroupInfo(self, group_list: list[dict], temp: bool = False, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None ) -> None:
+    def saveGroupInfo(self, groups: list[dict], temp: bool = False, conn: sqlite3.Connection = None) -> None:
         '''保存小班数据 + 保存成员信息'''
-        if not cursor:
-            # 筛选时读写较多，因此重用连接
+        if not conn:
+            temp_conn = True
+            # 筛选时同批次内读取频繁，因此由调用者创建连接，批次结束后释放
             conn = self.connect(self.db_path)
-            cursor = conn.cursor()
-        if temp:
+        else:
+            temp_conn = False
+        cursor = conn.cursor()
+
+        if temp: # 只保存成员信息，不保存小班信息
             for group in groups:
                 if group.get('exception'):
                     continue
-                self.saveMemberInfo(group_info['members'], group_info['groupInfo']['id'], temp, cursor, conn)
+                self.saveMemberInfo(group['members'], group['groupInfo']['id'], temp, conn)
             return
-        conn = self.connect(self.db_path)
-        cursor = conn.cursor()
+        
         for group in groups:
             if group.get('exception'):
                 continue
@@ -225,18 +243,21 @@ class SQLite:
                     group['data_time'],
                 )
             )
-            conn.commit()
             self.saveMemberInfo(group['members'])
-        conn.close()
+        conn.commit()
+        if temp_conn:
+            conn.close()
 
-    def saveMemberInfo(self, members: list, temp: bool = False, cursor: sqlite3.Cursor = None, conn: sqlite3.Connection = None) -> None:
+    def saveMemberInfo(self, members: list, temp: bool = False, conn: sqlite3.Connection = None) -> None:
         '''仅保存成员详情'''
-        release = False
-        if not cursor:
-            # 筛选时读写较多，因此重用连接
+        if not conn:
+            temp_conn = True
+            # 筛选时同批次内读取频繁，因此由调用者创建连接，批次结束后释放
             conn = self.connect(self.db_path)
-            cursor = conn.cursor()
-            release = True
+        else:
+            temp_conn = False
+        cursor = conn.cursor()
+
         table_name = 'MEMBERS'
         if temp:
             table_name = 'T_' + table_name
@@ -266,7 +287,7 @@ class SQLite:
             )
             # 有个备注：踢出操作的有效期必须是当次，否则会影响手动通过的有效性
         conn.commit()
-        if release:
+        if temp_conn:
             conn.close()
 
     def addObserveGroupInfo(self, groups: list[dict]) -> None:
@@ -530,160 +551,180 @@ class SQLite:
                 f'SELECT COUNT(*) FROM MEMBERS'
             )[0][0]
 
-    def differMemberData(self, field_index: int, time_index: int, sqlite_result: dict, no_splice: bool = False) -> dict:
-        '''queryMemberGroup内部函数，获取字典中指定字段数据，返回随时间的变化
-        return {
-            '%YY-%mm-%dd': value1,
-            '%YY-%mm-%dd': value2,
-            (value2≠value1)
-            ...
-        }
-        '''
-        data = {}
-        latest_value = None
-        for item in sqlite_result:
-            time = item[time_index]
-            value = item[field_index]
-            if no_splice:
-                # 不删除时间上的重复数据
-                data[time] = value
-            else:
-                # 如果数据跟前面的不一样才记录
-                if value != latest_value:
-                    latest_value = value
-                    data[time] = value
-        return data
-    
-    def queryMemberGroup(self, user_id: str = None, group_id: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> dict: # 获取指定成员 + 小班的所有信息
-        '''获取指定成员 + 小班的所有信息，若没有指定则返回所有MEMBERS表记录过的信息
-        数据库MEMBER TABLE -> 内存member_dict'''
-        release = False
-        if not conn or not cursor:
-            conn = self.connect(self.db_path)
-            cursor = conn.cursor()
-            release = True
-        if not user_id and not group_id:
-            # 获取所有成员信息
-            result = cursor.execute(
-                f'''
-                    SELECT DISTINCT
-                        USER_ID,
-                        GROUP_ID,
-                    FROM MEMBERS
-                ''',
-            ).fetchall()
-            members = {}
-            for item in result:
-                member = self.queryMemberInfo(item[0], item[1], conn, cursor)
-                members[item[0]] = member
-            return members
-        else: # 获取指定成员 + 小班的所有信息
-            latest_data_time = cursor.execute(
-                f'''
-                    SELECT
-                        MAX(DATA_TIME)
-                    FROM MEMBERS
-                    WHERE USER_ID = ? AND GROUP_ID = ?
-                ''',
-                [user_id, group_id]
-            ).fetchone()
-            if not latest_data_time:
-                return {}
-            latest_data_time = latest_data_time[0]
-            # 获取最新数据（属性类）
-            result_keys = [
-                'id',
-                'today_date',
-                'completed_times',
-                'duration_days',
-                'group_id',
-                'avatar',
-            ]
-            result = cursor.execute(
-                f'''
-                    SELECT
-                        USER_ID,
-                        TODAY_DATE,
-                        COMPLETED_TIMES,
-                        DURATION_DAYS,
-                        GROUP_ID,
-                        AVATAR
-                    FROM MEMBERS
-                    WHERE USER_ID = ? AND GROUP_ID = ? AND DATA_TIME = ?
-                ''',
-                [user_id, group_id, latest_data_time]
-            ).fetchone()
-            member = dict(zip(result_keys, result))
-            
-            # 获取历史数据集
+        
+    def queryLongestInfo(self, unique_id: str, zaoka_time: str, wanka_time:str, conn: sqlite3.Connection) -> dict:
+        '''获取指定成员数据库中（可推断的）最长停留天数和完成率、最长满卡天数、最近60天早卡晚卡和午卡数量'''
+        # 和 saveGroupsInfo 功能相对，但这是以成员为单位，而不是以小班为单位
+        cursor = conn.cursor()
+        # 先获取这个成员的小班列表
+        group_list = cursor.execute(
+            f'SELECT DISTINCT GROUP_ID FROM MEMBERS WHERE USER_ID = ?',
+            [unique_id]
+        ).fetchall()
+        # 遍历小班列表，获取最长停留天数和完成率、最长完成次数
+        longest_stay_days = 0
+        longest_completed_times = 0
+        for group_id in group_list:
             result = cursor.execute(
                 f'''
                     SELECT
                         TODAY_DATE,
-                        NICKNAME,
-                        GROUP_NICKNAME,
                         COMPLETED_TIME,
-                        WORD_COUNT,
-                        STUDY_CHEAT,
                         DURATION_DAYS,
                         COMPLETED_TIMES,
-                        BOOK_NAME,
-                        GROUP_NAME,
+                        WORD_COUNT,
                     FROM MEMBERS
                     WHERE USER_ID = ? AND GROUP_ID = ? ORDER BY DATA_TIME ASC
-                ''',
-                [user_id, group_id]
+                ''',# TODAY_DATE和WORD_COUNT暂时没用到
+                [unique_id, group_id[0]]
             ).fetchall()
-            if not result:
-                return {}
-            member['nickname'] = self.differMemberData(1, 0, result)
-            member['group_nickname'] = self.differMemberData(2, 0, result)
-            member['completed_time'] = self.differMemberData(3, 0, result)
-            member['word_count'] = self.differMemberData(4, 0, result)
-            total_study_cheat = 0
-            total_stay_days = 0
-            total_completed_times = 0
+            zaoka_cnt = midka_cnt = wanka_cnt = 0
             longest_stay_days = 0 # 最长停留天数
             longest_completed_times = 0
+            longest_manka_days = 0 # 最长满卡天数
+            latest_date = "00-00"
+            time_stamp = time.time()
             for item in result:
-                total_study_cheat += item[5]
-                if item[6] > longest_stay_days:
-                    longest_stay_days = item[6]
-                    longest_completed_times = item[7]
+                today_date = item[0]
+                completed_time = item[1]
+                duration_days = item[2]
+                completed_times = item[3]
+                word_count = item[4]
+
+                latest_date = max(latest_date, today_date)
+                if duration_days == 1 or time_stamp - completed_time < 86400: # 入班第一天或今天
+                    continue
+                # 两分钟才刷新，故减120s
+                daka_hour = max(completed_time % 86400 - 120, 0) / 3600
+                if daka_hour < zaoka_time:
+                    zaoka_cnt += 1
+                elif daka_hour >= wanka_time: 
+                    wanka_cnt += 1
                 else:
-                    total_stay_days += longest_stay_days
-                    total_completed_times += longest_completed_times
-                    if longest_stay_days >= 10:
-                        member['duration_completed'].append((longest_stay_days, longest_completed_times))
-                    longest_stay_days = 0
-                    longest_completed_times = 0
-            # 最后一组数据
-            total_stay_days += longest_stay_days
-            total_completed_times += longest_completed_times
-            if longest_stay_days >= 10:
-                member['duration_completed'].append((longest_stay_days, longest_completed_times))
-            member['total_study_cheat'] = total_study_cheat
-            member['total_stay_days'] = total_stay_days
-            member['total_completed_times'] = total_completed_times
-            # 按完成率排序
-            member['duration_completed'] = sorted(member['duration_completed'], key=lambda x: x[1]/x[0], reverse=True)
-            if release:
-                conn.close()
-            return member
-
-    def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> None:
-        '''保存筛选日志，详情见filter.py'''
-        conn = self.connect(self.db_path)
-
-    def queryFilterLog(self, user_id: str = None, group_id: str = None, today_date: str = None, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
-        '''获取筛选日志，详情见filter.py'''
-
-    def queryStrategyVerdict(self, strategy_id: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> list:
-        '''获取策略审核结果，详情见filter.py'''
-
-    def saveStrategyVerdict(self, strategy_id: str, verdict: str, conn: sqlite3.Connection = None, cursor: sqlite3.Cursor = None) -> None:
-        '''保存策略审核结果，详情见filter.py'''
+                    midka_cnt += 1
+                    
+                if duration_days > longest_stay_days:
+                    longest_stay_days = duration_days
+                    longest_completed_times = completed_times
+                if duration_days == completed_times and duration_days > longest_manka_days:
+                    longest_manka_days = duration_days
+                    
+            return {"joinDays": longest_stay_days,
+                     "completedTimes": longest_completed_times,
+                       "mankaDays": longest_manka_days,
+                         "zaokaDays": zaoka_cnt, # 正在使用
+                            "recordedDays": zaoka_cnt + midka_cnt + wanka_cnt, # 正在使用
+                                "latestRecord": latest_date, # 正在使用
+                                    "finishingRate": longest_completed_times / longest_stay_days if longest_stay_days > 0 else 0 # 正在使用
+                                      }
         
+    def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection) -> None:
+        '''保存筛选日志，详情见filter.py'''
+        # 结构实例
+        # filter_log_tosave.append({
+        #     'uniqueId':uniqueId,
+        #     'groupId':group_id,
+        #     'datetime':datetime.datetime.now(),
+        #     'strategy':strategy_dict['name'],
+        #     'subStrategy':sub_strat_dict['name'],
+        #     'result':'剩余人数满足要求，踢出小班'
+        # })
+        cursor = conn.cursor()
+        for filter_log in filter_log_list:
+            cursor.execute(
+                f'INSERT INTO FILTER_LOG (UNIQUE_ID, GROUP_ID, DATETIME, STRATEGY, SUB_STRATEGY, DETAIL, RESULT) VALUES (?,?)',
+                (filter_log['uniqueId'], filter_log['groupId'], filter_log['datetime'], filter_log['strategy'], filter_log['subStrategy'], filter_log['detail'], filter_log['result'])
+                )
+        conn.commit()
+        
+
+    def queryFilterLog(self, time_start: int, time_end: int, conn: sqlite3.Connection, user_id: str = None, group_id: str = None) -> list:
+        '''获取筛选日志，详情见filter.py'''
+        cursor = conn.cursor()
+        if user_id and group_id:
+            cursor.execute(
+                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ? AND GROUP_ID = ?',
+                (time_start, time_end, user_id, group_id)
+            )
+        elif user_id:
+            cursor.execute(
+                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ?',
+                (time_start, time_end, user_id)
+            )
+        elif group_id:
+            cursor.execute(
+                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND GROUP_ID = ?',
+                (time_start, time_end, group_id)
+            )
+        else:
+            cursor.execute(
+                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ?',
+                (time_start, time_end)
+            )
+        result = cursor.fetchall()
+        return result
+
+    def queryStrategyVerdict(self, strategy_id: int, unique_id: str, conn: sqlite3.Connection) -> list:
+        '''获取策略审核结果，详情见filter.py'''
+        cursor = conn.cursor()
+        cursor.execute(
+            f'SELECT SUB_STRATEGY_INDEX FROM STRATEGY_VERDICT WHERE STRATEGY_ID = ? AND UNIQUE_ID = ?',
+            (strategy_id, unique_id)
+        )
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            return None
+
+    
+    def saveStrategyVerdict(self, verdict: dict, conn: sqlite3.Connection) -> None:
+        '''保存策略审核结果，详情见filter.py'''
+        # verdict = {strategy_id: {uniqueId: 符合的sub_strategy_index}}
+        # 在StrategyVerdict表中，主键是uniqueId和strategy_id，值是verdict
+        cursor = conn.cursor()
+        for strategy_id, strategy_verdict_dict in verdict.items():
+            try:
+                for unique_id, sub_strategy_index in strategy_verdict_dict.items():
+                    cursor.execute(
+                        f'INSERT OR REPLACE INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_INDEX) VALUES (?,?,?)',
+                        (unique_id, strategy_id, sub_strategy_index)
+                    )
+            except Exception as e:
+                pass
+        conn.commit()
+
+    def queryBlacklist(self, unique_id: str, conn: sqlite3.Connection):
+        '''查询黑名单'''
+        cursor = conn.cursor()
+        cursor.execute(
+            f'SELECT BLACK_REASON FROM BLACKLIST WHERE UNIQUE_ID = ?',
+            [unique_id]
+        )
+        result = cursor.fetchone()
+        if result:
+            return result[0]
+        else:
+            return None
+
+    def saveBlacklist(self, unique_id: str, black_reason: str, conn: sqlite3.Connection) -> None:
+        '''保存黑名单'''
+        cursor = conn.cursor()
+        cursor.execute(
+            f'INSERT INTO BLACKLIST (UNIQUE_ID, BLACK_REASON) VALUES (?,?)',
+            (unique_id, black_reason)
+        )
+        conn.commit()
+
+    def getPersonalInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
+        '''获取个人信息'''
+        cursor = conn.cursor()
+
+    def savePersonalInfo(self, unique_id: str, personal_info: dict, conn: sqlite3.Connection) -> None:
+        '''保存个人信息'''
+        # 记得看备忘录
+        # 记得转换database脚本
+        cursor = conn.cursor()
 
     def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> dict:
         '''查询用户信息表
