@@ -433,13 +433,17 @@ class BCZ:
                      group.update(result)
         return groups
 
-    def getUserAllInfo(self, user_id: str = None) -> dict:
-        '''【用户校牌+所有小班内主页】获取指定用户所有信息'''
+    def getUserAllInfo(self, sqlite: SQLite, user_id: str, detail: int = 0) -> dict:
+        '''【用户校牌+所有小班内主页+黑名单信息】获取指定用户所有信息'''
+        # 目前这个函数在筛选器内没有引用，仅用作外部查询
         user_info = self.getUserInfo(user_id)
         if not user_info:
             return {}
-        groups = self.getUserGroupInfo(user_id)
-        user_info['group_dict'] = self.getGroupsInfo(groups)
+        user_info['group_intro'] = self.getUserGroupInfo(user_id)
+        user_info['black_list'] = sqlite.queryBlacklist(user_id)
+        user_info['longest_info'] = sqlite.queryLongestInfo(user_id)
+        if detail == 1:
+            user_info['group_dict'] = self.getGroupsInfo(user_info['group_intro'])
         return user_info
 
 def recordInfo(bcz: BCZ, sqlite: SQLite):

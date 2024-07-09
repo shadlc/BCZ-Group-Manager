@@ -125,7 +125,20 @@ class SQLite:
             );''',
             '''CREATE TABLE IF NOT EXISTS BLACKLIST (                   -- 黑名单表
                 UNIQUE_ID INTEGER,                  -- 用户ID
-                DETAIL TEXT,                        -- 备注
+                DATETIME TEXT,                      -- 记录日期和时间
+                ADD_BY TEXT,                        -- 添加人昵称
+                TYPE INTEGER,                       -- 类型(1:王者班长)
+                REASON TEXT,                        -- 原因
+                PRIMARY KEY (UNIQUE_ID, DATETIME)
+            );''',
+            '''CREATE TABLE IF NOT EXISTS CONTACT_INFO (                   -- 用户联系方式表
+                -- 考虑做一个群编辑黑名单bot，添加这个表为了快速记录添加黑名单的王者班长
+                UNIQUE_ID INTEGER,                  -- 用户ID
+                NAME TEXT,                          -- 班长昵称
+                TYPE INTEGER,                       -- 类型(1:王者班长)
+                QQ_ID TEXT,                         -- QQ号
+                OTHERS TEXT,                        -- 其他联系方式
+                PRIMARY KEY (UNIQUE_ID)
             );''',
             '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
                 UNIQUE_ID TEXT,                      -- 用户ID/client ID
@@ -262,7 +275,7 @@ class SQLite:
         if temp:
             table_name = 'T_' + table_name
         for member in members:
-            recorded_time = cursor.execute(f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = {member['uniqueId']} AND GROUP_ID = {group_id}').fetchone()
+            recorded_time = cursor.execute(f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = {member["uniqueId"]} AND GROUP_ID = {group_id}').fetchone()
             if recorded_time[0] != 0 and recorded_time[0] < member['completed_time']:
                 member['completed_time'] = recorded_time[0]
                 # 可能加入新的小班后，会产生更晚的时间，以早的为准
@@ -552,8 +565,22 @@ class SQLite:
             )[0][0]
 
         
-    def queryLongestInfo(self, unique_id: str, zaoka_time: str, wanka_time:str, conn: sqlite3.Connection) -> dict:
-        '''获取指定成员数据库中（可推断的）最长停留天数和完成率、最长满卡天数、最近60天早卡晚卡和午卡数量'''
+    def ComboExpectancy(join_days: int, completed_times: int) -> int:
+        '''计算最长连卡天数期望'''
+        # 我夜观星象，得到超越方程E*(x)^Q = 0.1Q，x为打卡率，求解Q即可
+        rate = completed_times / join_days
+        expectancy = join_days
+        length = 0
+        while length < join_days:
+            length += 1
+            expectancy *= rate # 11...11（Q个1）在100数位上发生的期望次数
+            if expectancy <= length / 10:  # 如果期望大于length则代表有一个完整的length序列，我们要找到符合条件的length最大值
+                # 但这个/10，我的天文知识还不能解释。经过测试在join_days = 100..10000, x=0.01..0.99都很符合
+                return length
+        
+    observed_days = 30
+    def queryLongestInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
+        '''获取指定成员数据库中停留天数【峰值】和【连卡期望】，最近30天【打卡时间】，平均【打卡词数】'''
         # 和 saveGroupsInfo 功能相对，但这是以成员为单位，而不是以小班为单位
         cursor = conn.cursor()
         # 先获取这个成员的小班列表
@@ -562,8 +589,6 @@ class SQLite:
             [unique_id]
         ).fetchall()
         # 遍历小班列表，获取最长停留天数和完成率、最长完成次数
-        longest_stay_days = 0
-        longest_completed_times = 0
         for group_id in group_list:
             result = cursor.execute(
                 f'''
@@ -578,12 +603,13 @@ class SQLite:
                 ''',# TODAY_DATE和WORD_COUNT暂时没用到
                 [unique_id, group_id[0]]
             ).fetchall()
-            zaoka_cnt = midka_cnt = wanka_cnt = 0
-            longest_stay_days = 0 # 最长停留天数
-            longest_completed_times = 0
-            longest_manka_days = 0 # 最长满卡天数
             latest_date = "00-00"
             time_stamp = time.time()
+            competed_time_list = []
+            period = []
+            current_stay = 0
+            current_completed_times = 0
+            total_word_count = 0
             for item in result:
                 today_date = item[0]
                 completed_time = item[1]
@@ -591,32 +617,30 @@ class SQLite:
                 completed_times = item[3]
                 word_count = item[4]
 
+                total_word_count += word_count
+
                 latest_date = max(latest_date, today_date)
-                if duration_days == 1 or time_stamp - completed_time < 86400: # 入班第一天或今天
+                if duration_days == 1 or time_stamp - completed_time < 86400: # 入班第一天或24h内
                     continue
-                # 两分钟才刷新，故减120s
-                daka_hour = max(completed_time % 86400 - 120, 0) / 3600
-                if daka_hour < zaoka_time:
-                    zaoka_cnt += 1
-                elif daka_hour >= wanka_time: 
-                    wanka_cnt += 1
-                else:
-                    midka_cnt += 1
+                competed_time_list.append(completed_time)
                     
-                if duration_days > longest_stay_days:
-                    longest_stay_days = duration_days
-                    longest_completed_times = completed_times
-                if duration_days == completed_times and duration_days > longest_manka_days:
-                    longest_manka_days = duration_days
+                if duration_days > current_stay:
+                    current_stay = duration_days
+                    current_completed_times = completed_times
+                else:# 离开班级
+                    period.append((current_stay, current_completed_times, self.ComboExpectancy(current_stay, current_completed_times)))
+
+                    current_stay = duration_days
+                    current_completed_times = completed_times
+            period.append((current_stay, current_completed_times, self.ComboExpectancy(current_stay, current_completed_times)))
+            # 按照ComboExpectancy排序
+            period.sort(key=lambda x: x[2], reverse=True)
+            
                     
-            return {"joinDays": longest_stay_days,
-                     "completedTimes": longest_completed_times,
-                       "mankaDays": longest_manka_days,
-                         "zaokaDays": zaoka_cnt, # 正在使用
-                            "recordedDays": zaoka_cnt + midka_cnt + wanka_cnt, # 正在使用
-                                "latestRecord": latest_date, # 正在使用
-                                    "finishingRate": longest_completed_times / longest_stay_days if longest_stay_days > 0 else 0 # 正在使用
-                                      }
+            return {"period": period, 
+                    "latest_date": latest_date, 
+                    "competed_time_list": competed_time_list,
+                    "average_word_count": total_word_count/len(result)}
         
     def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection) -> None:
         '''保存筛选日志，详情见filter.py'''
@@ -694,28 +718,81 @@ class SQLite:
                 pass
         conn.commit()
 
-    def queryBlacklist(self, unique_id: str, conn: sqlite3.Connection):
-        '''查询黑名单'''
+    def queryBlacklist(self, unique_id: str, conn: sqlite3.Connection) -> list:
+        '''查询黑名单，[]=不在黑名单'''
         cursor = conn.cursor()
         cursor.execute(
-            f'SELECT BLACK_REASON FROM BLACKLIST WHERE UNIQUE_ID = ?',
+            f'SELECT REASON, DATETIME, ADD_BY, TYPE FROM BLACKLIST WHERE UNIQUE_ID = ?',
             [unique_id]
+        )
+        result = cursor.fetchall()
+        if result:
+            return result
+        else:
+            return []
+
+    def saveBlacklist(self, add_by: str, type: str, reason: str, bundle: list) -> None:
+        '''批量保存黑名单'''
+        conn = sqlite3.connect(self.db_path)
+        date_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        cursor = conn.cursor()
+        for i in bundle:
+            cursor.execute(
+                f'INSERT INTO BLACKLIST (UNIQUE_ID, ADD_BY, TYPE, REASON, DATETIME) VALUES (?,?,?,?,?)',
+                (i, add_by, type, reason, date_time)
+            )
+        conn.commit()
+        conn.close()
+
+    def deleteBlacklist(self, unique_id: str, date_time: str) -> None:
+        '''删除黑名单'''
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            f'DELETE FROM BLACKLIST WHERE UNIQUE_ID = ? AND DATETIME = ?',
+            (unique_id, date_time)
+        )
+        conn.commit()
+        conn.close()
+
+    def setUserContact(self, unique_id: str, name:str, type: int, qq_id: str, others: str) -> bool:
+        '''保存用户联系方式'''
+        # 要保证昵称不能重复，否则返回false
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            f'SELECT * FROM USER_CONTACT WHERE NAME = ?',
+            [name]
         )
         result = cursor.fetchone()
         if result:
-            return result[0]
+            conn.close()
+            return False
         else:
-            return None
-
-    def saveBlacklist(self, unique_id: str, black_reason: str, conn: sqlite3.Connection) -> None:
-        '''保存黑名单'''
+            cursor.execute(
+                f'INSERT OR REPLACE INTO USER_CONTACT (UNIQUE_ID, NAME, TYPE, QQ_ID, OTHERS) VALUES (?,?,?,?,?)',
+                (unique_id, name, type, qq_id, others)
+            )
+            conn.commit()
+            conn.close()
+            return True
+    
+    def queryUserContact(self, name: str, type: int) -> list:
+        '''查询用户联系方式'''
+        # 因为是为了方便用户查找添加黑名单的联系方式
+        conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute(
-            f'INSERT INTO BLACKLIST (UNIQUE_ID, BLACK_REASON) VALUES (?,?)',
-            (unique_id, black_reason)
+            f'SELECT * FROM USER_CONTACT WHERE NAME = ? AND TYPE = ?',
+            [name, type]
         )
-        conn.commit()
-
+        result = cursor.fetchall()
+        conn.close()
+        if result:
+            return result
+        else:
+            return []
+        
     def getPersonalInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
         '''获取个人信息'''
         cursor = conn.cursor()

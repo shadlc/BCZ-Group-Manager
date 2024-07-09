@@ -259,11 +259,11 @@ class Filter:
                 else:continue
 
             # 【3】外部查询（黑名单）
-            member_dict['blacklisted'] = self.sqlite.queryBlacklist(member_dict['uniqueId'], conn)
+            member_dict['blacklisted'] = 0 if self.sqlite.queryBlacklist(member_dict['uniqueId'], conn) is None else 1
             if condition_name == "blacklisted":
                 if not self.condition(member_dict, refer_dict, condition):
                     accept = 0
-                    break    
+                    break   
                 else:continue
 
                     

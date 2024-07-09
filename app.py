@@ -214,6 +214,20 @@ def search_group():
     except Exception as e:
         return restful(400, f'搜索小班时发生错误(X_X): {e}')
 
+@app.route('/search_user', methods=['GET'])
+def search_user():
+    user_id = request.args.get('uid')
+    detail = request.args.get('detail', 0)  
+    try:
+        if not user_id:
+            return restful(400, '请求参数错误Σ(っ °Д °;)っ')
+        user_info = bcz.getUserAllInfo(user_id, detail = detail)
+        if user_info:
+            return restful(200, '', user_info)
+        return restful(404, '未搜索到符合条件的用户Σ(っ °ω°;)っ')
+    except Exception as e:
+        return restful(400, f'搜索用户时发生错误(X_X): {e}')
+
 @app.route('/configure', methods=['GET', 'POST'])
 def configure():
     if request.method == 'GET':
@@ -248,6 +262,35 @@ def test_send() -> None:
     sse.publish({"content": "Hello, client!"}, type='notice')
     return 
 
+# 如果用的bot可以集成到project里面，就不用接口。
+#
+#
+# @app.route('/blacklist/add', methods=['POST'])
+# def add_blacklist() -> None:
+#     # 前端收集的信息包括：add_by班长昵称, type王者班长=1, reason原因, bundle黑名单用户id列表
+#     try:
+#         data = request.json
+#         sqlite.saveBlacklist(data['add_by'], data['type'], data['reason'], data['bundle'])
+#         return restful(200, '添加成功!')
+#     except Exception as e:
+#         return restful(500, f'添加黑名单失败：{e}')
+
+# @app.route('/blacklist/query', methods=['GET'])
+# def query_blacklist() -> None:
+#     unique_id = request.args.get('unique_id', '')
+#     if unique_id == '':
+#         return restful(400, '请求参数错误Σ(っ °Д °;)っ')
+#     return restful(200, '', sqlite.queryBlacklist(unique_id))
+    
+# @app.route('/blacklist/delete', methods=['POST'])
+# def delete_blacklist() -> None:
+#     # 前端收集的信息包括：unique_id, date_time；前端获取时只展示查询者本人添加的记录
+#     try:
+#         data = request.json
+#         sqlite.deleteBlacklist(data['unique_id'], data['date_time'])
+#         return restful(200, '删除成功!')
+#     except Exception as e:
+#         return restful(500, f'删除黑名单失败：{e}')
 
 
 if __name__ == '__main__':
