@@ -195,24 +195,23 @@ class Strategy:
             },
             # ... 其他策略  
         ]
-    
     def __init__(self) -> None:
         '''初始化配置文件'''
         self.file_path = f'./strategy.json'
-        
         try:
             if path := os.path.dirname(self.file_path):
                 os.makedirs(path, exist_ok=True)
             self.json_data = json.read(self.file_path, encoding='utf-8')
         except:
             json.dump(self.default_list, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            self.json_data = self.default_list
             logger.info('初次启动，已在当前执行目录生成配置文件')
         
-    def read(self: str = '') -> None:
+    def read(self) -> None:
         '''从文件中更新，一般不需使用'''
         self.json_data = json.load(open(self.file_path, encoding='utf-8'))
     
-    def get(self: str = '', index: int = None) -> list | dict | str | int | bool:
+    def get(self, index: int = None) -> list | dict | str | int | bool:
         '''获取指定配置'''
         if index:
             return self.json_data.get(index)
@@ -227,7 +226,7 @@ class Strategy:
         '''用key-value更新配置文件'''
         self.json_data[key] = value
 
-    def save(self: dict) -> None:
+    def save(self) -> None:
         '''写入配置文件'''
         try:
             json.dump(self.json_data, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)

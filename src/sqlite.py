@@ -72,7 +72,7 @@ class SQLite:
                 GROUP_ID INTEGER UNIQUE,            -- 小班ID   *
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
-                DATA_TIME TEXT                      -- 记录时间
+                DATA_TIME TEXT,                      -- 记录时间
                 PRIMARY KEY (USER_ID, TODAY_DATE, GROUP_ID)
             );''',
             '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
@@ -121,7 +121,7 @@ class SQLite:
                 DEPENDABILITY INTEGER,              -- 靠谱指数
                 GROUP_ID_LIST TEXT,                 -- 加入的小班列表
                 GROUP_JOIN_DAYS_LIST TEXT,          -- 加入小班的天数列表
-                GROUP_FINISHING_RATE_LIST TEXT,     -- 打卡率列表
+                GROUP_FINISHING_RATE_LIST TEXT      -- 打卡率列表
             );''',
             '''CREATE TABLE IF NOT EXISTS BLACKLIST (                   -- 黑名单表
                 UNIQUE_ID INTEGER,                  -- 用户ID
@@ -140,21 +140,21 @@ class SQLite:
                 OTHERS TEXT,                        -- 其他联系方式
                 PRIMARY KEY (UNIQUE_ID)
             );''',
-            '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
-                UNIQUE_ID TEXT,                      -- 用户ID/client ID
-                GROUP_ID TEXT,                       -- 小班ID
-                DATETIME TEXT,                       -- 操作日期时间
-                STRATEGY TEXT,                       -- 子策略属于的策略名称
-                SUB_STRATEGY TEXT,                   -- 执行的子策略名称
-                RESULT TEXT,                         -- 筛选结果（中文）
-                DETAIL TEXT                          -- 筛选细节（判断依据）
-            );''',
+            # '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
+            #     UNIQUE_ID TEXT,                      -- 用户ID/client ID
+            #     GROUP_ID TEXT,                       -- 小班ID
+            #     DATETIME TEXT,                       -- 操作日期时间
+            #     STRATEGY TEXT,                       -- 子策略属于的策略名称
+            #     SUB_STRATEGY TEXT,                   -- 执行的子策略名称
+            #     RESULT TEXT,                         -- 筛选结果（中文）
+            #     DETAIL TEXT                          -- 筛选细节（判断依据）
+            # );''',
             '''CREATE TABLE IF NOT EXISTS STRATEGY_VERDICT (                   -- 成员在指定策略下的判定结果表，有效期24h
                 UNIQUE_ID TEXT,                      -- 用户ID
                 STRATEGY_ID,                         -- 策略ID
                 SUB_STRATEGY_ID,                     -- 符合的子策略ID
                 DATETIME TEXT,                       -- 记录日期和时间
-                DETAIL TEXT                          -- 判断依据
+                DETAIL TEXT,                          -- 判断依据
                 PRIMARY KEY (UNIQUE_ID, STRATEGY_ID)
             );''',
             '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
@@ -185,8 +185,12 @@ class SQLite:
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         for sql in self.init_sql:
-            cursor.execute(sql)
-            conn.commit()
+            try:
+                cursor.execute(sql)
+                conn.commit()
+            except:
+                logger.info(sql)
+                raise
         conn.close()
 
     def read(self, sql: str, param: list | tuple = ()) -> list:
@@ -229,7 +233,7 @@ class SQLite:
             for group in groups:
                 if group.get('exception'):
                     continue
-                self.saveMemberInfo(group['members'], group['groupInfo']['id'], temp, conn)
+                self.saveMemberInfo(group['members'], conn = conn)
             return
         
         for group in groups:
@@ -256,7 +260,7 @@ class SQLite:
                     group['data_time'],
                 )
             )
-            self.saveMemberInfo(group['members'])
+            self.saveMemberInfo(group['members'], conn = conn)
         conn.commit()
         if temp_conn:
             conn.close()
@@ -275,12 +279,16 @@ class SQLite:
         if temp:
             table_name = 'T_' + table_name
         for member in members:
-            recorded_time = cursor.execute(f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = {member["uniqueId"]} AND GROUP_ID = {group_id}').fetchone()
-            if recorded_time[0] != 0 and recorded_time[0] < member['completed_time']:
+            # 选取同一天、同一用户的最早打卡时间
+            recorded_time = cursor.execute(
+                f'SELECT COMPLETED_TIME FROM {table_name} WHERE USER_ID = ? AND TODAY_DATE = ? ORDER BY COMPLETED_TIME ASC LIMIT 1',
+                (member['id'], member['today_date'])
+            ).fetchone()
+            if recorded_time and recorded_time[0] != 0 and recorded_time[0] < member['completed_time']:
                 member['completed_time'] = recorded_time[0]
                 # 可能加入新的小班后，会产生更晚的时间，以早的为准
             cursor.execute(
-                f'INSERT OR REPLACE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                f'INSERT OR REPLACE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
                 (
                     member['id'],
                     member['nickname'],
@@ -642,57 +650,57 @@ class SQLite:
                     "competed_time_list": competed_time_list,
                     "average_word_count": total_word_count/len(result)}
         
-    def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection) -> None:
-        '''保存筛选日志，详情见filter.py'''
-        # 结构实例
-        # filter_log_tosave.append({
-        #     'uniqueId':uniqueId,
-        #     'groupId':group_id,
-        #     'datetime':datetime.datetime.now(),
-        #     'strategy':strategy_dict['name'],
-        #     'subStrategy':sub_strat_dict['name'],
-        #     'result':'剩余人数满足要求，踢出小班'
-        # })
-        cursor = conn.cursor()
-        for filter_log in filter_log_list:
-            cursor.execute(
-                f'INSERT INTO FILTER_LOG (UNIQUE_ID, GROUP_ID, DATETIME, STRATEGY, SUB_STRATEGY, DETAIL, RESULT) VALUES (?,?)',
-                (filter_log['uniqueId'], filter_log['groupId'], filter_log['datetime'], filter_log['strategy'], filter_log['subStrategy'], filter_log['detail'], filter_log['result'])
-                )
-        conn.commit()
+    # def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection) -> None:
+    #     '''保存筛选日志，详情见filter.py'''
+    #     # 结构实例
+    #     # filter_log_tosave.append({
+    #     #     'uniqueId':uniqueId,
+    #     #     'groupId':group_id,
+    #     #     'datetime':datetime.datetime.now(),
+    #     #     'strategy':strategy_dict['name'],
+    #     #     'subStrategy':sub_strat_dict['name'],
+    #     #     'result':'剩余人数满足要求，踢出小班'
+    #     # })
+    #     cursor = conn.cursor()
+    #     for filter_log in filter_log_list:
+    #         cursor.execute(
+    #             f'INSERT INTO FILTER_LOG (UNIQUE_ID, GROUP_ID, DATETIME, STRATEGY, SUB_STRATEGY, DETAIL, RESULT) VALUES (?,?)',
+    #             (filter_log['uniqueId'], filter_log['groupId'], filter_log['datetime'], filter_log['strategy'], filter_log['subStrategy'], filter_log['detail'], filter_log['result'])
+    #             )
+    #     conn.commit()
         
 
-    def queryFilterLog(self, time_start: int, time_end: int, conn: sqlite3.Connection, user_id: str = None, group_id: str = None) -> list:
-        '''获取筛选日志，详情见filter.py'''
-        cursor = conn.cursor()
-        if user_id and group_id:
-            cursor.execute(
-                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ? AND GROUP_ID = ?',
-                (time_start, time_end, user_id, group_id)
-            )
-        elif user_id:
-            cursor.execute(
-                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ?',
-                (time_start, time_end, user_id)
-            )
-        elif group_id:
-            cursor.execute(
-                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND GROUP_ID = ?',
-                (time_start, time_end, group_id)
-            )
-        else:
-            cursor.execute(
-                f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ?',
-                (time_start, time_end)
-            )
-        result = cursor.fetchall()
-        return result
+    # def queryFilterLog(self, time_start: int, time_end: int, conn: sqlite3.Connection, user_id: str = None, group_id: str = None) -> list:
+    #     '''获取筛选日志，详情见filter.py'''
+    #     cursor = conn.cursor()
+    #     if user_id and group_id:
+    #         cursor.execute(
+    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ? AND GROUP_ID = ?',
+    #             (time_start, time_end, user_id, group_id)
+    #         )
+    #     elif user_id:
+    #         cursor.execute(
+    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ?',
+    #             (time_start, time_end, user_id)
+    #         )
+    #     elif group_id:
+    #         cursor.execute(
+    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND GROUP_ID = ?',
+    #             (time_start, time_end, group_id)
+    #         )
+    #     else:
+    #         cursor.execute(
+    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ?',
+    #             (time_start, time_end)
+    #         )
+    #     result = cursor.fetchall()
+    #     return result
 
     def queryStrategyVerdict(self, strategy_id: int, unique_id: str, conn: sqlite3.Connection) -> list:
         '''获取策略审核结果，详情见filter.py'''
         cursor = conn.cursor()
         cursor.execute(
-            f'SELECT SUB_STRATEGY_INDEX FROM STRATEGY_VERDICT WHERE STRATEGY_ID = ? AND UNIQUE_ID = ?',
+            f'SELECT SUB_STRATEGY_ID FROM STRATEGY_VERDICT WHERE STRATEGY_ID = ? AND UNIQUE_ID = ?',
             (strategy_id, unique_id)
         )
         result = cursor.fetchone()

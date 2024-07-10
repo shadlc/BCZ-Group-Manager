@@ -2,7 +2,7 @@ import sys
 import time
 import logging
 
-from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request
+from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request, stream_with_context
 from werkzeug.serving import WSGIRequestHandler, _log
 # from flask_sockets import Sockets  
 # from flask_socketio import SocketIO
@@ -40,11 +40,12 @@ strategy = Strategy()
 bcz = BCZ(config)
 xlsx = Xlsx(config)
 sqlite = SQLite(config)
-filter = Filter(config, strategy, bcz, sqlite, sse)
+filter = Filter(strategy, bcz, sqlite, sse, config)
 processing = False
+logger = logging.getLogger(__name__)
 
 if not config.main_token:
-    print('未配置授权令牌，请在[config.json]文件中填入正确main_token后重启，程序会在5秒后自动退出')
+    logger.info('未配置授权令牌，请在[config.json]文件中填入正确main_token后重启，程序会在5秒后自动退出')
     time.sleep(5)
     sys.exit(0)
 
@@ -257,10 +258,12 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
 
 
 
-@app.route('/test-notice')
-def test_send() -> None:
-    sse.publish({"content": "Hello, client!"}, type='notice')
-    return 
+# 处理SSE连接
+@app.route('/test')
+def test():
+    filter.start('JJDLph8dK3IuaKFc59mAndT7Z21DzmRYG1Nu6pGWXBE%3D','1kopv2ycflsni3ux', 0, '12345678')
+    return Response(stream_with_context(filter.generator()), content_type='text/event-stream')
+
 
 # 如果用的bot可以集成到project里面，就不用接口。
 #
@@ -301,4 +304,7 @@ if __name__ == '__main__':
         Schedule(config.daily_verify, lambda: verifyInfo(bcz, sqlite))
     
     app.register_blueprint(sse, url_prefix='/stream')
-    app.run(config.host, config.port, request_handler=MyRequestHandler)
+    if '--debug' in sys.argv:
+        app.run(debug=True, host=config.host, port=config.port, request_handler=MyRequestHandler)
+    else:
+        app.run(config.host, config.port, request_handler=MyRequestHandler)

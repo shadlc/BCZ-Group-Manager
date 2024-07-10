@@ -58,7 +58,7 @@ class BCZ:
         if (not token):
             token = self.config.main_token
 
-        current_headers = self.default_headers.copy()
+        current_headers = self.default_headers['default_headers_dict']
 
         if token not in self.hash_rmb:
             # 使用哈希函数计算字符串的哈希值
@@ -76,6 +76,8 @@ class BCZ:
             key = key.replace(";","%3B").replace("=","%3D")
             value = value.replace(";","%3B").replace("=","%3D")
             current_headers['Cookie'] += f'{key}={value};'
+        # 需要转为str
+        return current_headers
         return current_headers
 
 
@@ -125,7 +127,9 @@ class BCZ:
         headers["Referer"] = "https://activity.baicizhan.com"
         response = requests.post(url, headers = headers, json = json, timeout = 5)
         if response.json().get("code",0) != 1:
-            print("出现异常，请检查")
+            if response.json().get("code",0) == 999:
+                logger.info(f"删除的人已经不在小班中")
+            logger.info(f"remove{json}出现异常，请检查")
             # 2024.2.23 15:39 成功第一次
             
 
@@ -161,7 +165,7 @@ class BCZ:
         if not user_id:
             return
         url = f'{self.user_info_url}?uniqueId={user_id}'
-        headers = self.getHeaders(self.main_token)
+        headers = self.getHeaders()
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -175,7 +179,7 @@ class BCZ:
         if not user_id:
             return {}
         url = f'{self.group_list_url}?uniqueId={user_id}'
-        headers = self.getHeaders(self.main_token)
+        headers = self.getHeaders()
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -216,7 +220,7 @@ class BCZ:
         '''获取【班内主页】信息group/information'''
         self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
         url = f'{self.group_detail_url}?shareKey={share_key}'
-        headers = self.getHeaders(self.main_token)
+        headers = self.getHeaders()
         main_response = requests.get(url, headers=headers, timeout=5)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
@@ -398,7 +402,7 @@ class BCZ:
     def getGroupDakaHistory(self, share_key: str) -> dict:
         '''获取小班成员历史打卡信息'''
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
-        headers = {'Cookie': f'access_token="{self.config.main_token}"'}
+        headers = self.getHeaders()
         week_response = requests.get(f'{url}&week=1', headers=headers, timeout=5)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班成员历史打卡信息失败! 小班不存在或主授权令牌无效'

@@ -1,16 +1,19 @@
 # 4.19计划：完成已经添加的用户(unique_id和accesstoken)、已经添加的班级的同步功能（和bcz.py之间）
 
-# from config import Config
 import json
 import threading
 import datetime
-import config
+from src.config import Config
+from src.config import Strategy
 import flask_sse
+import uuid
+import logging
+logger = logging.getLogger(__name__)
 
 import time
-from config import Strategy
-from sqlite import SQLite
-from bcz import BCZ
+from src.sqlite import SQLite
+from src.bcz import BCZ
+# 跨文件引用多用from，方便改路径
 import sqlite3
 
 #
@@ -31,7 +34,7 @@ import sqlite3
 #         {
 #             'uniqueId':uniqueId,
 #             'shareKey':share_key,
-#             'datetime':datetime.datetime.now(),
+#             'datetime':self.time_stamp(),
 #             'strategy':strategy_dict['name'],
 #             'subStrategy':sub_strat_dict['name'],
 #             'detail':{
@@ -104,7 +107,7 @@ import sqlite3
 
 
 class Filter:
-    def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, sse: flask_sse.SSE, config: config.Config) -> None:
+    def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, sse: flask_sse.sse, config: Config) -> None:
         # filter类全局仅一个，每个班级一个线程（当成局域网代理设备），但是strategy因为要前端更新，所以只储存Strategy类地址
         self.strategy_class = strategy_class
         self.strategy_index = 0
@@ -114,13 +117,14 @@ class Filter:
         self.sse = sse
 
         self.lock = threading.Lock()
+        self.clients_message_lock = threading.Lock()
 
         self.activate_groups = {}
         self.autosave_is_running = False
         self.member_dict = []
-        self.filter_log = []
-        self.verdict_dict = []
+        self.verdict_dict = {}
         self.personal_dict = [] # 缓存个人信息，避免重复请求
+        self.clients_message = {}
 
         # activate_groups内格式：shareKey:{tids, client_id, stop}
         # client_id: 连接该shareKey的客户端订阅的sse频道
@@ -141,20 +145,26 @@ class Filter:
                 self.stop(shareKey)
             while self.autosave_is_running:
                 time.sleep(1) # 等待autosave线程退出
-            print('autosave已停止')
+            self.log('autosave已停止')
             return
-        if not self.activate_groups.get(shareKey, None):
+        if self.activate_groups.get(shareKey, None) is None:
             return # 筛选线程没有运行
-        
-        self.activate_groups[shareKey]['stop'] = True
-        self.activate_groups[shareKey]['tids'].join()
-        
-        self.activate_groups.pop(shareKey)
-        print(f'筛选线程已停止，shareKey = {shareKey}')
+        try:
+            self.activate_groups[shareKey]['stop'] = True
+            self.activate_groups[shareKey]['tids'].join()
+            
+            self.activate_groups.pop(shareKey)
+            self.log(f'筛选线程已停止，shareKey = {shareKey}')
+        except Exception as e:
+            self.log(f'停止筛选线程失败，shareKey = {shareKey}, error = {e}')
+            
 
 
-
-    def condition(member_dict: dict, refer_dict: dict, condition: dict) -> bool:
+    def time_stamp(self) -> str:
+        '''获取当前时间戳,毫秒'''
+        return str(int(time.time() * 1000))
+    
+    def condition(self, member_dict: dict, refer_dict: dict, condition: dict) -> bool:
         '''条件判断，返回布尔值'''
         name = condition['name']
         member_value = member_dict.get(name, None)
@@ -165,36 +175,36 @@ class Filter:
 
         if operator == "==":
             if member_value != value:
-                print(f'failed: {name}:{member_value} != {value}')
+                self.log(f'failed: {name}:{member_value} != {value}')
                 refer_dict[name] = f"{member_value} != {value}"
                 return False
             return True
         elif operator == "!=":
             if member_value == value:
-                print(f'failed: {name}:{member_value} == {value}')
+                self.log(f'failed: {name}:{member_value} == {value}')
                 refer_dict[name] = f"{member_value} == {value}"
                 return False
         elif operator == ">":
             if member_value <= value:
-                print(f'failed: {name}:{member_value} <= {value}')
+                self.log(f'failed: {name}:{member_value} <= {value}')
                 refer_dict[name] = f"{member_value} <= {value}"
                 return False
             return True
         elif operator == "<":
             if member_value >= value:
-                print(f'failed: {name}:{member_value} >= {value}')
+                self.log(f'failed: {name}:{member_value} >= {value}')
                 refer_dict[name] = f"{member_value} >= {value}"
                 return False
             return True
         elif operator == ">=":
             if member_value < value:
-                print(f'failed: {name}:{member_value} < {value}')
+                self.log(f'failed: {name}:{member_value} < {value}')
                 refer_dict[name] = f"{member_value} < {value}"
                 return False
             return True
         elif operator == "<=":
             if member_value > value:
-                print(f'failed: {name}:{member_value} > {value}')
+                self.log(f'failed: {name}:{member_value} > {value}')
                 refer_dict[name] = f"{member_value} > {value}"
                 return False
             return True
@@ -203,7 +213,7 @@ class Filter:
     def check(self, member_dict: dict, week_info: dict,substrategy_dict :dict, conn: sqlite3.Connection) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
-        print (f'正在验证{member_dict["nickname"]},id = {member_dict["uniqueId"]}')
+        self.log (f'正在验证{member_dict["nickname"]},id = {member_dict["uniqueId"]}')
 
         
 
@@ -348,7 +358,7 @@ class Filter:
                 
             if condition_name == "zaoka_history":
                 if self.condition(group_history, refer_dict, zaoka_days):
-                    print(f"数据不足{zaoka_days.get('value')}天，不进行判断")
+                    self.log(f"数据不足{zaoka_days.get('value')}天，不进行判断")
                     continue
                 else:
                     if not self.condition(group_history, refer_dict, zaoka_rate):
@@ -356,8 +366,8 @@ class Filter:
                         break
                     else:continue
                     
-        print(refer_dict)
-        print('\n\n\n')
+        self.log(refer_dict)
+        self.log('\n\n\n')
         result = {'result': accept, 'detail': refer_dict}
         
         if personal_tosave: # 有新的缓存数据
@@ -410,79 +420,79 @@ class Filter:
 #     # ... 其他策略  
 # ]
 
-    def setLogResult(self, share_key: str, message_id: int, result: str) -> None:
-        '''设置日志结果，由客户端调用'''
-        self.activate_groups[share_key][message_id] = result
+    # def setLogResult(self, share_key: str, message_id: int, result: str) -> None:
+    #     '''设置日志结果，由客户端调用'''
+    #     self.activate_groups[share_key][message_id] = result
         
     
-    def sendLog(self, message: dict, share_key: str, filter_log_tosave: list, conn: sqlite3.Connection, await_time: int = 0) -> str:
-        '''向启动本筛选器的客户端发送日志，若await_time不为0，则等待若干秒'''
+    # def sendLog(self, message: dict, share_key: str, filter_log_tosave: list, conn: sqlite3.Connection, await_time: int = 0) -> str:
+    #     '''向启动本筛选器的客户端发送日志，若await_time不为0，则等待若干秒'''
 
-        connected = self.activate_groups[share_key]['connected']
-        client_id = self.activate_groups[share_key]['client_id']
+    #     connected = self.activate_groups[share_key].get('connected', None)
+    #     client_id = self.activate_groups[share_key].get('client_id', None)
 
-        if connected == True and not self.sse.is_connected(client_id):
-            print("客户端已断开连接，记录最后时间")
+    #     if connected == True and not self.sse.is_connected(client_id):
+    #         self.log("客户端已断开连接，记录最后时间")
             
-            time_stamp = time.time()# 所有时间戳以s为单位
-            filter_log_tosave.append({
-                'uniqueId':client_id,
-                'datetime':time_stamp,
-                'detail':f'客户端已断开连接，记录最后时间',
-            })
-            connected = False
-            self.activate_groups[share_key]['connected'] = False
-            return ''
+    #         time_stamp = int(time.time() * 1000)# 所有时间戳以s为单位
+    #         self.log(str({
+    #             'uniqueId':client_id,
+    #             'datetime':time_stamp,
+    #             'detail':f'客户端已断开连接，记录最后时间',
+    #         })
+    #         connected = False
+    #         self.activate_groups[share_key]['connected'] = False
+    #         return ''
         
-        if not connected and self.sse.is_connected(client_id):
-            print("客户端已连接，发送历史记录")
-            client_date = self.sqlite.queryFilterLog(user_id = client_id, conn = conn) # 客户端已读日志的时间戳
-            message["history"] = self.sqlite.queryFilterLog(time_start = client_date, time_end = time_stamp, conn = conn) # 客户端已读日志的时间戳
-            connected = True
-            self.activate_groups[share_key]['connected'] = True
+    #     if not connected and self.sse(client_id):
+    #         self.log("客户端已连接，发送历史记录")
+    #         client_date = self.sqlite.queryFilterLog(user_id = client_id, conn = conn) # 客户端已读日志的时间戳
+    #         message["history"] = self.sqlite.queryFilterLog(time_start = client_date, time_end = time_stamp, conn = conn) # 客户端已读日志的时间戳
+    #         connected = True
+    #         self.activate_groups[share_key]['connected'] = True
 
-        if not connected:
-            return ''
+    #     if not connected:
+    #         return ''
         
-        message_str = json.dumps(message)
-        self.sse.publish(channel = client_id, message = json.dumps({
-            "type": "log",
-            "await_time": await_time,
-            "id": # 每个信息的id，暂用时间戳
-            time_stamp,
-            "value": f'''
-            <div class="log-item">
-                <div class="log-time">
-                    <span class="log-time-value">{time_stamp}</span>
-                </div>
-                <div class="log-value">
-                    <span class="log-value-value">{message_str}</span>
-                </div>
-                <div class="log-member">
-                    <span class="log-member-value">测试用，格式稍后补充</span>
-                </div>
-            </div>
-            ''',
-            "confirm_value":f'''
-            <div class="log-item">
-                <div class="log-time">
-                    <span class="log-time-value">{time_stamp}</span>
-                </div>
-                <div class="log-value">
-                    <span class="log-value-value">{message_str}</span>
-                </div>
-                <div class="log-member">
-                    <span class="log-member-value">这是confirm</span>
-                </div>
-            </div>
-            '''
+    #     message_str = json.dumps(message)
+    #     self.sse.publish(channel = client_id, message = json.dumps({
+    #         "type": "log",
+    #         "await_time": await_time,
+    #         "id": # 每个信息的id，暂用时间戳
+    #         time_stamp,
+    #         "value": f'''
+    #         <div class="log-item">
+    #             <div class="log-time">
+    #                 <span class="log-time-value">{time_stamp}</span>
+    #             </div>
+    #             <div class="log-value">
+    #                 <span class="log-value-value">{message_str}</span>
+    #             </div>
+    #             <div class="log-member">
+    #                 <span class="log-member-value">测试用，格式稍后补充</span>
+    #             </div>
+    #         </div>
+    #         ''',
+    #         "confirm_value":f'''
+    #         <div class="log-item">
+    #             <div class="log-time">
+    #                 <span class="log-time-value">{time_stamp}</span>
+    #             </div>
+    #             <div class="log-value">
+    #                 <span class="log-value-value">{message_str}</span>
+    #             </div>
+    #             <div class="log-member">
+    #                 <span class="log-member-value">这是confirm</span>
+    #             </div>
+    #         </div>
+    #         '''
             
-        }))
-        for i in range(await_time):
-            time.sleep(1)
-            result = self.activate_groups[share_key].get(time_stamp, None)
-            if (result != None):
-                return result 
+    #     }))
+    #     for i in range(await_time):
+    #         time.sleep(1)
+    #         result = self.activate_groups[share_key].get(time_stamp, None)
+    #         if (result != None):
+    #             return result 
 
 
 
@@ -496,16 +506,39 @@ class Filter:
             time.sleep(self.autosave_interval)
             conn = self.sqlite.connect()
             with self.lock:
-                self.sqlite.saveGroupInfo([self.member_dict], conn = conn)
-                self.sqlite.saveStrategyVerdict(self.verdict_dict)
-                self.sqlite.saveFilterLog(self.filter_log)
-                self.sqlite.savePersonalInfo(self.personal_dict)
+                self.log('autosave now...')
+                self.log(str(self.member_dict))
+                self.sqlite.saveGroupInfo(self.member_dict,temp = True, conn = conn)
+                self.sqlite.saveStrategyVerdict(self.verdict_dict, conn = conn)
+                self.sqlite.savePersonalInfo(self.personal_dict, conn = conn)
                 self.member_dict = []
-                self.verdict_dict = []
-                self.filter_log = []
+                self.verdict_dict = {}
                 self.personal_dict = [] # 缓存个人信息，避免重复请求
             conn.close()
         self.autosave_is_running = False
+
+    def log(self, message: str) -> None:
+        '''记录日志，分发到所有连接的消息队列'''
+        logger.info(message)
+        with self.clients_message_lock:
+            for client_id, queue in self.clients_message.items():
+                queue.append(message)
+        
+    def generator(self):
+        '''每个客户端分发一个，会自动创建消息队列，断开后回收'''
+        client_id = str(uuid.uuid4())
+        self.clients_message[client_id] = []
+        try:
+            i = 0
+            while True:
+                while len(self.clients_message[client_id]) > i:
+                    message = self.clients_message[client_id][i]
+                    i += 1
+                    yield f'data: {i}.{message}\n\n'
+                time.sleep(1)
+        except GeneratorExit:
+            with self.clients_message_lock:
+                self.clients_message[client_id] = None # 回收消息队列
 
     def run(self, authorized_token: str,strategy_index:int, share_key: str, strategy_dict: dict) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
@@ -527,24 +560,24 @@ class Filter:
         
         
         member_list = [] # 当前成员列表
+        member_check_count = {} # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
         member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
         group_id = member_dict_temp['id']
         for member_dict in member_dict_temp["members"]:
-                uniqueId = member_dict['uniqueId']
-                member_list.append(uniqueId) # 记录当前成员列表
+            uniqueId = member_dict['id']
+            member_list.append(uniqueId) # 记录当前成员列表
 
         group_count_limit = member_dict_temp['count_limit']
         
         check_count = 0 # 检查次数，标志成员更新状态
         while self.activate_groups[share_key]['stop'] == False:
             
-            
+            self.log('start now...')
             time.sleep(delay)
 
             # 线程上传空间，操作commit后放入共享空间然后清空
             member_dict_tosave = []
             verdict_dict_tosave = []
-            filter_log_tosave = []
             personal_dict_tosave = []
             conn = self.sqlite.connect() # 每次循环都重新连接数据库
 
@@ -564,22 +597,26 @@ class Filter:
             check_count += 1
             newbies_count = 0
             for personal_dict_temp in member_dict_temp["members"]:
-                uniqueId = personal_dict_temp['uniqueId']
+                self.log(f'checking {personal_dict_temp["nickname"]}')
+                uniqueId = personal_dict_temp['id']
                     
                 if self.activate_groups[share_key]['stop'] == True:
                     break
+                member_check_count[uniqueId] = check_count # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
                 if uniqueId not in member_list:
+                    self.log('is_new: True')
                     newbies_count += 1 # 新增成员
-                    member_list[uniqueId] = check_count # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
+                    
                     
                     
 
                     # 对每个成员，先判断是否已决策（仅本次运行期间有效，局部储存）
                     # verdict 含义：None-未决策，0...n-已决策，符合子条目的序号（越小越优先）
                     
-                    verdict = self.sqlite.getStrategiesVerdict(uniqueId, strategy_index, conn)
+                    verdict = self.sqlite.queryStrategyVerdict(uniqueId, strategy_index, conn)
                     result_code = 0
                     if not verdict:
+                        self.log("no_verdict: True")
                         # 先检查是否满足条件，满足则堆入待决策列表
                         
                         for index, sub_strat_dict in strategy_dict["subItems"].items():
@@ -590,29 +627,31 @@ class Filter:
                             if result['result'] == 1:
                                 # 符合该子条目
                                 verdict = verdict_dict_tosave[uniqueId] = index
-                                filter_log_tosave.append({
+                                self.log(str({
                                     'uniqueId':uniqueId,
                                     'groupId':group_id,
-                                    'datetime':datetime.datetime.now(),
+                                    'datetime':self.time_stamp(),
                                     'strategy':strategy_dict['name'],
                                     'subStrategy':sub_strat_dict['name'],
                                     'detail':result,
                                     'minPeople':sub_strat_dict['minPeople'],
-                                    'result':f'成员加入，{sub_strat_dict['operation']}',
-                                })
+                                    'result':f'成员加入，{sub_strat_dict["operation"]}',
+                                }))
+                                self.log(f"accept: True ;strategy:{sub_strat_dict['name']}")
+
                                 break
                         if result_code == 0:
-                            print("没有符合条件的子条目，默认接受，请检查策略配置")
-                            filter_log_tosave.append({
+                            self.log("没有符合条件的子条目，默认接受，请检查策略配置")
+                            self.log(str({
                                     'uniqueId':uniqueId,
                                     'groupId':group_id,
-                                    'datetime':datetime.datetime.now(),
+                                    'datetime':self.time_stamp(),
                                     'strategy':"",
                                     'subStrategy':"",
                                     'detail': None,
                                     'minPeople':0,
                                     'result':'成员加入，不符合任何条件，默认接受',
-                                })
+                                }))
                             continue
                     result_code = 1 if strategy_dict['subItems'][verdict]['operation'] == '接受' else 2
                     # 从this_verdict_dict中读取结果
@@ -632,25 +671,30 @@ class Filter:
 
 
             # 【退班更新】
-            for uniqueId, value in member_list.items():
+            new_member_list = []
+            for uniqueId in member_list:
+                value = member_check_count.get(uniqueId)
                 if value != check_count:
                     # 成员退出
-                    filter_log_tosave.append({
+                    self.log(f'[id:{uniqueId}]exit: True')
+                    self.log(str({
                         'uniqueId':uniqueId,
                         'groupId':group_id,
-                        'datetime':datetime.datetime.now(),
+                        'datetime':self.time_stamp(),
                         'strategy':'',
                         'subStrategy':'',
                         'detail': {"check_count": value},
                         'result':'成员退出/手动踢出',
-                    })
-                    member_list.pop(uniqueId)
+                    }))
+                else:
+                    new_member_list.append(uniqueId)
+            member_list = new_member_list
                     
             # 【踢人】
             # 序号小的先踢(执行)
             # kick_list 候补踢出列表，remove_list 立刻踢出列表
             minPeople_min = 200
-            remain_people_cnt = member_cnt = member_dict_temp['memberCount']
+            remain_people_cnt = member_cnt = member_dict_temp['member_count']
             remove_list = []
             for index, this_verdict_dict in enumerate(kick_list):
                 sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
@@ -659,29 +703,30 @@ class Filter:
                     remain_people_cnt -= 1
                     uniqueId = this_verdict_dict['uniqueId']
                     remove_list.append(uniqueId)
-                    filter_log_tosave.append({
+                    self.log(f'[id:{uniqueId}]kick: True')
+                    self.log(str({
                         'uniqueId':uniqueId,
                         'groupId':group_id,
-                        'datetime':datetime.datetime.now(),
+                        'datetime':self.time_stamp(),
                         'strategy':strategy_dict['name'],
                         'subStrategy':sub_strat_dict['name'],
                         'result':'剩余人数满足要求，踢出小班'
-                    })
+                    }))
                     member_list.pop(uniqueId)
                     
             # 踢人
-            self.bcz.removeMembers(remove_list, share_key, authorized_token)
+            if remove_list:
+                self.bcz.removeMembers(remove_list, share_key, authorized_token)
 
 
             # 【保存数据】到共享空间
-            self.sendLog(json.dumps(filter_log_tosave), share_key) # 向客户端发送日志
+            
             with self.lock:
-                self.member_dict.append(member_dict_tosave)
-                self.personal_dict.append(personal_dict_tosave) 
-                if self.verdict_dict.get(strategy_index) == None:
+                self.member_dict.extend(member_dict_tosave)
+                self.personal_dict.extend(personal_dict_tosave) 
+                if (self.verdict_dict.get(strategy_index, None) == None):
                     self.verdict_dict[strategy_index] = []
-                self.verdict_dict[strategy_index].append(verdict_dict_tosave)
-                self.filter_log.append(filter_log_tosave)
+                self.verdict_dict[strategy_index].extend(verdict_dict_tosave)
                 if self.autosave_is_running == False:
                     self.autosave_is_running = True
                     threading.Thread(target=self.autosave).start()
@@ -695,20 +740,23 @@ class Filter:
                 delay = max(delay - delay_delta, 3)
             else:
                 delay = min(delay + delay_delta, 60) # 筛选暂停，延迟增加
+            self.log(f"delay: {delay}")
             
 
     def start(self, authorized_token: str, share_key: str, strategy_index: int, client_id: str) -> None:
         # 是否验证？待测试，如果没有那就可怕了
         self.stop(share_key) # 防止重复运行
+        self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
         self.activate_groups[share_key]['client_id'] = client_id
+        self.activate_groups[share_key]['connected'] = False
         
         
         # 每次启动更新一次self.strategies列表
         strategy_dict = self.strategy_class.get(strategy_index)
 
         if not strategy_dict:
-            print(f"策略索引无效")
+            self.log(f"策略索引无效")
         else:
             self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, self.config.main_token, share_key, strategy_dict))
             self.activate_groups[share_key]['tids'].start()
