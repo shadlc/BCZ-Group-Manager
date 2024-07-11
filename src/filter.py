@@ -210,10 +210,13 @@ class Filter:
             return True
         
 
-    def check(self, member_dict: dict, week_info: dict,substrategy_dict :dict, conn: sqlite3.Connection) -> dict:
+    def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, conn: sqlite3.Connection) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
-        self.log (f'正在验证{member_dict["nickname"]},id = {member_dict["uniqueId"]}')
+        print(member_dict)
+        print(this_week_info)
+        print(last_week_info)
+        self.log (f'正在验证{member_dict["nickname"]},id = {member_dict["id"]} in {member_dict["group_name"]}')
 
         
 
@@ -225,28 +228,12 @@ class Filter:
             condition_name = condition['name']
             refer_dict = {}
 
-            # 打卡历史项，先标记，和最长打卡天数一起判断
-            if condition_name == "daka_history_finishingRate":
-                condition['name'] = 'finishingRate'
-                finishing_rate_condition = condition
-                continue
-            if condition_name == "daka_history_joinDays":
-                condition['name'] = 'joinDays'
-                join_days_condition = condition
-                continue
-            if condition_name == "zaokaRate":
-                zaoka_rate = condition
-            if condition_name == "zaokaDays":
-                zaoka_days = condition
-
-                
-
             # 【1】班内主页基础信息
-            member_dict['finishingRate'] = member_dict['completedTimes'] / member_dict['durationDays']
-            if condition_name == "completedTime"\
-                or condition_name == "todayStudyCheat"\
-                or condition_name == "durationDays" or condition_name == "completedTimes"\
-                or condition_name == "finishingRate":
+            member_dict['finishing_rate'] = member_dict['completed_times'] / member_dict['duration_days']
+            if condition_name == "completed_time"\
+                or condition_name == "today_study_cheat"\
+                or condition_name == "duration_days" or condition_name == "completed_times"\
+                or condition_name == "finishing_rate":
                 if not self.condition(member_dict, refer_dict, condition):
                     accept = 0
                     break # 以上都是可以直接查表判断
@@ -255,12 +242,19 @@ class Filter:
             # 【2】本班两周内历史信息
             # 先获取今日星期，然后计算从该成员上周一到今天打卡天数和漏卡天数，注意上周一之后才入班的情况单独处理
             # week_info示例:['05-24','05-25','05-27']
+            
             weekday_count = int(time.strftime("%w"))
             if weekday_count == 0 : # 星期日
                 weekday_count = 7
-            two_week_total_days = min(weekday_count + 7, member_dict['durationDays'])# 计算两周内在班总天数
-            two_week_daka_days = len(week_info) # 计算两周内打卡天数
-            member_dict['drop_this_week'] = two_week_total_days - two_week_daka_days # 计算两周内漏卡天数
+            last_week_total_days = min(7, max(0, member_dict['duration_days'] - weekday_count))
+            this_week_total_days = min(weekday_count, member_dict['duration_days']) # 计算本周在班总天数
+            two_week_total_days = min(7 + weekday_count, member_dict['duration_days'])
+            
+            this_week_daka_days = len(this_week_info)
+            last_week_daka_days = len(last_week_info)
+            
+            member_dict['drop_last_week'] = last_week_total_days - last_week_daka_days # 计算两周内漏卡天数
+            member_dict['drop_this_week'] = this_week_total_days - this_week_daka_days
             if condition_name == "drop_this_week"\
                 or condition_name == "drop_last_week":
                 if not self.condition(member_dict, refer_dict, condition):
@@ -283,88 +277,66 @@ class Filter:
             # 相当于点击了校牌
             # 每次调用bcz接口后需要等待0.5s
             
-            today_date = time.strftime("%m-%d")
-            personal_dict = self.sqlite.getPersonalInfo(member_dict['uniqueId'], today_date, conn)
+            personal_dict = self.sqlite.getPersonalInfo(member_dict['uniqueId'], conn)
             
             if personal_dict is None:
+                self.log(f"获取{member_dict['uniqueId']}没有今日校牌信息，正在获取")
                 personal_tosave = True
                 personal_dict = self.bcz.getUserInfo(member_dict['uniqueId'])
                 group_list = self.bcz.getUserGroupInfo(member_dict['uniqueId'])
-                personal_dict['group_list'] = group_list
                 time.sleep(0.5)
             else:
+                self.log(f"{member_dict['uniqueId']}今日校牌已获取")
                 personal_tosave = False
-                group_list = personal_dict.get('group_list', None)
 
 
-            if personal_dict["tag"] != -1 and personal_dict["tag"] != 3: # 3靠谱 -1未组队
-                personal_dict["dependability"] = 1 
-            else:
-                personal_dict["dependability"] = 0
             if personal_dict["name"] == member_dict["nickname"]:# 是否改了小班昵称
                 personal_dict["modified_nickname"] = 0
             else:
                 personal_dict["modified_nickname"] = 1
             if condition_name == "liked"\
                 or condition_name == "deskmate_days"\
-                or condition_name == "dependability"\
-                or condition_name == "modified_nickname":
+                or condition_name == "dependable_frame"\
+                or condition_name == "modified_nickname": # 3靠谱，0不靠谱，1萌新
                 if not self.condition(personal_dict, refer_dict, condition):
                     accept = 0
                     break
                 else:continue
                 
             # 【4】校牌小班信息
-            if condition_name == "group_daka_history":# 下面的缩进块是用来找出self.their_classes中满足指定天数的
-                # 要求：完成率finishing_rate_condition，加入天数other_groups_join_days
-
-
-                member_dict['group_daka_history'] = 0
-                for group_info in group_list:
-                    if self.condition(group_info, refer_dict, finishing_rate_condition)\
-                        and self.condition(group_info, refer_dict, join_days_condition):
-                            member_dict['group_daka_history'] = 1
-                            break
-                if not self.condition(member_dict, refer_dict, {'name': 'group_daka_history', 'value': 1, 'operator': '==', 'equality': True}):
-                    accept = 0
-                    break
-                else:continue
-            
-            # 【5】最长小班主页信息
-            # 数据库历史检测
-            group_history = self.sqlite.queryLongestInfo(member_dict['uniqueId'], member_dict['group_id'], conn)# 满足条件的最近的数据
-            group_tosave = False
-            # 最早的有效日期是3天前
-            valid_date = (datetime.datetime.now() - datetime.timedelta(days = 3)).strftime("%m-%d")
-            if condition_name == "personal_daka_history" and group_history["latestRecord"] <= valid_date:
-                # 查询group_list中的最后一个
-
-                group_dict = self.bcz.getGroupInfo(group_list[-1]['groupId'])
+            max_group_share_key = ""
+            max_group_name = ""
+            max_group_completed_times = 0
+            max_group_join_days = 0
+            max_expectancy = 0
+            if personal_tosave:
+                # 计算group_list中最长连卡期望
+                for group in group_list:
+                    join_days = group['joinDays']
+                    # 估计值：
+                    completed_times = join_days * group['finishingRate']
+                    expectancy = self.sqlite.ComboExpectancy(join_days, completed_times)
+                    if expectancy > max_expectancy:
+                        max_group_share_key = group['shareKey']
+                        max_expectancy = expectancy
+                        max_group_name = group['groupName']
+                        max_group_join_days = group['joinDays']
+                        max_group_completed_times = group['completedTimes']
+                # 对期望最大的小班进行查询
+                group_dict = self.bcz.getGroupInfo(max_group_share_key)
                 group_tosave = True
-
-                group_history['joinDays'] = max(group_history['joinDays'], group_dict['joinDays'])
-                group_history['completedTimes'] = max(group_history['completedTimes'], group_dict['completedTimes'])
-                group_history['finishingRate'] = group_history['completedTimes'] / group_history['durationDays']
-
-
-                member_dict['personal_daka_history'] = 1\
-                    if self.condition(group_history, refer_dict, finishing_rate_condition)\
-                and self.condition(group_history, refer_dict, join_days_condition) else 0
-            
-                if not self.condition(member_dict, refer_dict, {'name': 'personal_daka_history', 'value': 1, 'operator': '==', 'equality': True}):
+            else:
+                result = self.sqlite.queryLongestInfo(member_dict['uniqueId'], conn) # 缓存数据
+                max_group_name = result['period'][0][0]
+                max_group_completed_times = result['period'][0][1]
+                max_group_join_days = result['period'][0][2]
+                member_dict['max_combo_expectancy'] = result['period'][0][3]
+            if condition_name == "mxa_combo_expectancy": # 3靠谱，0不靠谱，1萌新
+                if not self.condition(personal_dict, refer_dict, condition):
                     accept = 0
                     break
                 else:continue
-                
-            if condition_name == "zaoka_history":
-                if self.condition(group_history, refer_dict, zaoka_days):
-                    self.log(f"数据不足{zaoka_days.get('value')}天，不进行判断")
-                    continue
-                else:
-                    if not self.condition(group_history, refer_dict, zaoka_rate):
-                        accept = 0
-                        break
-                    else:continue
+            
                     
         self.log(refer_dict)
         self.log('\n\n\n')
@@ -378,7 +350,7 @@ class Filter:
 
 
 # strategy_class列表（strategy_dict是其中指定字典）
-# default_list = [
+# default_list = [  
 #     {
 #         "name": "策略一",
 #         "weekDays": ["周一", "周三"],
@@ -538,7 +510,7 @@ class Filter:
                 time.sleep(1)
         except GeneratorExit:
             with self.clients_message_lock:
-                self.clients_message[client_id] = None # 回收消息队列
+                self.clients_message.pop(client_id, None)
 
     def run(self, authorized_token: str,strategy_index:int, share_key: str, strategy_dict: dict) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
@@ -563,9 +535,9 @@ class Filter:
         member_check_count = {} # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
         member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
         group_id = member_dict_temp['id']
-        for member_dict in member_dict_temp["members"]:
-            uniqueId = member_dict['id']
-            member_list.append(uniqueId) # 记录当前成员列表
+        # for member_dict in member_dict_temp["members"]:
+        #     uniqueId = member_dict['id']
+        #     member_list.append(uniqueId) # 记录当前成员列表
 
         group_count_limit = member_dict_temp['count_limit']
         
@@ -585,9 +557,8 @@ class Filter:
             # 【开始筛选，获取信息】
             # 点击成员管理页面
             member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token) # 包含现有成员信息，结构：{基本信息,"members":{"uniqueId":...}}
-            member_dict_temp["week_daka_info"] = self.bcz.getGroupDakaHistory(share_key) # 本周和上周打卡信息，结构：{12345678:["05-23","05-25",...],...}
-            # 先将所有获取到的member储存起来，在autosave时统一保存到数据库
-            member_dict_tosave.append(member_dict_temp)
+            member_dict_temp["week_daka_info"] = self.bcz.getGroupDakaHistory(share_key, parsed=True) # 本周和上周打卡信息，结构：{12345678:["05-23","05-25",...],...}
+            # 由于member_dict_temp获取的是observed_group的信息，所以不需要保存到数据库
             # 需要处理：数据库的主键问题，到时要写联合主键（又踩坑）
             
             
@@ -613,15 +584,18 @@ class Filter:
                     # 对每个成员，先判断是否已决策（仅本次运行期间有效，局部储存）
                     # verdict 含义：None-未决策，0...n-已决策，符合子条目的序号（越小越优先）
                     
-                    verdict = self.sqlite.queryStrategyVerdict(uniqueId, strategy_index, conn)
+                    verdict = self.sqlite.queryStrategyVerdict(strategy_index, uniqueId, conn)
                     result_code = 0
                     if not verdict:
                         self.log("no_verdict: True")
                         # 先检查是否满足条件，满足则堆入待决策列表
-                        
-                        for index, sub_strat_dict in strategy_dict["subItems"].items():
+                        for index, sub_strat_dict in enumerate(strategy_dict["subItems"]):
                             
-                            result = self.check(personal_dict_temp, member_dict_temp["week_daka_info"].get(uniqueId, None), sub_strat_dict, authorized_token, conn)
+                            result = self.check(
+                                personal_dict_temp,
+                                  member_dict_temp["week_daka_info"]['this_week'].get(uniqueId, None),
+                                    member_dict_temp["week_daka_info"]['last_week'].get(uniqueId, None),
+                                      sub_strat_dict, conn)
                             personal_dict_tosave.append(result['personal_dict'])
                             member_dict_tosave.append(result['group_dict'])
                             if result['result'] == 1:
@@ -758,7 +732,7 @@ class Filter:
         if not strategy_dict:
             self.log(f"策略索引无效")
         else:
-            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, self.config.main_token, share_key, strategy_dict))
+            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index, share_key, strategy_dict))
             self.activate_groups[share_key]['tids'].start()
 
 

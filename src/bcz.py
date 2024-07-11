@@ -19,7 +19,8 @@ class BCZ:
         self.own_info_url = 'https://social.baicizhan.com/api/deskmate/home_page'
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
-        self.user_info_url = 'https://social.baicizhan.com/api/deskmate/personal_details'
+        self.user_deskmate_url = 'https://social.baicizhan.com/api/deskmate/social/get_user_deskmate_info'
+        self.user_team_url = 'https://activity.baicizhan.com/api/activity/team-up-recite/person_home' # 注意参数字段名bcz_id
         self.get_week_rank_url = 'https://group.baicizhan.com/group/get_week_rank'
         self.remove_members_url = 'https://group.baicizhan.com/group/remove_members'
 
@@ -161,17 +162,33 @@ class BCZ:
         return data
         
     def getUserInfo(self, user_id: str = None) -> dict | None:
-        '''【用户校牌】获取指定用户信息deskmate'''
+        '''【用户校牌】获取指定同桌天数、是否靠谱头像框'''
+        # 获取同桌信息
         if not user_id:
             return
-        url = f'{self.user_info_url}?uniqueId={user_id}'
+        url = f'{self.user_deskmate_url}?uniqueId={user_id}'
         headers = self.getHeaders()
         response = requests.get(url, headers=headers, timeout=5)
         if response.status_code != 200 or response.json().get('code') != 1:
-            msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
+            msg = f'获取同桌失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
             raise Exception(msg)
-        user_info = response.json().get('data')
+        user_info = {}
+        user_info['deskmate_days'] = response.json()['data']['deskmateDays']
+        # 获取小队信息
+        url = f'{self.user_team_url}?bcz_id={user_id}'
+        response = requests.get(url, headers=headers, timeout=5)
+        if response.status_code != 200 or response.json().get('code') != 1:
+            logger.warning(f'获取小队信息失败!\n{response.text}')
+        team_info = response.json().get('data').get('members')
+        if team_info is None:
+            # 未加入小队
+            user_info['dependable_frame'] = '-1'
+        else:
+            for member in team_info:
+                if member['bczId'] == user_id:
+                    user_info['dependable_frame'] = member['tag']
+                    # 3靠谱，0不靠谱，1萌新
         return user_info
 
     def getUserGroupInfo(self, user_id: str = None) -> list[dict]:
@@ -399,7 +416,7 @@ class BCZ:
 
         return group
 
-    def getGroupDakaHistory(self, share_key: str) -> dict:
+    def getGroupDakaHistory(self, share_key: str, parsed: bool = False) -> dict:
         '''获取小班成员历史打卡信息'''
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
         headers = self.getHeaders()
@@ -412,16 +429,23 @@ class BCZ:
         week_data = week_response.json().get('data')
         last_week_data = last_week_response.json().get('data')
         daka_dict = {}
+        last_week_daka_dict = {}
         for member in week_data.get('list', []):
             id = member['uniqueId']
             daka_dict[id] = member['weekDakaDates']
         for member in last_week_data.get('list', []):
             id = member['uniqueId']
-            if id in daka_dict:
-                daka_dict[id] += member['weekDakaDates']
+            last_week_daka_dict[id] = member['weekDakaDates']
+        # 分离返回
+        if parsed:
+            return {'this_week': daka_dict, 'last_week': last_week_daka_dict}
+        # 将daka_dict和last_week_daka_dict合并返回
+        for id, daka_dates in daka_dict.items():
+            if id in last_week_daka_dict:
+                last_week_daka_dict[id].extend(daka_dates)
             else:
-                daka_dict[id] = member['weekDakaDates']
-        return daka_dict
+                last_week_daka_dict[id] = daka_dates
+        return last_week_daka_dict
 
     def updateGroupInfo(self, groups: list[dict], with_nickname: bool = True, only_favorite: bool = False) -> list:
         '''【参数传入的班内主页】获取最新信息并刷新小班信息列表'''

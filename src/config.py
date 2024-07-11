@@ -155,57 +155,108 @@ class Config:
 class Strategy:
     # Strategy类更新较少，且是整体更新，故也是用json，创建新的类
     default_list = [
-            {
-                "name": "策略一",
-                "weekDays": ["周一", "周三"],
-                "timeStart": "09:00",
-                "timeEnd": "10:00",
-                "subItems": [
-                    {
-                        "name": "子条目1",
-                        "operation": "接受",
-                        "validity": "本周",
-                        "minPeople": 199,
-                        "conditions": [
-                            {"name": "同桌天数", "value": 5, "operator": "大于", "equality": False},
-                            # ... 其他条件  
-                        ]
-                    },
-                    # ... 其他子条目  
-                ]
-            },
-            {
-                "name": "策略二",
-                "weekDays": ["周二", "周四"],
-                "timeStart": "10:00",
-                "timeEnd": "11:00",
-                "subItems": [
-                    {
-                        "name": "子条目1",
-                        "operation": "拒绝",
-                        "minPeople": 199,
-                        "validity": "本周",
-                        "conditions": [
-                            {"name": "同桌天数", "value": 3, "operator": "大于", "equality": False},
-                            # ... 其他条件  
-                        ]
-                    },
-                    # ... 其他子条目  
-                ]
-            },
-            # ... 其他策略  
+  {
+    "name": "策略一",
+    "weekDays": [
+      "周一",
+      "周三"
+    ],
+    "timeStart": "09:00",
+    "timeEnd": "10:00",
+    "subItems": [
+      {
+        "name": "子条目1",
+        "operation": "accept",
+        "validity": "本周",
+        "minPeople": 199,
+        "conditions": [
+          
+          {
+            "name": "completed_time",
+            "comment": "今日打卡时间,0表示未打卡",
+            "value": 0,
+            "operator": ">",
+            "equality": False
+          },
+          {
+            "name": "today_study_cheat",
+            "value": "是",
+            "operator": "==",
+            "equality": False
+          },
+          {
+            "name": "duration_days",
+            "value": "3",
+            "operator": ">",
+            "equality": False
+          },
+          {
+            "name": "completed_times",
+            "value": "3",
+            "operator": ">",
+            "equality": False
+          },
+          {
+            "name": "finishing_rate",
+            "value": 0.8,
+            "operator": ">",
+            "equality": False
+          },
+          {
+            "name": "drop_this_week",
+            "comment": "本周漏卡次数",
+            "value": 1,
+            "operator": "<",
+            "equality": False
+          },
+          {
+            "name": "drop_last_week",
+            "value": 1,
+            "operator": "<",
+            "equality": False
+          }
+          
         ]
+      }
+    ]
+  },
+  {
+    "name": "策略二",
+    "weekDays": [
+      "周二",
+      "周四"
+    ],
+    "timeStart": "10:00",
+    "timeEnd": "11:00",
+    "subItems": [
+      {
+        "name": "子条目1",
+        "operation": "拒绝",
+        "minPeople": 199,
+        "validity": "本周",
+        "conditions": [
+          {
+            "name": "同桌天数",
+            "value": 3,
+            "operator": "大于",
+            "equality": False
+          }
+        ]
+      }
+    ]
+  }
+]
     def __init__(self) -> None:
         '''初始化配置文件'''
-        self.file_path = f'./strategy.json'
+        self.file_path = f'strategy.json'
         try:
             if path := os.path.dirname(self.file_path):
                 os.makedirs(path, exist_ok=True)
-            self.json_data = json.read(self.file_path, encoding='utf-8')
+            self.json_data = json.load(open(self.file_path, encoding='utf-8'))
         except:
             json.dump(self.default_list, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
             self.json_data = self.default_list
-            logger.info('初次启动，已在当前执行目录生成配置文件')
+            logger.info('初次启动，已在当前执行目录生成strategy.json文件')
         
     def read(self) -> None:
         '''从文件中更新，一般不需使用'''
@@ -213,8 +264,8 @@ class Strategy:
     
     def get(self, index: int = None) -> list | dict | str | int | bool:
         '''获取指定配置'''
-        if index:
-            return self.json_data.get(index)
+        if index is not None:
+            return self.json_data[index]
         else:
             return self.json_data
         

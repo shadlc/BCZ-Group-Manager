@@ -118,10 +118,7 @@ class SQLite:
                 UNIQUE_ID INTEGER,                  -- 用户ID
                 DATETIME TEXT,                      -- 记录日期和时间
                 DESKMATE_DAYS INTEGER,              -- 同桌天数
-                DEPENDABILITY INTEGER,              -- 靠谱指数
-                GROUP_ID_LIST TEXT,                 -- 加入的小班列表
-                GROUP_JOIN_DAYS_LIST TEXT,          -- 加入小班的天数列表
-                GROUP_FINISHING_RATE_LIST TEXT      -- 打卡率列表
+                DEPENDABLE_FRAME INTEGER           -- 靠谱头像框
             );''',
             '''CREATE TABLE IF NOT EXISTS BLACKLIST (                   -- 黑名单表
                 UNIQUE_ID INTEGER,                  -- 用户ID
@@ -573,83 +570,6 @@ class SQLite:
             )[0][0]
 
         
-    def ComboExpectancy(join_days: int, completed_times: int) -> int:
-        '''计算最长连卡天数期望'''
-        # 我夜观星象，得到超越方程E*(x)^Q = 0.1Q，x为打卡率，求解Q即可
-        rate = completed_times / join_days
-        expectancy = join_days
-        length = 0
-        while length < join_days:
-            length += 1
-            expectancy *= rate # 11...11（Q个1）在100数位上发生的期望次数
-            if expectancy <= length / 10:  # 如果期望大于length则代表有一个完整的length序列，我们要找到符合条件的length最大值
-                # 但这个/10，我的天文知识还不能解释。经过测试在join_days = 100..10000, x=0.01..0.99都很符合
-                return length
-        
-    observed_days = 30
-    def queryLongestInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
-        '''获取指定成员数据库中停留天数【峰值】和【连卡期望】，最近30天【打卡时间】，平均【打卡词数】'''
-        # 和 saveGroupsInfo 功能相对，但这是以成员为单位，而不是以小班为单位
-        cursor = conn.cursor()
-        # 先获取这个成员的小班列表
-        group_list = cursor.execute(
-            f'SELECT DISTINCT GROUP_ID FROM MEMBERS WHERE USER_ID = ?',
-            [unique_id]
-        ).fetchall()
-        # 遍历小班列表，获取最长停留天数和完成率、最长完成次数
-        for group_id in group_list:
-            result = cursor.execute(
-                f'''
-                    SELECT
-                        TODAY_DATE,
-                        COMPLETED_TIME,
-                        DURATION_DAYS,
-                        COMPLETED_TIMES,
-                        WORD_COUNT,
-                    FROM MEMBERS
-                    WHERE USER_ID = ? AND GROUP_ID = ? ORDER BY DATA_TIME ASC
-                ''',# TODAY_DATE和WORD_COUNT暂时没用到
-                [unique_id, group_id[0]]
-            ).fetchall()
-            latest_date = "00-00"
-            time_stamp = time.time()
-            competed_time_list = []
-            period = []
-            current_stay = 0
-            current_completed_times = 0
-            total_word_count = 0
-            for item in result:
-                today_date = item[0]
-                completed_time = item[1]
-                duration_days = item[2]
-                completed_times = item[3]
-                word_count = item[4]
-
-                total_word_count += word_count
-
-                latest_date = max(latest_date, today_date)
-                if duration_days == 1 or time_stamp - completed_time < 86400: # 入班第一天或24h内
-                    continue
-                competed_time_list.append(completed_time)
-                    
-                if duration_days > current_stay:
-                    current_stay = duration_days
-                    current_completed_times = completed_times
-                else:# 离开班级
-                    period.append((current_stay, current_completed_times, self.ComboExpectancy(current_stay, current_completed_times)))
-
-                    current_stay = duration_days
-                    current_completed_times = completed_times
-            period.append((current_stay, current_completed_times, self.ComboExpectancy(current_stay, current_completed_times)))
-            # 按照ComboExpectancy排序
-            period.sort(key=lambda x: x[2], reverse=True)
-            
-                    
-            return {"period": period, 
-                    "latest_date": latest_date, 
-                    "competed_time_list": competed_time_list,
-                    "average_word_count": total_word_count/len(result)}
-        
     # def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection) -> None:
     #     '''保存筛选日志，详情见filter.py'''
     #     # 结构实例
@@ -801,15 +721,154 @@ class SQLite:
         else:
             return []
         
-    def getPersonalInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
-        '''获取个人信息'''
+    def ComboExpectancy(join_days: int, completed_times: int) -> int:
+        '''计算最长连卡天数期望'''
+        # 我夜观星象，得到超越方程E*(x)^Q = 0.1Q，x为打卡率，求解Q即可
+        rate = completed_times / join_days
+        expectancy = join_days
+        length = 0
+        while length < join_days:
+            length += 1
+            expectancy *= rate # 11...11（Q个1）在100数位上发生的期望次数
+            if expectancy <= length / 10:  # 如果期望大于length则代表有一个完整的length序列，我们要找到符合条件的length最大值
+                # 但这个/10，我的天文知识还不能解释。经过测试在join_days = 100..10000, x=0.01..0.99都很符合
+                return length
+        
+    observed_days = 30
+    def queryLongestInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
+        '''获取指定成员数据库中停留天数【峰值】和【连卡期望】，最近30天【打卡时间】，平均【打卡词数】'''
+        # 和 saveGroupsInfo 功能相对，但这是以成员为单位，而不是以小班为单位
         cursor = conn.cursor()
+        # 先获取这个成员的小班列表
+        group_list = cursor.execute(
+            f'SELECT DISTINCT GROUP_ID FROM MEMBERS WHERE USER_ID = ?',
+            [unique_id]
+        ).fetchall()
+        # 遍历小班列表，获取最长停留天数和完成率、最长完成次数
+        for group_id in group_list:
+            result = cursor.execute(
+                f'''
+                    SELECT
+                        TODAY_DATE,
+                        COMPLETED_TIME,
+                        DURATION_DAYS,
+                        COMPLETED_TIMES,
+                        WORD_COUNT,
+                        GROUP_NAME,
+                    FROM MEMBERS
+                    WHERE USER_ID = ? AND GROUP_ID = ? ORDER BY DATA_TIME ASC
+                ''',# TODAY_DATE和WORD_COUNT暂时没用到
+                [unique_id, group_id[0]]
+            ).fetchall()
+            latest_date = "00-00"
+            time_stamp = time.time()
+            competed_time_list = []
+            period = []
+            current_stay = 0
+            current_completed_times = 0
+            total_word_count = 0
+            for item in result:
+                today_date = item[0]
+                completed_time = item[1]
+                duration_days = item[2]
+                completed_times = item[3]
+                word_count = item[4]
+                group_name = item[5]
 
-    def savePersonalInfo(self, unique_id: str, personal_info: dict, conn: sqlite3.Connection) -> None:
-        '''保存个人信息'''
-        # 记得看备忘录
-        # 记得转换database脚本
+                total_word_count += word_count
+
+                latest_date = max(latest_date, today_date)
+                if duration_days == 1 or time_stamp - completed_time < 86400: # 入班第一天或24h内
+                    continue
+                competed_time_list.append(completed_time)
+                    
+                if duration_days > current_stay:
+                    current_stay = duration_days
+                    current_completed_times = completed_times
+                else:# 离开班级
+                    period.append((group_name, current_completed_times, current_stay, self.ComboExpectancy(current_stay, current_completed_times)))
+
+                    current_stay = duration_days
+                    current_completed_times = completed_times
+            period.append((group_name, current_completed_times, current_stay, self.ComboExpectancy(current_stay, current_completed_times)))
+            # 按照ComboExpectancy排序
+            period.sort(key=lambda x: x[3], reverse=True)
+            
+                    
+            return {"period": period, 
+                    "latest_date": latest_date, 
+                    "competed_time_list": competed_time_list,
+                    "average_word_count": total_word_count/len(result)}
+        
+    def getPersonalInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
+        '''获取基于今日的个人信息，如果今天没获取过，返回None'''
         cursor = conn.cursor()
+        # 查询最近日期，如果不是今天返回None
+        result = cursor.execute(
+            f'SELECT DATETIME, DESKMATE_DAYS, DEPENDABLE_FRAME FROM PERSONAL_INFO WHERE USER_ID = ? ORDER BY DATETIME DESC LIMIT 1',
+            [unique_id]
+        ).fetchone()
+        today_date = result[0][0] if result else None
+        if today_date is None or today_date != datetime.now().strftime('%Y-%m-%d'):
+            return None
+        # 查询最大的同桌天数
+        max_deskmate_days = result[0][1]
+        # 查询时间最近的靠谱头像框
+        dependable_frame = result[0][2]
+        # 由于有今天的校牌记录，说明小班信息已经存入MEMBERS表，所以从MEMBERS表中查询
+        # 查询最近日期的所有小班的完成次数和入班天数
+        
+        # result = cursor.execute(
+        #     f'''
+        #         SELECT 
+        #             GROUP_NAME,
+        #             COMPLETED_TIMES,
+        #             DURATION_DAYS,
+        #         FROM MEMBERS
+        #         WHERE USER_ID = ? AND DATA_TIME = ?
+        #     ''',
+        #     [unique_id, today_date]
+        # ).fetchall()
+        # # 遍历小班列表，获取最大期望连卡天数
+        # # 注意此处的最大期望是基于今日数据，而queryLongestInfo是基于历史数据
+        # max_combo_expectancy = 0
+        # max_completed_times = 0
+        # max_duration_days = 0
+        # max_group_name = ''
+        # for item in result:
+        #     group_name = item[0]
+        #     completed_times = item[1]
+        #     duration_days = item[2]
+        #     combo_expectancy = self.ComboExpectancy(duration_days, completed_times)
+        #     if combo_expectancy > max_combo_expectancy:
+        #         max_group_name = group_name
+        #         max_completed_times = completed_times
+        #         max_duration_days = duration_days
+        #         max_combo_expectancy = combo_expectancy
+
+        return {
+            'unique_id': unique_id,
+            'deskmate_days': max_deskmate_days,
+            'dependable_frame': dependable_frame,
+            # 'today_max_combo_expectancy': (
+            #     max_group_name,
+            #     max_completed_times,
+            #     max_duration_days,
+            #     max_combo_expectancy
+            # )
+        }
+    
+    def savePersonalInfo(self, personal_info_list : list, conn: sqlite3.Connection) -> None:
+        '''保存个人信息'''
+        # 只保存personal表
+        cursor = conn.cursor()
+        for personal_info in personal_info_list:
+            unique_id = personal_info['unique_id']
+            cursor.execute(
+                f'INSERT OR REPLACE INTO PERSONAL_INFO (USER_ID, DATETIME, DESKMATE_DAYS, DEPENDABLE_FRAME) VALUES (?,?,?,?)',
+                (unique_id, datetime.now().strftime('%Y-%m-%d'), personal_info['deskmate_days'], personal_info['dependable_frame'])
+            )
+        conn.commit()
 
     def queryMemberTable(self, payload: dict, header: bool = True, union_temp: bool = False) -> dict:
         '''查询用户信息表
