@@ -155,93 +155,92 @@ class Config:
 class Strategy:
     # Strategy类更新较少，且是整体更新，故也是用json，创建新的类
     default_list = [
-  {
-    "name": "策略一",
-    "weekDays": [
-      "周一",
-      "周三"
-    ],
+      {
+    "name": "示例策略",
     "timeStart": "09:00",
     "timeEnd": "10:00",
+    "comment": "时间标记暂未启用",
     "subItems": [
       {
         "name": "子条目1",
         "operation": "accept",
-        "validity": "本周",
-        "minPeople": 199,
+        "comment": "子条目按顺序判断，符合即不再继续",
         "conditions": [
           
           {
-            "name": "completed_time",
+            "name": "completed_time_stamp",
             "comment": "今日打卡时间,0表示未打卡",
             "value": 0,
-            "operator": ">",
-            "equality": False
+            "operator": ">"
           },
           {
             "name": "today_study_cheat",
-            "value": "是",
-            "operator": "==",
-            "equality": False
+            "value": "否",
+            "operator": "=="
           },
           {
             "name": "duration_days",
-            "value": "3",
-            "operator": ">",
-            "equality": False
+            "value": 3,
+            "operator": ">"
           },
           {
             "name": "completed_times",
-            "value": "3",
-            "operator": ">",
-            "equality": False
+            "value": 3,
+            "operator": ">"
           },
           {
             "name": "finishing_rate",
-            "value": 0.8,
-            "operator": ">",
-            "equality": False
+            "value": 0.85,
+            "operator": ">"
           },
           {
             "name": "drop_this_week",
             "comment": "本周漏卡次数",
             "value": 1,
-            "operator": "<",
-            "equality": False
+            "operator": "<"
           },
           {
             "name": "drop_last_week",
             "value": 1,
-            "operator": "<",
-            "equality": False
-          }
-          
-        ]
-      }
-    ]
-  },
-  {
-    "name": "策略二",
-    "weekDays": [
-      "周二",
-      "周四"
-    ],
-    "timeStart": "10:00",
-    "timeEnd": "11:00",
-    "subItems": [
-      {
-        "name": "子条目1",
-        "operation": "拒绝",
-        "minPeople": 199,
-        "validity": "本周",
-        "conditions": [
+            "operator": "<"
+          },
           {
-            "name": "同桌天数",
+            "name": "blacklisted",
+            "value": 0,
+            "operator": "=="
+          },
+          {
+            "name": "deskmate_days",
+            "value": 10,
+            "operator": ">="
+          },
+          {
+            "name": "dependable_frame",
+            "comment": "4未加入，0不靠谱，1萌新，3靠谱",
             "value": 3,
-            "operator": "大于",
-            "equality": False
+            "operator": ">="
+          },
+          {
+            "name": "modified_nickname",
+            "comment": "班内昵称和用户昵称不一致为1",
+            "value": 1,
+            "operator": "=="
+          },
+          {
+            "name": "max_combo_expectancy",
+            "comment": "校牌小班+数据库预测最大连卡期望",
+            "value": 10,
+            "operator": ">"
           }
         ]
+      },
+      {
+        "name": "兜底",
+        "operation": "reject",
+        "minPeople": 195,
+        "comment":"只要不符合以上任意且人数>195就踢",
+        "conditions": [
+        ] 
       }
     ]
   }

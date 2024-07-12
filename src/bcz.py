@@ -183,7 +183,7 @@ class BCZ:
         team_info = response.json().get('data').get('members')
         if team_info is None:
             # 未加入小队
-            user_info['dependable_frame'] = '-1'
+            user_info['dependable_frame'] = '4'
         else:
             for member in team_info:
                 if member['bczId'] == user_id:
@@ -369,6 +369,7 @@ class BCZ:
                 completed_time = time.strftime('%H:%M:%S', time.localtime(member['completedTime']))
             members.append({
                 'id': member_id,
+                'member_id': member['id'],
                 'group_id': group_id,
                 'group_name': group_name,
                 'nickname': nickname,
@@ -378,6 +379,7 @@ class BCZ:
                 'today_word_count': member['todayWordCount'],
                 'completed_times': member['completedTimes'],
                 'completed_time': completed_time,
+                'completed_time_stamp': member['completedTime'],
                 'duration_days': member['durationDays'],
                 'today_study_cheat': '是' if member['todayStudyCheat'] else '否',
                 'today_date': today_date,
