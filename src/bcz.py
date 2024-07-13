@@ -131,6 +131,7 @@ class BCZ:
             if response.json().get("code",0) == 999:
                 logger.info(f"删除的人已经不在小班中")
             logger.info(f"remove{json}出现异常，请检查")
+        logger.info(f"删除成功")
             # 2024.2.23 15:39 成功第一次
             
 
@@ -162,7 +163,7 @@ class BCZ:
         return data
         
     def getUserInfo(self, user_id: str = None) -> dict | None:
-        '''【用户校牌】获取指定同桌天数、是否靠谱头像框'''
+        '''【用户校牌】获取用户名、同桌天数、是否靠谱头像框'''
         # 获取同桌信息
         if not user_id:
             return
@@ -174,6 +175,8 @@ class BCZ:
             logger.error(f'{msg}\n{response.text}')
             raise Exception(msg)
         user_info = {}
+        user_info['unique_id'] = user_id
+        user_info['name'] = response.json()['data']['userInfo']['name']
         user_info['deskmate_days'] = response.json()['data']['deskmateDays']
         # 获取小队信息
         url = f'{self.user_team_url}?bcz_id={user_id}'
@@ -230,6 +233,8 @@ class BCZ:
                 'avatar_frame': avatar_frame,
                 'data_time': self.data_time,
                 'join_days': group['joinDays'],
+                'unique_id': user_id,
+                'today_date': datetime.now().strftime('%Y-%m-%d'),
             })
         return groups
 

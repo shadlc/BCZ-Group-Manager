@@ -307,6 +307,43 @@ class SQLite:
         if temp_conn:
             conn.close()
 
+    def saveUserOwnGroupsInfo(self, members: list, conn: sqlite3.Connection) -> None:
+        '''保存用户校牌小班信息'''
+        cursor = conn.cursor()
+
+        for member in members:
+            # 选取同一天、同一用户的最早打卡时间
+            recorded_time = cursor.execute(
+                f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = ? AND TODAY_DATE = ? ORDER BY COMPLETED_TIME ASC LIMIT 1',
+                (member['id'], member['today_date'])
+            ).fetchone()
+            if recorded_time and recorded_time[0] is not None:
+                member['completed_time'] = recorded_time[0]
+                # 校牌小班没有打卡时间。以数据库为准
+            else: 
+                member['completed_time'] = -1
+            cursor.execute(
+                f'INSERT OR REPLACE INTO MEMBERS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                (
+                    member['unique_id'],
+                    'unknown',# member['nickname'],
+                    'unknown',# member['group_nickname'],
+                    member['completed_time'],
+                    member['today_date'],
+                    -1,# member['today_word_count'],
+                    'unknown',# member['today_study_cheat'],
+                    round(member['join_days'] * member['finishing_rate'], 2),# member['completed_times'],
+                    member['join_days'],
+                    'unknown',# member['group_name'],
+                    member['id'],# group_id
+                    member['name'],# group_name
+                    'unknown',# member['avatar'],
+                    member['data_time'],
+                )
+            )
+            # 有个备注：踢出操作的有效期必须是当次，否则会影响手动通过的有效性
+        conn.commit()
+
     def addObserveGroupInfo(self, groups: list[dict]) -> None:
         '''增加关注小班信息'''
         conn = self.connect(self.db_path)
@@ -623,6 +660,7 @@ class SQLite:
             (strategy_id, unique_id, datetime.now().strftime('%Y-%m-%d'))
         )
         result = cursor.fetchone()
+        logger.info(f'queryStrategyVerdict result: {result}')
         if result:
             return result[0]
         else:
@@ -718,18 +756,23 @@ class SQLite:
         else:
             return []
         
-    def ComboExpectancy(completed_times: int, join_days: int) -> int:
+    def ComboExpectancy(self, finishing_rate: float, join_days: int) -> int:
         '''计算最长连卡天数期望'''
         # 我夜观星象，得到超越方程E*(x)^Q = 0.1Q，x为打卡率，求解Q即可
-        rate = completed_times / join_days
+        if finishing_rate == 1:
+            return join_days
+        rate = finishing_rate
         expectancy = join_days
         length = 0
+        # logger.info( f'ComboExpectancy: {rate}% {join_days}')
         while length < join_days:
+            # logger.debug( f'check: {length}: E={expectancy}')
             length += 1
             expectancy *= rate # 11...11（Q个1）在100数位上发生的期望次数
-            if expectancy <= length / 10:  # 如果期望大于length则代表有一个完整的length序列，我们要找到符合条件的length最大值
+            if expectancy <= length / 4:  # 如果期望大于length则代表有一个完整的length序列，我们要找到符合条件的length最大值
                 # 但这个/10，我的天文知识还不能解释。经过测试在join_days = 100..10000, x=0.01..0.99都很符合
                 return length
+        return join_days
 
     def getPersonalInfo(self, unique_id: str, conn: sqlite3.Connection, user_info: dict = None, group_info: dict = None) -> dict:
         '''简化版gPI：①查数据库，如果没今日数据则调bcz端口，合并数据②返回停留天数峰值、连卡期望'''
@@ -753,18 +796,13 @@ class SQLite:
         if result is None or result[0] is None:
             deskmate_days = 0
         else:
-            deskmate_days = result[0][2]
+            deskmate_days = result[0]
+            print(deskmate_days)
         # 比较数据库中的个人数据和传入的数据
         if user_info is not None:
-            try:
-                dependable_frame = user_info['dependable_frame']
-                
-                deskmate_days = max(user_info['deskmate_days'], deskmate_days)
-            except Exception as e:
-                
-                logger.debug(f'user_info: {user_info}')
-                logger.debug(f'{dependable_frame} {deskmate_days}')
-                raise e
+            dependable_frame = user_info['dependable_frame']
+            deskmate_days = max(user_info['deskmate_days'], deskmate_days) # 此处原来的bug是deskmate_days是None
+            # logger.debug(f'user_info: {user_info}')
             
         
         # 查询用户历史加入的小班，获取每个小班最长停留天数和连卡期望
@@ -787,15 +825,17 @@ class SQLite:
                 [unique_id, group_id[0]]
             ).fetchone()
             if result:
-                combo_expectancy = self.ComboExpectancy(result[0], result[1])
+                combo_expectancy = self.ComboExpectancy(result[1] / result[2], result[2])
                 period.append((result[0], result[1], result[2], combo_expectancy))
         # 如果传入的字段有数据
         if group_info is not None:
             for group in group_info:
-                expected_completed_times = group['joinDays'] * group['finishingRate']
-                combo_expectancy = self.ComboExpectancy(expected_completed_times, group['joinDays'])
-                period.append((group['name'], expected_completed_times, group['joinDays'], combo_expectancy))
+                # logger.debug(f'group_info: {group}')
+                expected_completed_times = round(group['join_days'] * group['finishing_rate'], 2)
+                combo_expectancy = self.ComboExpectancy(group['finishing_rate'], group['join_days'])
+                period.append((group['name'], expected_completed_times, group['join_days'], combo_expectancy))
         # 按照ComboExpectancy排序，最终第0个就是最佳选择
+        # logger.debug(f'period: {period}')
         period.sort(key=lambda x: x[3], reverse=True)
         return {
             'unique_id': unique_id,
