@@ -42,6 +42,7 @@ html {
 }
 body {
   display: flex;
+  flex-direction: column;
   align-items: stretch;
   height: 100%;
   margin: 0;
@@ -51,9 +52,11 @@ main {
   position: relative;
   display: flex;
   font-weight: bold;
-  flex-direction: column;
-  width: 100%;
+  flex-direction: row;
+  width: 90%;
+  height: calc(100% - 2rem);
   align-items: center;
+  align-self: center;
   overflow: hidden;
 }
 a {
@@ -890,13 +893,11 @@ table.simple-table td {
 .wall {
   z-index: 0;
   position: relative;
-  width: 95%;
   height: calc(100% - 12rem);
   max-width: 1800px;
   padding: 0;
+  margin: 1rem;
   margin-top: 7rem;
-  background: rgb(255, 250, 235);
-  border: solid 0.1rem var(--black);
 }
 .wall-container {
   position: relative;
@@ -908,6 +909,8 @@ table.simple-table td {
   justify-content: space-evenly;
   width: 100%;
   height: calc(100% - 2rem);
+  background: rgb(255, 250, 235, 0.85);
+  border: solid 0.1rem var(--black);
   padding: 1rem 0;
   overflow: auto;
 }
@@ -1574,7 +1577,7 @@ table.simple-table td {
 
 /*Footer*/
 .footer {
-  position: relative;
+  position: absolute;
   bottom: 0;
   height: 4rem;
   z-index: 10;
@@ -1696,4 +1699,91 @@ footer{
   background: #ff88aa;
   box-shadow: inset 0.1rem 0.1rem 0.15rem #c06680, inset -0.1rem -0.1rem 0.2rem #ff9ac0;
   transform: translateY(0) rotate(45deg);
+}
+@keyframes Fade {
+  0% {
+      opacity: 1;
+      transform: translateX(0px);
+  }
+
+  20% {
+      opacity: 1;
+      transform: translateX(25px);
+  }
+
+  90% {
+      opacity: 0;
+      transform: translateX(-325px);
+  }
+
+  100% {
+      opacity: 0;
+      transform: translateX(300px);
+  }
+}
+
+@keyframes Show {
+  0% {
+      opacity: 0;
+      transform: translateX(300px);
+  }
+
+  20% {
+      opacity: 0;
+      transform: translateX(350px);
+  }
+
+  90% {
+      opacity: 1;
+      transform: translateX(0px);
+  }
+
+  100% {
+      opacity: 1;
+      transform: translateX(0px);
+  }
+}
+
+@keyframes FadeRevert {
+  0% {
+      opacity: 1;
+      transform: translateX(0px);
+  }
+
+  20% {
+      opacity: 1;
+      transform: translateX(-25px);
+  }
+
+  90% {
+      opacity: 0;
+      transform: translateX(325px);
+  }
+
+  100% {
+      opacity: 0;
+      transform: translateX(-300px);
+  }
+}
+
+@keyframes ShowRevert {
+  0% {
+      opacity: 0;
+      transform: translateX(-300px);
+  }
+
+  20% {
+      opacity: 0;
+      transform: translateX(-350px);
+  }
+
+  90% {
+      opacity: 1;
+      transform: translateX(0px);
+  }
+
+  100% {
+      opacity: 1;
+      transform: translateX(0px);
+  }
 }
