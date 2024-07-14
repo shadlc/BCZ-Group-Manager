@@ -253,7 +253,8 @@ class Filter:
 
         # 【1】班内主页基础信息
         member_dict['finishing_rate'] = member_dict['completed_times'] / member_dict['duration_days']
-        for name in ['completed_time_stamp', 'today_study_cheat', 'duration_days', 'completed_times', 'finishing_rate']:
+        member_dict['modified_nickname'] = 0 if member_dict['nickname'] == member_dict['group_nickname'] else 1
+        for name in ['completed_time_stamp', 'today_study_cheat', 'duration_days', 'completed_times', 'finishing_rate', 'modified_nickname']:
             try:
                 pos = condition_name.index(name)
                 if not self.condition(member_dict, refer_dict, conditions[pos]):
@@ -326,22 +327,28 @@ class Filter:
         personal_dict = self.sqlite.getPersonalInfo(uniqueId, conn)
         
         personal_tosave = False
-        if condition_name == "modified_nickname":
-            self.log(f"正在获取班内昵称")
+        if personal_dict is None:
+            self.log(f"获取{uniqueId}没有今日校牌信息，正在获取")
             personal_tosave = True
         else:
-            if personal_dict is None:
-                self.log(f"获取{uniqueId}没有今日校牌信息，正在获取")
-                personal_tosave = True
-            else:
-                self.log(f"{uniqueId}今日校牌已获取")
-                personal_tosave = False
+            self.log(f"{uniqueId}今日校牌已获取")
+            personal_tosave = False
         if personal_tosave:
             user_info = self.bcz.getUserInfo(uniqueId)
             group_info = self.bcz.getUserGroupInfo(uniqueId)
+            for group in group_info:
+                # 将用户昵称、班内昵称等信息写入
+                group['nickname'] = user_info['name']
+                group['completed_time'] = member_dict['completed_time']
+                group['completed_time_stamp'] = member_dict['completed_time_stamp']
+                group['today_word_count'] = member_dict['today_word_count']
+                group['today_study_cheat'] = member_dict['today_study_cheat']
+                group['book_name'] = member_dict['book_name']
+                group['avatar'] = member_dict['avatar']
+                
             time.sleep(0.5)
             personal_dict = self.sqlite.getPersonalInfo(uniqueId, conn, user_info = user_info, group_info = group_info)
-            personal_dict["modified_nickname"] = 0 if user_info["name"] == member_dict["nickname"] else 1
+            personal_dict["modified_nickname"] = 0 if user_info["name"] == member_dict["group_nickname"] else 1
         
         # 【4】校牌小班、历史小班信息
         max_info = personal_dict['period'][0]
@@ -374,9 +381,10 @@ class Filter:
         self.autosave_is_running = True
         while(self.activate_groups):
             time.sleep(self.autosave_interval)
+            
+            self.log('autosave now...')
             conn = self.sqlite.connect()
             with self.lock:
-                self.log('autosave now...')
                 # self.log('save member_dict:'+str(self.member_dict))
                 self.sqlite.saveUserOwnGroupsInfo(self.member_dict, conn)
                 # self.log('save verdict_dict:'+str(self.verdict_dict))
@@ -387,6 +395,7 @@ class Filter:
                 self.verdict_dict = {}
                 self.personal_dict = [] # 缓存个人信息，避免重复请求
             conn.close()
+            self.log('autosave done')
         self.autosave_is_running = False
 
     def debug(self, message: str) -> None:
@@ -423,7 +432,7 @@ class Filter:
 
         today_date = datetime.datetime.now().strftime("%m-%d")
         delay = 3
-        delay_delta = 6
+        delay_delta = 6.5
 
         
 
@@ -613,9 +622,9 @@ class Filter:
             # 根据加入人数多少，调整延迟
             # 例如最少是196，则198或以上时延迟减少，否则增加
             if member_cnt > min(group_count_limit, minPeople_min + 1): # 正在筛选，延迟减少
-                delay = max(delay - delay_delta, 3)
+                delay = max(delay - delay_delta, 3.5)
             else:
-                delay = min(delay + delay_delta, 30) # 筛选暂停，延迟增加
+                delay = min(delay + delay_delta, 127.5) # 筛选暂停，延迟增加
             self.log(f"下一次检测延迟{delay}s")
             time.sleep(delay)
             

@@ -310,11 +310,11 @@ img[src=""] {
   border-radius: 100%;
   background: fieldtext;
   transform-origin: center;
-  transform: scale(0%);
+  transform: scale(0);
   transition: all ease 0.2s;
 }
 .checkbox input:checked + label::after {
-  transform: scale(100%);
+  transform: scale(1);
   transition: all cubic-bezier(0, 1, 0.5, 1.5) 0.2s;
 }
 .modal {

@@ -231,7 +231,7 @@ class BCZ:
                 'type': group['type'],
                 'avatar': group['avatar'],
                 'avatar_frame': avatar_frame,
-                'data_time': self.data_time,
+                'data_time': data_time,
                 'join_days': group['joinDays'],
                 'unique_id': user_id,
                 'today_date': datetime.now().strftime('%Y-%m-%d'),

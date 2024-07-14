@@ -59,37 +59,38 @@ class SQLite:
                 DATA_TIME TEXT                      -- 记录时间
             );''',
             '''CREATE TABLE IF NOT EXISTS MEMBERS (                   -- 成员表（以用户 + 小班 + 日期 为主键）
-                USER_ID INTEGER UNIQUE,             -- 用户ID   *
+                USER_ID INTEGER,             -- 用户ID   *
                 NICKNAME TEXT,                      -- 用户昵称
                 GROUP_NICKNAME TEXT,                -- 班内昵称(直接覆盖旧的)
                 COMPLETED_TIME TEXT,                -- 打卡时间
-                TODAY_DATE TEXT UNIQUE,             -- 记录日期 *
+                TODAY_DATE TEXT,             -- 记录日期 *
                 WORD_COUNT INTEGER,                 -- 今日词数
                 STUDY_CHEAT INTEGER,                -- 是否作弊
                 COMPLETED_TIMES INTEGER,            -- 打卡天数
                 DURATION_DAYS INTEGER,              -- 入班天数
                 BOOK_NAME TEXT,                     -- 学习词书
-                GROUP_ID INTEGER UNIQUE,            -- 小班ID   *
+                GROUP_ID INTEGER,            -- 小班ID   *
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
                 DATA_TIME TEXT,                      -- 记录时间
-                PRIMARY KEY (USER_ID, TODAY_DATE, GROUP_ID)
+                UNIQUE(USER_ID, GROUP_ID, TODAY_DATE)
             );''',
             '''CREATE TABLE IF NOT EXISTS T_MEMBERS (                   -- 成员临时表(最新数据)
-                USER_ID INTEGER UNIQUE,             -- 用户ID   *
+                USER_ID INTEGER,             -- 用户ID   *
                 NICKNAME TEXT,                      -- 用户昵称
                 GROUP_NICKNAME TEXT,                -- 班内昵称(直接覆盖旧的)
                 COMPLETED_TIME TEXT,                -- 打卡时间
-                TODAY_DATE TEXT UNIQUE,             -- 记录日期 *
+                TODAY_DATE TEXT,             -- 记录日期 *
                 WORD_COUNT INTEGER,                 -- 今日词数
                 STUDY_CHEAT INTEGER,                -- 是否作弊
                 COMPLETED_TIMES INTEGER,            -- 打卡天数
                 DURATION_DAYS INTEGER,              -- 入班天数
                 BOOK_NAME TEXT,                     -- 学习词书
-                GROUP_ID INTEGER UNIQUE,            -- 小班ID   *
+                GROUP_ID INTEGER,            -- 小班ID   *
                 GROUP_NAME TEXT,                    -- 小班昵称
                 AVATAR TEXT,                        -- 用户头像
-                DATA_TIME TEXT                      -- 记录时间
+                DATA_TIME TEXT,                      -- 记录时间
+                UNIQUE(USER_ID, GROUP_ID, TODAY_DATE)
             );''',
             '''CREATE TABLE IF NOT EXISTS OBSERVED_GROUPS (                   -- 关注小班表
                 GROUP_ID INTEGER,                   -- 小班ID
@@ -115,18 +116,19 @@ class SQLite:
                 VALID INTEGER                       -- 是否有效(0:已删除, 1:有效, 2:无效)
             );''',
             '''CREATE TABLE IF NOT EXISTS PERSONAL_INFO (                -- 个人信息表
-                UNIQUE_ID INTEGER,                  -- 用户ID
-                DATETIME TEXT,                      -- 记录日期和时间
+                UNIQUE_ID INTEGER,           -- 用户ID
+                DATETIME TEXT,               -- 记录日期和时间
                 DESKMATE_DAYS INTEGER,              -- 同桌天数
-                DEPENDABLE_FRAME INTEGER           -- 靠谱头像框
+                DEPENDABLE_FRAME INTEGER,           -- 靠谱头像框
+                UNIQUE(UNIQUE_ID, DATETIME)
             );''',
             '''CREATE TABLE IF NOT EXISTS BLACKLIST (                   -- 黑名单表
-                UNIQUE_ID INTEGER,                  -- 用户ID
-                DATETIME TEXT,                      -- 记录日期和时间
+                UNIQUE_ID INTEGER,           -- 用户ID
+                DATETIME TEXT,               -- 记录日期和时间
                 ADD_BY TEXT,                        -- 添加人昵称
                 TYPE INTEGER,                       -- 类型(1:王者班长)
                 REASON TEXT,                        -- 原因
-                PRIMARY KEY (UNIQUE_ID, DATETIME)
+                UNIQUE(UNIQUE_ID, DATETIME)
             );''',
             '''CREATE TABLE IF NOT EXISTS CONTACT_INFO (                   -- 用户联系方式表
                 -- 考虑做一个群编辑黑名单bot，添加这个表为了快速记录添加黑名单的王者班长
@@ -135,7 +137,7 @@ class SQLite:
                 TYPE INTEGER,                       -- 类型(1:王者班长)
                 QQ_ID TEXT,                         -- QQ号
                 OTHERS TEXT,                        -- 其他联系方式
-                PRIMARY KEY (UNIQUE_ID)
+                PRIMARY KEY (QQ_ID)
             );''',
             # '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
             #     UNIQUE_ID TEXT,                      -- 用户ID/client ID
@@ -148,10 +150,10 @@ class SQLite:
             # );''',
             '''CREATE TABLE IF NOT EXISTS STRATEGY_VERDICT (                   -- 成员在指定策略下的判定结果表，有效期24h
                 UNIQUE_ID TEXT,                      -- 用户ID
-                STRATEGY_ID,                         -- 策略ID
-                SUB_STRATEGY_ID,                     -- 符合的子策略ID
+                STRATEGY_ID INTEGER,                         -- 策略ID
+                SUB_STRATEGY_ID INTEGER,                     -- 符合的子策略ID
                 DATE TEXT,                       -- 所有判据当天有效
-                PRIMARY KEY (UNIQUE_ID, STRATEGY_ID)
+                UNIQUE(UNIQUE_ID, STRATEGY_ID, DATE)
             );''',
             '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,   -- 头像ID
@@ -284,19 +286,30 @@ class SQLite:
                 member['completed_time'] = recorded_time[0]
                 # 可能加入新的小班后，会产生更晚的时间，以早的为准
             cursor.execute(
-                f'INSERT OR REPLACE INTO {table_name} VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                f'INSERT INTO {table_name} (USER_ID, TODAY_DATE, GROUP_ID, NICKNAME, GROUP_NICKNAME, COMPLETED_TIME, WORD_COUNT, STUDY_CHEAT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_NAME, AVATAR, DATA_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(USER_ID, TODAY_DATE, GROUP_ID) DO UPDATE SET'
+                ' NICKNAME = excluded.NICKNAME, '
+                'GROUP_NICKNAME = excluded.GROUP_NICKNAME, '
+                'COMPLETED_TIME = excluded.COMPLETED_TIME, '
+                'WORD_COUNT = excluded.WORD_COUNT, '
+                'STUDY_CHEAT = excluded.STUDY_CHEAT, '
+                'COMPLETED_TIMES = excluded.COMPLETED_TIMES, '
+                'DURATION_DAYS = excluded.DURATION_DAYS, '
+                'BOOK_NAME = excluded.BOOK_NAME, '
+                'GROUP_NAME = excluded.GROUP_NAME, '
+                'AVATAR = excluded.AVATAR, '
+                'DATA_TIME = excluded.DATA_TIME',
                 (
-                    member['id'],
+                    member['id'],# *
+                    member['today_date'], # *
+                    member['group_id'], # *
                     member['nickname'],
                     member['group_nickname'], # 如果当天改名，则覆盖旧的
                     member['completed_time'],
-                    member['today_date'],
                     member['today_word_count'],
                     member['today_study_cheat'],
                     member['completed_times'],
                     member['duration_days'],
                     member['book_name'],
-                    member['group_id'],
                     member['group_name'],
                     member['avatar'],
                     member['data_time'],
@@ -317,30 +330,40 @@ class SQLite:
                 f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = ? AND TODAY_DATE = ? ORDER BY COMPLETED_TIME ASC LIMIT 1',
                 (member['id'], member['today_date'])
             ).fetchone()
-            if recorded_time and recorded_time[0] is not None:
+            if recorded_time and recorded_time[0] != 0 and recorded_time[0] < member['completed_time']:
                 member['completed_time'] = recorded_time[0]
-                # 校牌小班没有打卡时间。以数据库为准
-            else: 
-                member['completed_time'] = -1
+                # 可能加入新的小班后，会产生更晚的时间，以早的为准
             cursor.execute(
-                f'INSERT OR REPLACE INTO MEMBERS VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                (
-                    member['unique_id'],
-                    'unknown',# member['nickname'],
-                    'unknown',# member['group_nickname'],
-                    member['completed_time'],
-                    member['today_date'],
-                    -1,# member['today_word_count'],
-                    'unknown',# member['today_study_cheat'],
-                    round(member['join_days'] * member['finishing_rate'], 2),# member['completed_times'],
-                    member['join_days'],
-                    'unknown',# member['group_name'],
-                    member['id'],# group_id
-                    member['name'],# group_name
-                    'unknown',# member['avatar'],
-                    member['data_time'],
-                )
+            f'INSERT INTO MEMBERS (USER_ID, TODAY_DATE, GROUP_ID, NICKNAME, GROUP_NICKNAME, COMPLETED_TIME, WORD_COUNT, STUDY_CHEAT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_NAME, AVATAR, DATA_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(USER_ID, TODAY_DATE, GROUP_ID) DO UPDATE SET '
+            ' NICKNAME = excluded.NICKNAME, '
+            'GROUP_NICKNAME = excluded.GROUP_NICKNAME, '
+            'COMPLETED_TIME = excluded.COMPLETED_TIME, '
+            'WORD_COUNT = excluded.WORD_COUNT, '
+            'STUDY_CHEAT = excluded.STUDY_CHEAT, '
+            'COMPLETED_TIMES = excluded.COMPLETED_TIMES, '
+            'DURATION_DAYS = excluded.DURATION_DAYS, '
+            'BOOK_NAME = excluded.BOOK_NAME, '
+            'GROUP_NAME = excluded.GROUP_NAME, '
+            'AVATAR = excluded.AVATAR, '
+            'DATA_TIME = excluded.DATA_TIME',
+            (
+                member['unique_id'],
+                member['today_date'],
+                member['id'],  # group_id
+                member['nickname'],
+                '',  # member['group_nickname'],
+                member['completed_time'],
+                member['today_word_count'],
+                member['today_study_cheat'],
+                round(member['join_days'] * member['finishing_rate'], 2),  # member['completed_times'],
+                member['join_days'],
+                member['book_name'],
+                member['name'],  # group_name
+                '',  # member['avatar'],
+                member['data_time'],
             )
+        )
+
             # 有个备注：踢出操作的有效期必须是当次，否则会影响手动通过的有效性
         conn.commit()
 
@@ -675,7 +698,8 @@ class SQLite:
         for strategy_id, strategy_verdict_dict in verdict.items():
             for unique_id, sub_strategy_index in strategy_verdict_dict.items():
                 cursor.execute(
-                    f'INSERT OR REPLACE INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE) VALUES (?,?,?,?)',
+                    f'INSERT INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE) VALUES (?,?,?,?) ON CONFLICT (UNIQUE_ID, STRATEGY_ID, DATE) DO UPDATE SET'
+                    ' SUB_STRATEGY_ID = excluded.SUB_STRATEGY_ID',
                     (unique_id, strategy_id, sub_strategy_index, datetime.now().strftime('%Y-%m-%d'))
                 )
         conn.commit()
@@ -701,7 +725,10 @@ class SQLite:
         cursor = conn.cursor()
         for i in bundle:
             cursor.execute(
-                f'INSERT INTO BLACKLIST (UNIQUE_ID, ADD_BY, TYPE, REASON, DATETIME) VALUES (?,?,?,?,?)',
+                f'INSERT INTO BLACKLIST (UNIQUE_ID, ADD_BY, TYPE, REASON, DATETIME) VALUES (?,?,?,?,?) ON CONFLICT (UNIQUE_ID, DATETIME) DO UPDATE SET'
+                ' REASON = excluded.REASON'
+                'ADD_BY = excluded.ADD_BY'
+                'TYPE = excluded.TYPE',
                 (i, add_by, type, reason, date_time)
             )
         conn.commit()
@@ -1025,7 +1052,8 @@ class SQLite:
         for personal_info in personal_info_list:
             unique_id = personal_info['unique_id']
             cursor.execute(
-                f'INSERT OR REPLACE INTO PERSONAL_INFO (UNIQUE_ID, DATETIME, DESKMATE_DAYS, DEPENDABLE_FRAME) VALUES (?,?,?,?)',
+                f'INSERT INTO PERSONAL_INFO (UNIQUE_ID, DATETIME, DESKMATE_DAYS, DEPENDABLE_FRAME) VALUES (?,?,?,?) ON CONFLICT(UNIQUE_ID, DATETIME) DO UPDATE SET'
+                ' DESKMATE_DAYS = excluded.DESKMATE_DAYS, DEPENDABLE_FRAME = excluded.DEPENDABLE_FRAME',
                 (unique_id, datetime.now().strftime('%Y-%m-%d'), personal_info['deskmate_days'], personal_info['dependable_frame'])
             )
         conn.commit()
@@ -1069,9 +1097,6 @@ class SQLite:
                 GROUP_ID,
                 GROUP_NAME,
                 AVATAR,
-                OPERATION,
-                VALIDITY,
-                STRATEGY_NAME,
                 DATA_TIME
             FROM MEMBERS WHERE 1=1
         '''
@@ -1167,6 +1192,7 @@ class SQLite:
                 '用户头像',
                 '记录时间',
             ]] + result
+        # logger.info(f'查询成员数据表结果：{result}, 总数：{count}, 页数：{page_num}/{page_max}, 每页条数：{page_count}')
         return {
             'data': result,
             'count': count,
