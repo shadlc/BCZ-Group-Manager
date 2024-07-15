@@ -45,10 +45,12 @@
 </div></div>
   </div>
   <main>
-  <div class="wall" style="
+  <div class="wall notice-wall" style="
   width: 20%;
   background: transparent;
   border: none;
+  overflow-y: scroll;
+  padding-top: 1rem;
 ">
   </div>
     <div class="wall" style="width: 75%;">
@@ -265,17 +267,34 @@
       </div>
     </div>
   </div>
-
 <script src="lib/script.js"></script>
 <script src="lib/group.js"></script>
 <script src="lib/data.js"></script>
 <script src="lib/setting.js"></script>
 <script src="lib/switch_box.js"></script>
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="lib/notice_card.js"></script>
 <script>
   //DOM加载完成后执行groupPage()函数
   window.onload = function() {
     groupPage();
-  }
+    // 建立到/test的sse连接
+    const source = new EventSource('/test');
+    source.onmessage = function(event) {
+      const data = event.data.split('#');
+            const messageObject = {};
+
+            data.forEach(line => {
+                const [key, value] = line.split('$');
+                if (key && value) {
+                    messageObject[key] = value;
+                }
+            });
+            // 将以上所有值转换成字符串
+            const card_message = messageObject['name'] + messageObject['message'];
+            $newCard(card_message)
+        };
+    }
   function groupPage() {
     // document.getElementsByClassName("group-page")[0].style.display = "block";
     document.getElementById("group_button").classList.add("active");

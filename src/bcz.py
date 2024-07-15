@@ -106,7 +106,7 @@ class BCZ:
         
     
     # 移除成员
-    def removeMembers(self, user_id: list, share_key: str, access_token: str) -> None:
+    def removeMembers(self, user_id: list, share_key: str, access_token: str) -> bool:
         
         url = f"{self.remove_members_url}?shareKey={share_key}"
         # 暂不确定url格式，稍后测试
@@ -130,8 +130,11 @@ class BCZ:
         if response.json().get("code",0) != 1:
             if response.json().get("code",0) == 999:
                 logger.info(f"删除的人已经不在小班中")
+                return False
             logger.info(f"remove{json}出现异常，请检查")
+            return False
         logger.info(f"删除成功")
+        return True
             # 2024.2.23 15:39 成功第一次
             
 
@@ -184,14 +187,16 @@ class BCZ:
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'获取小队信息失败!\n{response.text}')
         team_info = response.json().get('data').get('members')
-        if team_info is None:
+        if team_info is None or len(team_info) == 0:
             # 未加入小队
-            user_info['dependable_frame'] = '4'
+            user_info['dependable_frame'] = 4
         else:
             for member in team_info:
                 if member['bczId'] == user_id:
                     user_info['dependable_frame'] = member['tag']
                     # 3靠谱，0不靠谱，1萌新
+        if user_info.get('dependable_frame') is None:
+            user_info['dependable_frame'] = 4
         return user_info
 
     def getUserGroupInfo(self, user_id: str = None) -> list[dict]:

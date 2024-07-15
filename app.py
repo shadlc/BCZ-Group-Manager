@@ -261,7 +261,13 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
 # 处理SSE连接
 @app.route('/test')
 def test():
-    filter.start('JJDLph8dK3IuaKFc59mAndT7Z21DzmRYG1Nu6pGWXBE%3D','1kopv2ycflsni3ux', 0, '12345678')
+    
+    # 山花4uvshv3axkatcq4f
+    # 抚霞2qcytz174mefxg9l
+    # 海莲1alv4ldkkhcxyln6
+    filter.start('7dDzzdH8d9Tu204vLGC21WBNcZv3KDAJyiMjAHNk%2BL8%3D','696zhagp08bnfae7', 1, '12345678')
+    # filter.start('m%2B4NaiyuUId5nvQ0pCCPmIKtvI7WnSD8%2FW8v6qLQ7NM%3D','2qcytz174mefxg9l', 1, '12345678')
+    # filter.start('m%2B4NaiyuUId5nvQ0pCCPmIKtvI7WnSD8%2FW8v6qLQ7NM%3D','1alv4ldkkhcxyln6', 1, '12345678')
     return Response(stream_with_context(filter.generator()), content_type='text/event-stream')
 
 

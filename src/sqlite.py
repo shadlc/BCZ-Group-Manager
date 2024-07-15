@@ -810,7 +810,8 @@ class SQLite:
             f'SELECT DATETIME, DEPENDABLE_FRAME FROM PERSONAL_INFO WHERE UNIQUE_ID = ? ORDER BY DATETIME DESC LIMIT 1',
             [unique_id]
         ).fetchone()
-        if result is None or result[0] is None or result[0][0] != datetime.now().strftime('%Y-%m-%d'):
+        logger.debug(f'getPersonalInfo result: {result}')
+        if result is None or result[0] is None or result[0] != datetime.now().strftime('%Y-%m-%d'):
             # 如果没有今日数据，则要求调用者提供
             if user_info is None or group_info is None:
                 return None
