@@ -165,6 +165,7 @@ def query_group_details():
         for group in groups:
             group['auth_token'] = len(group['auth_token']) * '*'
         analyseWeekInfo(groups, sqlite, week)
+        
         if not groups:
             return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
         return restful(200, '', groups)
@@ -265,7 +266,33 @@ def test():
     # 山花4uvshv3axkatcq4f
     # 抚霞2qcytz174mefxg9l
     # 海莲1alv4ldkkhcxyln6
-    filter.start('7dDzzdH8d9Tu204vLGC21WBNcZv3KDAJyiMjAHNk%2BL8%3D','696zhagp08bnfae7', 1, '12345678')
+    conn = sqlite.connect()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM STRATEGY_VERDICT")
+
+    strategy_dict = strategy.get()
+    data = cursor.fetchall()
+    # 给STRATEGY_VERDICT表增加2个字段OPERATION和REASON    
+
+    
+    # cursor.execute("ALTER TABLE STRATEGY_VERDICT ADD COLUMN OPERATION TEXT")
+    # cursor.execute("ALTER TABLE STRATEGY_VERDICT ADD COLUMN REASON TEXT")
+    for row in data:
+        try:
+            strategy_id = row[1]
+            sub_id = row[2]
+            operation = strategy_dict[strategy_id]['subItems'][sub_id]['operation']
+        except:
+            operation = 'suspect'
+        # 更新表单
+
+        cursor.execute("UPDATE STRATEGY_VERDICT SET OPERATION =? WHERE UNIQUE_ID = ? AND STRATEGY_ID = ? AND DATE = ?", (operation, row[0], strategy_id, row[3]))
+    
+        
+    conn.commit()
+    cursor.close()
+    conn.close()
+    # filter.start('7dDzzdH8d9Tu204vLGC21WBNcZv3KDAJyiMjAHNk%2BL8%3D','696zhagp08bnfae7', 1, '12345678')
     # filter.start('m%2B4NaiyuUId5nvQ0pCCPmIKtvI7WnSD8%2FW8v6qLQ7NM%3D','2qcytz174mefxg9l', 1, '12345678')
     # filter.start('m%2B4NaiyuUId5nvQ0pCCPmIKtvI7WnSD8%2FW8v6qLQ7NM%3D','1alv4ldkkhcxyln6', 1, '12345678')
     return Response(stream_with_context(filter.generator()), content_type='text/event-stream')

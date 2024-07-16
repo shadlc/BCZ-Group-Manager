@@ -1,6 +1,5 @@
 
   function initGroupPage() {
-    initCloud(10);
     getInfo_1()
     .then((info)=>{
       if (!info) return;
@@ -116,7 +115,8 @@
             return;
           }
         }
-          window.location.href = 'group/' + group.id;
+        SwitchRight('group-detail-page')
+        initGroupDetails(group.id);
         });
         container.insertBefore(group_div, empty_group);
       }

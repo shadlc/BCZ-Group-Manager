@@ -1,7 +1,14 @@
 
 function $newCard(msg) {
             // 获取msg有多少个<br>
-            var height = 50 + msg.split('<br>').length * 20; // 计算通知框的高度
+            lines = msg.split('<br>')
+            height = 30; // 计算高度
+            for (var i = 0; i < lines.length; i++) {
+                lines[i] = lines[i].trim();
+                // 以每15个字符为一行，计算高度
+                height += Math.ceil(lines[i].length / 15) * 20;
+            }
+            
 
             // 创建新的card notice类的框  
             const newCard = document.createElement('div');
@@ -71,7 +78,7 @@ function $newCard(msg) {
                 // 设定滑动阈值，比如50%的宽度 
                 
                 if (Math.abs(swipeDistance) < cardWidth * 0.1) { // 如果滑动距离很小，则认为是点击事件，打开详情页  
-                    console.log('点击事件');
+                    // console.log('点击事件');
                     if (top == 0) {
                         top = 1
                         // 将背景色改成aaffff66

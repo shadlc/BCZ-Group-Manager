@@ -392,7 +392,7 @@ class Filter:
                 # self.log('save member_dict:'+str(self.member_dict))
                 self.sqlite.saveUserOwnGroupsInfo(self.member_dict, conn)
                 # self.log('save verdict_dict:'+str(self.verdict_dict))
-                self.sqlite.saveStrategyVerdict(self.verdict_dict, conn = conn)
+                self.sqlite.saveStrategyVerdict(self.verdict_dict, self.strategy_class.get(), conn = conn)
                 # self.log('save personal_dict:'+str(self.personal_dict))
                 self.sqlite.savePersonalInfo(self.personal_dict, conn = conn)
                 self.member_dict = []

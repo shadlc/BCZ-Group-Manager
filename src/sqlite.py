@@ -153,6 +153,8 @@ class SQLite:
                 STRATEGY_ID INTEGER,                         -- 策略ID
                 SUB_STRATEGY_ID INTEGER,                     -- 符合的子策略ID
                 DATE TEXT,                       -- 所有判据当天有效
+                OPERATION TEXT,                  -- 操作类型(add/remove)
+                REASON TEXT,                     -- 判定原因
                 UNIQUE(UNIQUE_ID, STRATEGY_ID, DATE)
             );''',
             '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
@@ -359,7 +361,7 @@ class SQLite:
                 member['join_days'],
                 member['book_name'],
                 member['name'],  # group_name
-                '',  # member['avatar'],
+                member['avatar'],
                 member['data_time'],
             )
         )
@@ -690,17 +692,22 @@ class SQLite:
             return None
 
     
-    def saveStrategyVerdict(self, verdict: dict, conn: sqlite3.Connection) -> None:
+    def saveStrategyVerdict(self, verdict: dict, strategy_dict: dict, conn: sqlite3.Connection) -> None:
         '''保存策略审核结果，详情见filter.py'''
         # verdict = {strategy_id: {uniqueId: 符合的sub_strategy_index}}
         # 在StrategyVerdict表中，主键是uniqueId和strategy_id，值是verdict
         cursor = conn.cursor()
         for strategy_id, strategy_verdict_dict in verdict.items():
-            for unique_id, sub_strategy_index in strategy_verdict_dict.items():
+            for unique_id, str in strategy_verdict_dict.items():
+                sub_strategy_index = int(str[0])
+                reason = str[1]
+                operation = strategy_dict[strategy_id]['subItem'][sub_strategy_index]['operation']
                 cursor.execute(
-                    f'INSERT INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE) VALUES (?,?,?,?) ON CONFLICT (UNIQUE_ID, STRATEGY_ID, DATE) DO UPDATE SET'
+                    f'INSERT INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE, OPERATION, REASON) VALUES (?,?,?,?,?,?) ON CONFLICT (UNIQUE_ID, STRATEGY_ID, DATE) DO UPDATE SET'
                     ' SUB_STRATEGY_ID = excluded.SUB_STRATEGY_ID',
-                    (unique_id, strategy_id, sub_strategy_index, datetime.now().strftime('%Y-%m-%d'))
+                    ' OPERATION = excluded.OPERATION',
+                    ' REASON = excluded.REASON',
+                    (unique_id, strategy_id, sub_strategy_index, datetime.now().strftime('%Y-%m-%d'), operation, reason)
                 )
         conn.commit()
 

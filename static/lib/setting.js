@@ -10,7 +10,6 @@ let cache_second_input = document.getElementById('cache_second_input');
     let past_main_token = "";
     let past_output_file = "";
     function initSettingPage(second) {
-      initCloud(10);
       getConfig()
       .then((result)=>{
         if (!result) return;

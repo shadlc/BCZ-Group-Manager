@@ -3,7 +3,6 @@ let page_num = 0
     let observe_groups = [];
 
     function initDataPage(){
-      initCloud(10);
       getInfo_2()
       .then((result)=>{
         if (!result) return;
