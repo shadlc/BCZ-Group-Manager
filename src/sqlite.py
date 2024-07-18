@@ -3,6 +3,7 @@ import sys
 import math
 import time
 import logging
+import json
 import sqlite3
 from datetime import datetime, timedelta
 
@@ -139,22 +140,23 @@ class SQLite:
                 OTHERS TEXT,                        -- 其他联系方式
                 PRIMARY KEY (QQ_ID)
             );''',
-            # '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
-            #     UNIQUE_ID TEXT,                      -- 用户ID/client ID
-            #     GROUP_ID TEXT,                       -- 小班ID
-            #     DATETIME TEXT,                       -- 操作日期时间
-            #     STRATEGY TEXT,                       -- 子策略属于的策略名称
-            #     SUB_STRATEGY TEXT,                   -- 执行的子策略名称
-            #     RESULT TEXT,                         -- 筛选结果（中文）
-            #     DETAIL TEXT                          -- 筛选细节（判断依据）
-            # );''',
+            '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
+                GROUP_ID TEXT,                       -- 小班ID
+                DATETIME TEXT,                       -- 操作日期时间
+                MEMBER_COUNT INTEGER,                -- 本轮小班成员数
+                ACCEPTED_COUNT INTEGER,                -- 在班的接受的人数
+                ACCEPT_LIST TEXT,                    -- 本轮接受列表<br>
+                REMOVE_LIST TEXT,                    -- 本轮拒绝列表<br>
+                QUIT_LIST TEXT,                      -- 本轮退出/手动移除列表<br>
+                UNIQUE(GROUP_ID, DATETIME)
+            );''',
             '''CREATE TABLE IF NOT EXISTS STRATEGY_VERDICT (                   -- 成员在指定策略下的判定结果表，有效期24h
                 UNIQUE_ID TEXT,                      -- 用户ID
-                STRATEGY_ID INTEGER,                         -- 策略ID
+                STRATEGY_ID TEXT,                         -- 策略ID
                 SUB_STRATEGY_ID INTEGER,                     -- 符合的子策略ID
                 DATE TEXT,                       -- 所有判据当天有效
-                OPERATION TEXT,                  -- 操作类型(add/remove)
-                REASON TEXT,                     -- 判定原因
+                OPERATION TEXT,                    -- 判定结果
+                REASON TEXT,                      -- 判定原因
                 UNIQUE(UNIQUE_ID, STRATEGY_ID, DATE)
             );''',
             '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
@@ -162,6 +164,10 @@ class SQLite:
                 URL TEXT UNIQUE                         -- 头像链接
             );
             ''',
+            '''CREATE TABLE IF NOT EXISTS STRATEGIES (                   -- 策略表(在筛选成员后保存，相当于永久映像)
+                HASH_ID TEXT PRIMARY KEY,                   -- 策略ID
+                STRATEGY_JSON TEXT                       -- 策略内容
+            );'''
         ]
         self.init()
 
@@ -218,6 +224,18 @@ class SQLite:
         except sqlite3.DatabaseError as e:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
         return False
+    
+    def queryGroupShareKey(self, group_id: str, conn: sqlite3.Connection = None) -> str:
+        '''查询小班分享码'''
+        cursor = conn.cursor()
+        result = cursor.execute(f'SELECT SHARE_KEY FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
+        logger.debug(f'查询小班{group_id}的分享码: {result}')
+        # 报错 Incorrect number of bindings supplied. The current statement uses 1, and there are 7 supplied.
+        if result:
+            return result[0]
+        return ''
+
+
 
     def saveGroupInfo(self, groups: list[dict], temp: bool = False, conn: sqlite3.Connection = None) -> None:
         '''保存小班数据 + 保存成员信息'''
@@ -353,11 +371,11 @@ class SQLite:
                 member['today_date'],
                 member['id'],  # group_id
                 member['nickname'],
-                '',  # member['group_nickname'],
+                member['group_nickname'],
                 member['completed_time'],
                 member['today_word_count'],
                 member['today_study_cheat'],
-                round(member['join_days'] * member['finishing_rate'], 2),  # member['completed_times'],
+                round(member['join_days'] * member['finishing_rate'], 2),  # member['completed_times']预测值
                 member['join_days'],
                 member['book_name'],
                 member['name'],  # group_name
@@ -630,58 +648,85 @@ class SQLite:
                 f'SELECT COUNT(*) FROM MEMBERS'
             )[0][0]
 
-        
-    # def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection) -> None:
-    #     '''保存筛选日志，详情见filter.py'''
-    #     # 结构实例
-    #     # filter_log_tosave.append({
-    #     #     'uniqueId':uniqueId,
-    #     #     'groupId':group_id,
-    #     #     'datetime':datetime.datetime.now(),
-    #     #     'strategy':strategy_dict['name'],
-    #     #     'subStrategy':sub_strat_dict['name'],
-    #     #     'result':'剩余人数满足要求，踢出小班'
-    #     # })
-    #     cursor = conn.cursor()
-    #     for filter_log in filter_log_list:
-    #         cursor.execute(
-    #             f'INSERT INTO FILTER_LOG (UNIQUE_ID, GROUP_ID, DATETIME, STRATEGY, SUB_STRATEGY, DETAIL, RESULT) VALUES (?,?)',
-    #             (filter_log['uniqueId'], filter_log['groupId'], filter_log['datetime'], filter_log['strategy'], filter_log['subStrategy'], filter_log['detail'], filter_log['result'])
-    #             )
-    #     conn.commit()
-        
+    
+    def lockStrategy(self, strategy_dict: dict) -> int:
+        '''锁定本次操作的策略为永久映像，生成由策略内容决定的id'''
+        # 将strategy_dict转化为json字符串
+        strategy_json = json.dumps(strategy_dict, ensure_ascii=False)
+        # 计算策略id
+        strategy_id = hash(strategy_json)
+        # 锁定策略
+        conn = self.connect()
+        cursor = conn.cursor()
+        # 判断策略是否已经存在
+        result = cursor.execute(
+            f'SELECT * FROM STRATEGY WHERE HASH_ID = ?',
+            [strategy_id]
+        ).fetchone()
+        if result:
+            # 策略已经存在，直接返回策略id
+            conn.close()
+            return strategy_id
+        else:
+            # 策略不存在，插入策略
+            cursor.execute(
+                f'INSERT INTO STRATEGY (HASH_ID, STRATEGY_JSON) VALUES (?,?)',
+                (strategy_id, strategy_json)
+            )
+            conn.commit()
+            conn.close()
+            return strategy_id
 
-    # def queryFilterLog(self, time_start: int, time_end: int, conn: sqlite3.Connection, user_id: str = None, group_id: str = None) -> list:
-    #     '''获取筛选日志，详情见filter.py'''
+    def saveFilterLog(self, filter_log_list: list, conn: sqlite3.Connection) -> None:
+        '''保存筛选日志'''
+        cursor = conn.cursor()
+        for filter_log in filter_log_list:
+            cursor.execute(
+                f'INSERT INTO FILTER_LOG (GROUP_ID, DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?)',
+                (
+                    filter_log['group_id'],
+                    filter_log['datetime'],
+                    filter_log['member_count'],
+                    filter_log['accepted_count'],
+                    json.dumps(filter_log['accept_list']),
+                    json.dumps(filter_log['remove_list']),
+                    json.dumps(filter_log['quit_list'])
+                ))
+        conn.commit()
+
+    def queryFilterLog(self, group_id: str, count_start: int, count_limit: int, conn: sqlite3.Connection) -> list:
+        '''获取筛选日志，用于group_detail展示'''
+        cursor = conn.cursor()
+        result = {}
+        # 找group_id按照时间排序从count_start开始的count_limit条记录
+        result['data'] = cursor.execute(
+            f'SELECT * FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
+            (group_id, count_limit, count_start)
+        ).fetchall()
+        result['page_max'] = len(result['data'])//count_limit + 1
+        result['page_num'] = count_start//count_limit + 1
+        logger.info(f'queryFilterLog result: {result}')
+        return result
+
+
+    # def queryStrategyVerdictDetails(self, unique_id: str, conn: sqlite3.Connection) -> list:
+    #     '''小班详情页面，获取策略审核结果'''
     #     cursor = conn.cursor()
-    #     if user_id and group_id:
-    #         cursor.execute(
-    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ? AND GROUP_ID = ?',
-    #             (time_start, time_end, user_id, group_id)
-    #         )
-    #     elif user_id:
-    #         cursor.execute(
-    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND USER_ID = ?',
-    #             (time_start, time_end, user_id)
-    #         )
-    #     elif group_id:
-    #         cursor.execute(
-    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ? AND GROUP_ID = ?',
-    #             (time_start, time_end, group_id)
-    #         )
+    #     result =cursor.execute(
+    #         f'SELECT DATE, OPERATION, REASON FROM STRATEGY_VERDICT WHERE UNIQUE_ID = ?',
+    #         [unique_id]
+    #     ).fetchall()
+    #     logger.info(f'queryStrategyVerdictDetails result: {result}')
+    #     if result:
+    #         return result
     #     else:
-    #         cursor.execute(
-    #             f'SELECT * FROM FILTER_LOG WHERE TIME >= ? AND TIME <= ?',
-    #             (time_start, time_end)
-    #         )
-    #     result = cursor.fetchall()
-    #     return result
-
-    def queryStrategyVerdict(self, strategy_id: int, unique_id: str, conn: sqlite3.Connection) -> list:
-        '''获取策略审核结果，详情见filter.py'''
+    #         return []
+            
+    def queryStrategyVerdict(self, strategy_id: str, unique_id: str, conn: sqlite3.Connection) -> list:
+        '''获取策略审核结果sub_strategy_index，详情见filter.py'''
         cursor = conn.cursor()
         cursor.execute(
-            f'SELECT SUB_STRATEGY_ID FROM STRATEGY_VERDICT WHERE STRATEGY_ID = ? AND UNIQUE_ID = ? AND DATE = ?',
+            f'SELECT SUB_STRATEGY_ID, OPERATION, REASON FROM STRATEGY_VERDICT WHERE STRATEGY_ID = ? AND UNIQUE_ID = ? AND DATE = ?',
             (strategy_id, unique_id, datetime.now().strftime('%Y-%m-%d'))
         )
         result = cursor.fetchone()
@@ -699,16 +744,20 @@ class SQLite:
         cursor = conn.cursor()
         for strategy_id, strategy_verdict_dict in verdict.items():
             for unique_id, str in strategy_verdict_dict.items():
-                sub_strategy_index = int(str[0])
-                reason = str[1]
-                operation = strategy_dict[strategy_id]['subItem'][sub_strategy_index]['operation']
+                sub_strategy_index = str[0]
+                operation = str[1]
+                reason_dict = str[2]
+                reason = ''
+                for key, value in reason_dict.items():
+                    reason += f'{key}:{value}\n'
                 cursor.execute(
-                    f'INSERT INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE, OPERATION, REASON) VALUES (?,?,?,?,?,?) ON CONFLICT (UNIQUE_ID, STRATEGY_ID, DATE) DO UPDATE SET'
-                    ' SUB_STRATEGY_ID = excluded.SUB_STRATEGY_ID',
-                    ' OPERATION = excluded.OPERATION',
-                    ' REASON = excluded.REASON',
+                    f'INSERT INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE, OPERATION, REASON) VALUES (?,?,?,?,?,?) ON CONFLICT (UNIQUE_ID, STRATEGY_ID, DATE) DO UPDATE SET '
+                    'SUB_STRATEGY_ID = excluded.SUB_STRATEGY_ID, '
+                    'OPERATION = excluded.OPERATION, '
+                    'REASON = excluded.REASON',
                     (unique_id, strategy_id, sub_strategy_index, datetime.now().strftime('%Y-%m-%d'), operation, reason)
                 )
+
         conn.commit()
 
     def queryBlacklist(self, unique_id: str, conn: sqlite3.Connection) -> list:

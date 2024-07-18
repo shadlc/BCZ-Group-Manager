@@ -124,6 +124,8 @@ class Filter:
         self.member_dict = []
         self.verdict_dict = {}
         self.personal_dict = [] # 缓存个人信息，避免重复请求
+        self.filter_log_dict = []
+        
         self.clients_message = {}
         self.logger_message = {}
 
@@ -165,8 +167,9 @@ class Filter:
         '''获取当前时间戳,毫秒'''
         return str(int(time.time() * 1000))
     
-    def condition(self, member_dict: dict, refer_dict: dict, condition: dict, group_name: str) -> bool:
+    def condition(self, member_dict: dict, refer_dict: dict, condition: dict, group_name: str, log_condition: int) -> bool:
         '''条件判断，返回布尔值'''
+        # log_condition: -1不记录；0记录标题；1标题+通过条件；2标题+不通过条件
         name = condition['name']
         member_value = member_dict.get(name, None)
         if member_value == None:
@@ -189,47 +192,54 @@ class Filter:
                 self.log(f'CONDITION: {name} type not match: ({type(value)}){(value)}!=({type(member_value)}){(member_value)}', group_name)
                 raise TypeError(f'CONDITION: {name} type not match: {(value)}!= {(member_value)}')
 
+        
         if operator == "==":
             if member_value != value:
-                self.log(f': {name}:{member_value} != {value}', group_name)
-                refer_dict[name] = f"X: {member_value} != {value}"
+                if log_condition == 2:
+                    refer_dict[name] = f"✗ {member_value} != {value}; "
                 return False
-            refer_dict[name] = f"✓: {member_value} == {value}"
+            if log_condition == 1:
+                refer_dict[name] = f"✓ {member_value} == {value}; "
             return True
         elif operator == "!=":
             if member_value == value:
-                self.log(f': {name}:{member_value} == {value}', group_name)
-                refer_dict[name] = f"X: {member_value} == {value}"
+                if log_condition == 2:
+                    refer_dict[name] = f"✗ {member_value}  == {value}; "
                 return False
-            refer_dict[name] = f"✓: {member_value} != {value}"
+            if log_condition == 1:
+                refer_dict[name] = f"✓ {member_value} != {value}; "
             return True
         elif operator == ">":
             if member_value <= value:
-                self.log(f': {name}:{member_value} <= {value}', group_name)
-                refer_dict[name] = f"X: {member_value} <= {value}"
+                if log_condition == 2:
+                    refer_dict[name] = f"✗ {member_value} <= {value}; "
                 return False
-            refer_dict[name] = f"✓: {member_value} > {value}"
+            if log_condition == 1:
+                refer_dict[name] = f"✓ {member_value} > {value}; "
             return True
         elif operator == "<":
             if member_value >= value:
-                self.log(f': {name}:{member_value} >= {value}', group_name)
-                refer_dict[name] = f"X: {member_value} >= {value}"
+                if log_condition == 2:
+                    refer_dict[name] = f"✗ {member_value} >= {value}; "
                 return False
-            refer_dict[name] = f"✓: {member_value} < {value}"
+            if log_condition == 1:
+                refer_dict[name] = f"✓ {member_value} < {value}; "
             return True
         elif operator == ">=":
             if member_value < value:
-                self.log(f': {name}:{member_value} < {value}', group_name)
-                refer_dict[name] = f"X: {member_value} < {value}"
+                if log_condition == 2:
+                    refer_dict[name] = f"✗ {member_value} < {value}; "
                 return False
-            refer_dict[name] = f"✓: {member_value} >= {value}"
+            if log_condition == 1:
+                refer_dict[name] = f"✓ {member_value} >= {value}; "
             return True
         elif operator == "<=":
             if member_value > value:
-                self.log(f': {name}:{member_value} > {value}', group_name)
-                refer_dict[name] = f"X: {member_value} > {value}"
+                if log_condition == 2:
+                    refer_dict[name] = f"✗ {member_value} > {value}; "
                 return False
-            refer_dict[name] = f"✓: {member_value} <= {value}"
+            if log_condition == 1:                
+                refer_dict[name] = f"✓ {member_value} <= {value}; "
             return True
         
 
@@ -245,6 +255,7 @@ class Filter:
         conditions = substrategy_dict['conditions'].copy()
         condition_name = []
         refer_dict = {}
+        log_condition = substrategy_dict['logCondition']
 
         for condition in substrategy_dict['conditions']:
             condition_name.append(condition['name'])
@@ -258,7 +269,7 @@ class Filter:
         for name in ['completed_time_stamp', 'today_study_cheat', 'duration_days', 'completed_times', 'finishing_rate', 'modified_nickname']:
             try:
                 pos = condition_name.index(name)
-                if not self.condition(member_dict, refer_dict, conditions[pos], group_name):
+                if not self.condition(member_dict, refer_dict, conditions[pos], group_name, log_condition):
                     accept = 0
                     break
                 condition_name.pop(pos)
@@ -266,9 +277,14 @@ class Filter:
             except ValueError:
                 continue
         if accept == 0:
-            return {'result':0,'reason':f'{refer_dict}'}
+            if log_condition >= 0:
+                return {'result':0,'reason':refer_dict}
+            return {'result':0,'reason':f''}
         if len(condition_name) == 0:
-            return {'result':1,'reason':f'{refer_dict}'}
+            if log_condition >= 0:
+                return {'result':1,'reason':refer_dict}
+            return {'result':1,'reason':f''}
+            
         
         # 【2】本班两周内历史信息
         # 先获取今日星期，然后计算从该成员上周一到今天打卡天数和漏卡天数，注意上周一之后才入班的情况单独处理
@@ -290,7 +306,7 @@ class Filter:
         for name in ['drop_last_week', 'drop_this_week']:
             try:
                 pos = condition_name.index(name)
-                if not self.condition(member_dict, refer_dict, conditions[pos], group_name):
+                if not self.condition(member_dict, refer_dict, conditions[pos], group_name, log_condition):
                     accept = 0
                     break
                 condition_name.pop(pos)
@@ -298,24 +314,32 @@ class Filter:
             except ValueError:
                 continue
         if accept == 0:
-            return {'result':0,'reason':f'{refer_dict}'}
+            if log_condition >= 0:
+                return {'result':0,'reason':refer_dict}
+            return {'result':0,'reason':f''}
         if len(condition_name) == 0:
-            return {'result':1,'reason':f'{refer_dict}'}
+            if log_condition >= 0:
+                return {'result':1,'reason':refer_dict}
+            return {'result':1,'reason':f''}
 
         # 【3】外部查询（黑名单）
         member_dict['blacklisted'] = 0 if len(self.sqlite.queryBlacklist(uniqueId, conn)) == 0 else 1
         try:
             pos = condition_name.index('blacklisted')
-            if not self.condition(member_dict, refer_dict, conditions[pos], group_name):
+            if not self.condition(member_dict, refer_dict, conditions[pos], group_name, log_condition):
                 accept = 0
             condition_name.pop(pos)
             conditions.pop(pos)
         except ValueError:
             pass
         if accept == 0:
-            return {'result':0,'reason':f'{refer_dict}'}
+            if log_condition >= 0:
+                return {'result':0,'reason':refer_dict}
+            return {'result':0,'reason':f''}
         if len(condition_name) == 0:
-            return {'result':1,'reason':f'{refer_dict}'}
+            if log_condition >= 0:
+                return {'result':1,'reason':refer_dict}
+            return {'result':1,'reason':f''}
 
 
     
@@ -362,7 +386,7 @@ class Filter:
         for name in ['modified_nickname', 'deskmate_days', 'dependable_frame', 'max_combo_expectancy']:
             try:
                 pos = condition_name.index(name)
-                if not self.condition(personal_dict, refer_dict, conditions[pos], group_name):
+                if not self.condition(personal_dict, refer_dict, conditions[pos], group_name, log_condition):
                     accept = 0
                     break
                 condition_name.pop(pos)
@@ -372,10 +396,13 @@ class Filter:
             
         
         if accept == 0:
-            return {'result':0,'reason':f'{refer_dict}','personal_info':user_info, 'group_info':group_info}
+            if log_condition >= 0:
+                return {'result':0,'reason':refer_dict,'personal_info':user_info, 'group_info':group_info}
         if len(condition_name) != 0:
             self.log(f"[error]出现未知条件：{condition_name}", group_name)
-        return {'result':1,'reason':f'{refer_dict}','personal_info':user_info, 'group_info':group_info}
+        if log_condition >= 0:
+            return {'result':1,'reason':refer_dict,'personal_info':user_info, 'group_info':group_info}
+        return {'result':1,'reason':f'','personal_info':user_info, 'group_info':group_info}
         
     # 自动保存间隔
     autosave_interval = 10
@@ -395,9 +422,12 @@ class Filter:
                 self.sqlite.saveStrategyVerdict(self.verdict_dict, self.strategy_class.get(), conn = conn)
                 # self.log('save personal_dict:'+str(self.personal_dict))
                 self.sqlite.savePersonalInfo(self.personal_dict, conn = conn)
+                # self.log('save filter_log_dict:'+str(self.filter_log_dict))
+                self.sqlite.saveFilterLog(self.filter_log_dict, conn)
                 self.member_dict = []
                 self.verdict_dict = {}
                 self.personal_dict = [] # 缓存个人信息，避免重复请求
+                self.filter_log_dict = {}
             conn.close()
             self.log('autosave done', '全局')
             self.log_dispatch('全局')
@@ -442,8 +472,15 @@ class Filter:
             with self.clients_message_lock:
                 self.clients_message.pop(client_id, None)
 
-    def run(self, authorized_token: str,strategy_index:int, share_key: str, strategy_dict: dict) -> None:
+    def run(self, authorized_token: str,strategy_index:str, share_key: str) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
+        strategy_dict = self.strategy_class.get(strategy_index)
+        if strategy_dict is None:
+            self.log(f"策略{strategy_index}不存在", '全局')
+            self.log_dispatch('全局')
+            return
+        self.log(f"加载策略{strategy_dict['name']}中...", '全局')
+        self.log_dispatch('全局')
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
 
@@ -464,6 +501,15 @@ class Filter:
         member_check_count = {} # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
         member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
         group_id = member_dict_temp['id']
+        # 因为保存策略index要用到group_id，所以先获取
+        
+        
+        groups_strategy_id = self.config.read('groups_strategy_id')
+        str_group_id = str(group_id)
+        if str_group_id not in groups_strategy_id or groups_strategy_id[str_group_id]!= strategy_index:
+            groups_strategy_id[str_group_id] = strategy_index
+            self.config.save("groups_strategy_id", strategy_index)
+
         leader_id = member_dict_temp['leader_id']
         group_count_limit = member_dict_temp['count_limit']
         group_name = member_dict_temp['name']
@@ -517,9 +563,13 @@ class Filter:
             newbies_count = 0
             removed_count = 0
             old_members_count = 0
+            accept_list = []
+            quit_list = []
             for personal_dict_temp in member_dict_temp["members"]:
                 uniqueId = personal_dict_temp['id']
                 memberId = personal_dict_temp['member_id']
+                # 由于getGroupInfo没有更新班内昵称获取模块，所以暂时修改了DakaHistory函数的返回值，将group_nickname加入到返回值中
+                personal_dict_temp['group_nickname'] = member_dict_temp['week_daka_info']['group_nickname'][uniqueId]
 
                 if self.activate_groups[share_key]['stop'] == True:
                     break
@@ -547,6 +597,8 @@ class Filter:
                         
                         self.log(f"今日首次遇到", group_name)
                         # 先检查是否满足条件，满足则堆入待决策列表
+                        reason = {}
+                        operation = ''
                         for index, sub_strat_dict in enumerate(strategy_dict["subItems"]):
                             
                             result = self.check(
@@ -554,6 +606,11 @@ class Filter:
                                   member_dict_temp["week_daka_info"]['this_week'].get(uniqueId, None),
                                     member_dict_temp["week_daka_info"]['last_week'].get(uniqueId, None),
                                       sub_strat_dict, group_name, conn)
+                            log_condition = sub_strat_dict['logCondition']
+                            sub_strat_name = sub_strat_dict['name']
+                            
+                            reason.update(result['reason'])
+                            
                             if result.get('personal_info', None):
                                 # self.debug(f"新增保存personal_info:{result['personal_info']}")
                                 # self.debug(f"新增保存group_info:{result['group_info']}")
@@ -561,14 +618,22 @@ class Filter:
                                 member_dict_tosave.extend(result['group_info'])
                             if result['result'] == 1:
                                 # 符合该子条目
-                                verdict = verdict_dict_tosave[uniqueId] = index
+                                if log_condition == 1 or log_condition == 0:
+                                    operation += f'符合{sub_strat_name}<br>'
+                                    # self.log(f"符合条件{sub_strat_dict['name']} → {sub_strat_dict['operation']}", group_name)
+                                verdict = index
+                                verdict_dict_tosave[uniqueId] = (index, operation, reason)
                                 result_code = 1 if sub_strat_dict['operation'] == 'accept' else 2
-                                self.log(f"符合条件{sub_strat_dict['name']} → {sub_strat_dict['operation']}", group_name)
-                                self.debug(f'{result["reason"]}')
+                                
+                                
                                 break
                             else:
-                                self.log(f"不符合条件{sub_strat_dict['name']}", group_name)
-                                self.debug(f'{result["reason"]}')
+                                if log_condition == 2 or log_condition == 0:
+                                    operation += f'不符合{sub_strat_name}<br>'
+                                    # self.log(f"不符合条件{sub_strat_dict['name']}", group_name)
+                        for key, value in reason.items():
+                            self.log(f"{key}:{value}", group_name)
+                        self.log(operation, group_name)
                         if not result_code:
                             self.log("[error]没有符合的子条目，默认接受，请检查策略", group_name)
                             continue
@@ -580,6 +645,7 @@ class Filter:
                     if result_code == 1:
                         self.log(f"【✓】接受加入(6s)", group_name)
                         accepted_count += 1
+                        accept_list.append(uniqueId)
                     elif result_code == 2:
                         self.log(f"【✗】准备踢出(6s)", group_name)
                         # 加入候补踢出列表，按小到大顺序插入列表
@@ -656,6 +722,7 @@ class Filter:
                         has = 1
                         self.log('成员退出、手动踢出列表：', group_name)
                     self.log(f'[id:{uniqueId}]', group_name)
+                    quit_list.append(uniqueId)
                 else:
                     new_member_list.append(uniqueId)
             member_list = new_member_list
@@ -672,6 +739,15 @@ class Filter:
                 if (self.verdict_dict.get(strategy_index, None) == None):
                     self.verdict_dict[strategy_index] = {}
                 self.verdict_dict[strategy_index].update(verdict_dict_tosave)
+                self.filter_log_dict.extend({
+                    'group_id':group_id,
+                    'date_time':datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    'member_count':member_dict_temp['member_count'],
+                    'accepted_count': old_members_count + accepted_count,
+                    'accept_list': accept_list,
+                    'remove_list': remove_list,
+                    'quit_list': quit_list
+                })
                 if self.autosave_is_running == False:
                     self.autosave_is_running = True
                     threading.Thread(target=self.autosave).start()
@@ -690,22 +766,14 @@ class Filter:
             time.sleep(delay)
             
 
-    def start(self, authorized_token: str, share_key: str, strategy_index: int, client_id: str) -> None:
+    def start(self, authorized_token: str, share_key: str, strategy_index: str) -> None:
         # 是否验证？待测试，如果没有那就可怕了
         self.stop(share_key) # 防止重复运行
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
-        self.activate_groups[share_key]['client_id'] = client_id
-        self.activate_groups[share_key]['connected'] = False
-        
-        
-        # 每次启动更新一次self.strategies列表
-        strategy_dict = self.strategy_class.get(strategy_index)
 
-        if not strategy_dict:
-            self.log(f"策略索引无效", "全局")
-        else:
-            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index, share_key, strategy_dict))
-            self.activate_groups[share_key]['tids'].start()
+        
+        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index, share_key))
+        self.activate_groups[share_key]['tids'].start()
 
 

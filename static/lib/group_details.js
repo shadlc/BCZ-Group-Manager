@@ -113,6 +113,7 @@ let group_id = '';
           notify('当前小班授权令牌已失效，请设置新的授权令牌');
         }
         setGroupInfo(group);
+        queryFilterLog('1');
         setMemberInfo(group);
         return true;
       })
@@ -237,6 +238,138 @@ let group_id = '';
       container.innerHTML = '';
       container.insertBefore(info_div, container.firstChild);
     }
+    function eventFilterSearch(event) {
+      if (event.key === "Enter" || event.type === 'blur') {
+        queryFilterLog(event?.target?.value);
+      }
+    }
+    page_num = 1
+    function queryFilterLog(option = '1') {
+      // 向后端请求筛选日志
+      if (option === '') {
+        return;
+      } else if (option == '-') {
+        page_num --;
+      } else if (option == '+') {
+        page_num ++;
+      } else if (option !== null && !isNaN(option)) {
+        if (option < 0) {
+          page_num = page_max + 1 + parseInt(option);
+        } else {
+          page_num = parseInt(option);
+        }
+      }
+      page_num = parseInt(document.querySelector('.filter-page-num').textContent)
+      page_count = document.querySelector('#filter-page-count').value
+      let payload = {
+        'group_id': group_id,
+        'count_start': (page_num - 1) * page_count,
+        'count_limit': parseInt(page_count),
+      }
+      return fetch('../query_filter_log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload) 
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          return;
+        }
+        let result = data.data;
+        page_max = result.page_max;
+        page_num = result.page_num;
+        document.querySelectorAll('.filter-page-count').forEach((e)=>{
+          e.innerHTML = `
+            <input type="text" value= "${page_num}"
+              style="margin-right: 0.2rem; width: ${(page_num.toString().length * 8) + 'px'}"
+              oninput="this.style.width = (this.value.length * 8) + 'px'"
+              onkeypress="eventFilterSearch(event)"
+              onblur="eventFilterSearch(event)"
+            />/${page_max}
+          `
+        });
+        let table_data = result.data;
+        let table = document.getElementById("filter_log_table");
+        // 如果没有数据，则提示为空
+        if (table_data.length == 0) {
+          table.innerHTML = '<br><span class="center">暂无筛选数据</span><br><br>';
+          return;
+        }
+        else {
+          table.innerHTML = '';
+          fillDataToTable(table_data, table);
+        }
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
+    function reCheckStrategyVerdict(member_id, group_id) {
+      let payload = {
+        'group_id': group_id,
+        'unique_id': member_id,
+      }
+      return fetch('../recheck_strategy_verdict', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          return;
+        }
+        notify('重新检测成功');
+        // document.querySelectorAll('.modal-close-btn').forEach((e)=>{
+        //   e.click();
+        // });
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+      
+    }
+    function getStrategyVerdictDetailsAndShowModal(modal_content, member_id, modal_title, refreshable) {
+      // 向后台请求策略详情
+      let payload = {
+        // 'week': current_week,
+       'unique_id': member_id,
+      }
+      return fetch('../query_strategy_verdict_details', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          return;
+        }
+        let strategy_verdict_details = data.data;
+        for (let i in strategy_verdict_details) {
+          let strategy_verdict = strategy_verdict_details[i];
+          if (strategy_verdict[2] == null) {
+            strategy_verdict[2] = '';
+          }
+          modal_content += `
+            <tr><td>`+strategy_verdict[0]+`</td><td>`+strategy_verdict[1]+`</td><td>`+strategy_verdict[2]+`</td></tr>`;
+        }
+        
+        if (refreshable){
+          modal_content += `<tr><td></td><td class="btn center" onclick="reCheckStrategyVerdict(`+member_id+`, `+group_id+`)">重新检测</td></tr>`;
+          // console.log(modal_content)
+        }
+        modal_content += '</table>';
+        showModal(modal_content, modal_title);
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
 
     // 通过数据设置展示成员信息
     function setMemberInfo(group) {
@@ -298,11 +431,12 @@ let group_id = '';
           </div>
         `;
         let member_table = document.createElement('div');
+        var refreshable = true;
         member_table.className = 'member info-table';
         member_table.innerHTML = member_content;
         let modal_content = '打卡记录为空';
         if (group.week == current_week || Object.keys(member.daka).length != 0) {
-          modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th><th>单词数</th></tr>';
+          modal_content = '<table class="simple-table"><tr><th>日期</th><th>打卡时间</th><th>词数/判定</th></tr>';
           for (let date in member.daka) {
             let daka_time = member.daka[date].time ? member.daka[date].time : '未打卡';
             let today_word_count = member.daka[date].count;
@@ -313,13 +447,21 @@ let group_id = '';
             modal_content += '<tr><td>'+member.today_date+'</td><td>'+daka_time+'</td><td>'+member.today_word_count+'</td></tr>';
           } else if (!member.data_time) {
             modal_content += '<tr><td></td><td>已离开</td><td></td></tr>';
+            refreshable = false;
           }
-          modal_content += '</table>';
+          
         } else if (!member.data_time) {
           continue;
         }
-        member_table.onclick = () => {
-          showModal(modal_content, '打卡详情');
+        // console.log(refreshable);
+        if (refreshable)
+          member_table.onclick = () => {
+              getStrategyVerdictDetailsAndShowModal(modal_content, member.id, '打卡详情', true);
+          }
+        else {
+          member_table.onclick = () => {
+              getStrategyVerdictDetailsAndShowModal(modal_content, member.id, '打卡详情', false);
+          }
         }
         container.appendChild(member_table, container.lastChild);
       }

@@ -20,6 +20,7 @@ class Config:
             'daily_verify': '00 04 * * *',
             'cache_second': 600,
             'real_time_cache_favorite': False,
+            'groups_strategy_id':{}
         }
         self.initConfig()
         self.raw = self.read()
@@ -49,9 +50,10 @@ class Config:
     def read(self, key: str = '') -> list | dict | str | int | bool:
         '''获取指定配置'''
         try:
-            json_data = json.load(open(self.config_file, encoding='utf-8'))
-            if key:
+            if key != '':
                 json_data = json.load(open(self.config_file, encoding='utf-8')).get(key)
+            else:
+                json_data = json.load(open(self.config_file, encoding='utf-8'))
             return json_data
         except Exception as e:
             logger.error(f'配置文件读取异常: {e}，程序会在5秒后自动退出')
@@ -154,8 +156,8 @@ class Config:
 
 class Strategy:
     # Strategy类更新较少，且是整体更新，故也是用json，创建新的类
-    default_list = [
-      {
+    default_dict = {
+  "2824592116057406893":{
     "name": "示例策略",
     "timeStart": "09:00",
     "timeEnd": "10:00",
@@ -164,6 +166,7 @@ class Strategy:
       {
         "name": "子条目1",
         "operation": "accept",
+        "logCondition": 2,
         "comment": "子条目按顺序判断，符合即不再继续",
         "conditions": [
           
@@ -180,13 +183,13 @@ class Strategy:
           },
           {
             "name": "duration_days",
-            "value": 3,
-            "operator": ">"
+            "value": 1,
+            "operator": ">="
           },
           {
             "name": "completed_times",
-            "value": 3,
-            "operator": ">"
+            "value": 1,
+            "operator": ">="
           },
           {
             "name": "finishing_rate",
@@ -211,7 +214,7 @@ class Strategy:
           },
           {
             "name": "deskmate_days",
-            "value": 10,
+            "value": 170,
             "operator": ">="
           },
           {
@@ -222,9 +225,9 @@ class Strategy:
           },
           {
             "name": "modified_nickname",
-            "comment": "班内昵称和用户昵称不一致为1",
+            "comment": "班内昵称已修改为1，但可能对方来不及改",
             "value": 1,
-            "operator": "=="
+            "operator": "<="
           },
           {
             "name": "max_combo_expectancy",
@@ -237,14 +240,83 @@ class Strategy:
       {
         "name": "兜底",
         "operation": "reject",
-        "minPeople": 195,
+        "minPeople": 1,
+        "logCondition": -1,
         "comment":"只要不符合以上任意且人数>195就踢",
         "conditions": [
         ] 
       }
     ]
+  },
+  "3404039418897180481":{
+    "name": "2048",
+    "subItems": [
+      {
+        "name": "老成员",
+        "operation": "accept",
+        "minPeople": 1,
+        "logCondition": 0,
+        "comment": "-1不记录，0仅记录标题，1标题和满足的条件，2标题和不满足的条件",
+        "conditions":[
+          {
+            "name": "duration_days",
+            "value": 2,
+            "operator": ">"
+          }
+        ]
+
+      },
+      {
+        "name":"不打卡kick",
+        "operation": "reject",
+        "minPeople": 1,
+        "logCondition": 0,
+        "conditions":[
+          {
+            "name": "duration_days",
+            "value": 1,
+            "operator": "=="
+          },
+          {
+            "name": "completed_time_stamp",
+            "value": 0,
+            "operator": "=="
+          }
+        ]
+      },
+      {
+        "name": "新成员kick",
+        "operation": "reject",
+        "minPeople": 148,
+        "logCondition": 2,
+        "conditions":[
+          {
+            "name": "completed_times",
+            "value": 1,
+            "operator": "=="
+          },
+          {
+            "name": "deskmate_days",
+            "value": 15,
+            "operator": "<"
+          },
+          {
+            "name":"max_combo_expectancy",
+            "value": 15,
+            "operator": "<"
+          }
+        ]
+      },
+      {
+        "name": "兜底通过",
+        "operation": "accept",
+        "minPeople": 1,
+        "logCondition": -1,
+        "conditions":[]
+      }
+    ]
   }
-]
+}
     def __init__(self) -> None:
         '''初始化配置文件'''
         self.file_path = f'strategy.json'
@@ -253,28 +325,22 @@ class Strategy:
                 os.makedirs(path, exist_ok=True)
             self.json_data = json.load(open(self.file_path, encoding='utf-8'))
         except:
-            json.dump(self.default_list, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
-            self.json_data = self.default_list
+            json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            self.json_data = self.default_dict
             logger.info('初次启动，已在当前执行目录生成strategy.json文件')
         
-    def read(self) -> None:
-        '''从文件中更新，一般不需使用'''
-        self.json_data = json.load(open(self.file_path, encoding='utf-8'))
     
-    def get(self, index: int = None) -> list | dict | str | int | bool:
+    def get(self, hash_id: str = None) -> list | dict | str | int | bool:
         '''获取指定配置'''
-        if index is not None:
-            return self.json_data[index]
+        if hash_id is not None:
+            return self.json_data[hash_id]
         else:
             return self.json_data
         
-    def update(self, data: dict) -> None:
+    def update(self, prev_data: dict, new_data: dict) -> None:
         '''用dict更新配置文件'''
-        self.json_data.update(data)
-
-    def modify(self, key: str, value: list | dict | str | int | bool = '') -> None:
-        '''用key-value更新配置文件'''
-        self.json_data[key] = value
+        self.json_data.pop(hash(prev_data))
+        self.json_data[hash(new_data)] = new_data
 
     def save(self) -> None:
         '''写入配置文件'''

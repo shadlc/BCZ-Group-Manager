@@ -230,7 +230,7 @@
         </div>
       </div>
       <div class="wall-container group-detail-page hide" id="group-detail-page">
-        
+
         <div class="group-info-container"></div>
         <div class="paper">
           <div class="member-info-container hide">
@@ -293,42 +293,68 @@
             数据获取中，请稍后...
           </span>
         </div>
-        <div id="setting_modal" class="modal hide" data-status="hidden" onclick="toggleSettingModal(event)">
-          <div class="modal-content">
-            <span class="modal-close-btn" onclick="toggleSettingModal()"></span>
-            <div class="modal-title">小班设置</div>
-            <div class="modal-body">
-              <div class="setting-group">
-                <div class="input">
-                  <label>每日记录开关</label>
-                  <div id="record_select" class="btn-group">
-                    <div class="checkbox">
-                      <input type="radio" id="record_select_true" name="record_select" value="1" />
-                      <label for="record_select_true">开启</label>
-                    </div>
-                    <div class="checkbox">
-                      <input type="radio" id="record_select_false" name="record_select" value="0" />
-                      <label for="record_select_false">关闭</label>
-                    </div>
+        <div class="paper filter-log-container">
+          <div class="table">
+            <div class="table-page">
+              <div class="filter-page-button" style="display: flex;">
+                <div class="btn" onclick="queryFilterLog('1')">&lt;&lt;</div> 
+                <div class="btn" onclick="queryFilterLog('-')">&lt;</div>
+                <div class="filter-page-num">1</div>
+                <div class="btn" onclick="queryFilterLog('+')">&gt;</div>
+                <div class="btn" onclick="queryFilterLog('-1')">&gt;&gt;</div>
+              </div>
+              <select id="filter-page-count">
+                <option value="20">20条/页</option>
+                <option value="50">50条/页</option>
+                <option value="100">100条/页</option>
+                <option value="200">200条/页</option>
+                <option value="500">500条/页</option>
+                <option value="2000">2000条/页</option>
+              </select>
+            </div>
+            <div class="table-content">
+              <table id="filter_log_table">
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div id="setting_modal" class="modal hide" data-status="hidden" onclick="toggleSettingModal(event)">
+        <div class="modal-content">
+          <span class="modal-close-btn" onclick="toggleSettingModal()"></span>
+          <div class="modal-title">小班设置</div>
+          <div class="modal-body">
+            <div class="setting-group">
+              <div class="input">
+                <label>每日记录开关</label>
+                <div id="record_select" class="btn-group">
+                  <div class="checkbox">
+                    <input type="radio" id="record_select_true" name="record_select" value="1" />
+                    <label for="record_select_true">开启</label>
+                  </div>
+                  <div class="checkbox">
+                    <input type="radio" id="record_select_false" name="record_select" value="0" />
+                    <label for="record_select_false">关闭</label>
                   </div>
                 </div>
-                <div class="input">
-                  <label for="late_time_input">晚卡时间</label>
-                  <input type="time" id="late_time_input" />
-                </div>
-                <div class="input">
-                  <label for="auth_token_input">授权令牌</label>
-                  <input type="text" id="auth_token_input" />
-                </div>
-                <div class="input-group">
-                  <div id="search_btn" class="btn" onclick="saveConfig()">保存设置</div>
-                  <div id="delete_btn" class="btn red-border" onclick="deleteGroup()">删除小班</div>
-                </div>
+              </div>
+              <div class="input">
+                <label for="late_time_input">晚卡时间</label>
+                <input type="time" id="late_time_input" />
+              </div>
+              <div class="input">
+                <label for="auth_token_input">授权令牌</label>
+                <input type="text" id="auth_token_input" />
+              </div>
+              <div class="input-group">
+                <div id="search_btn" class="btn" onclick="saveConfig()">保存设置</div>
+                <div id="delete_btn" class="btn red-border" onclick="deleteGroup()">删除小班</div>
               </div>
             </div>
           </div>
         </div>
       </div>
+    </div>
     </div>
   </main>
 
@@ -378,7 +404,7 @@
   <script src="lib/setting.js"></script>
   <script src="lib/group_details.js"></script>
   <script src="lib/switch_box.js"></script>
-  <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+  <script src="lib/jquery-3.5.1.min.js"></script>
   <script src="lib/notice_card.js"></script>
   <script>
     var group_loaded = false;

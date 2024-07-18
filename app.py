@@ -153,6 +153,124 @@ def observe_group():
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         return restful(200, msg)
 
+
+@app.route('/query_strategy_verdict_details', methods=['POST'])
+def query_strategy_verdict_details():
+    '''获取策略审核详情'''
+    unique_id = request.json.get('unique_id')
+    if not unique_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        conn = sqlite.connect()
+        cursor = conn.cursor()
+        result = cursor.execute(f'SELECT DATE, OPERATION, REASON FROM STRATEGY_VERDICT WHERE UNIQUE_ID = ?', (unique_id,)).fetchall()
+        conn.close()
+        # result可能为空，这是正常情况
+        return restful(200, '', result)
+    except Exception as e:
+        logger.error(f'查询审核记录时发生错误: {e}')
+        return restful(400, f'查询审核记录时发生错误(X_X): {e}')
+
+@app.route('/recheck_strategy_verdict', methods=['POST'])   
+def recheck_strategy_verdict():
+    '''重新审核策略，仅限在班成员'''
+    unique_id = int(request.json.get('unique_id'))
+    group_id = int(request.json.get('group_id'))
+    if not unique_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        logger.info(f'重新审核策略: unique_id={unique_id}, group_id={group_id}')
+        groups_strategy_id = config.read('groups_strategy_id')
+        logger.info(f'groups_strategy_id={groups_strategy_id}')
+        strategy_id = groups_strategy_id[str(group_id)]
+    except KeyError:
+        return restful(400, '未配置该小班的策略ID')
+    strategy_dict = strategy.get(strategy_id)
+    # 从GROUP表获取sharekey
+    filter.log(f'获取中...<br>unique_id={unique_id} group_id={group_id}', '全局')
+    filter.log_dispatch('全局')
+    
+    conn = sqlite.connect()
+
+
+    share_key = sqlite.queryGroupShareKey(str(group_id), conn)
+    member_dict_temp = bcz.getGroupInfo(share_key, buffered_time=30).get('members')
+    rank_dict = bcz.getGroupDakaHistory(share_key, parsed=True, buffered_time=30)
+    # logger.debug(f'总{member_dict_temp}')
+    for member_dict in member_dict_temp:
+        # logger.debug(f'查询成员{member_dict}')
+        if unique_id == member_dict['id']:
+            personal_dict_temp = member_dict
+            personal_dict_temp['group_nickname'] = rank_dict['group_nickname'][unique_id]
+            break
+    if not personal_dict_temp:
+        return restful(404, '未查询到该成员信息Σ(っ °Д °;)っ')
+    
+    result_code = 0
+
+    reason_dict = {}
+    operation = ''
+    for index, sub_strat_dict in enumerate(strategy_dict["subItems"]):                
+        result = filter.check(
+            personal_dict_temp,
+                rank_dict['this_week'].get(unique_id, None),
+                    rank_dict['last_week'].get(unique_id, None),
+                        sub_strat_dict, '全局', conn)
+        logger.debug(f'sub_strat_dict={sub_strat_dict} result={result}')
+        log_condition = sub_strat_dict['logCondition']
+        sub_strat_name = sub_strat_dict['name']
+    
+        reason_dict.update(result['reason'])
+        if result.get('personal_info', None):
+            sqlite.savePersonalInfo([result['personal_info']], conn)
+            sqlite.saveUserOwnGroupsInfo(result['group_info'], conn)
+        if result['result'] == 1:
+            # 符合该子条目
+            if log_condition == 1 or log_condition == 0:
+                operation += f'符合{sub_strat_name}<br>'
+                filter.log(f'符合{sub_strat_name}', '全局')
+            verdict = index
+            sqlite.saveStrategyVerdict({strategy_id: {unique_id: (index, operation, reason_dict)}}, strategy.get(), conn)
+            result_code = 1 if sub_strat_dict['operation'] == 'accept' else 2
+            break
+        else:
+            if log_condition == 2 or log_condition == 0: 
+                operation += f'不符合{sub_strat_name}<br>'
+                filter.log(f'不符合{sub_strat_name}', '全局')
+    if not result_code:
+        filter.log('[error]没有符合的子条目，默认拒绝，请检查策略', '全局')
+        filter.log_dispatch('全局')
+        return restful("[error]没有符合的子条目，默认接受，请检查策略")
+    reason = ''
+    for key, value in reason_dict.items():
+        reason += f'{key}: {value}<br>'
+    filter.log(f'审核结果: {operation}<br>{reason}', '全局')
+    filter.log_dispatch('全局')
+    return restful(200, f'审核结果: {operation}<br>{reason}')
+
+
+@app.route('/query_filter_log', methods=['POST'])
+def query_filter_log():
+    '''获取过滤日志'''
+    group_id = request.json.get('group_id')
+    count_start = request.json.get('count_start', 0)
+    count_limit = request.json.get('count_limit', 20)
+    try:
+        conn = sqlite.connect()
+        logger.debug(f'查询日志记录: group_id={group_id}, count_start={count_start}, count_limit={count_limit}')
+        logs = sqlite.queryFilterLog(group_id, count_start, count_limit, conn)
+        conn.close()
+        if not logs:
+            return restful(404, '未查询到该日志记录Σ(っ °Д °;)っ')
+        return restful(200, '', logs)
+    except Exception as e:
+        # logger.error(f'查询日志记录时发生错误: {e}')
+        return restful(400, f'查询日志记录时发生错误(X_X): {e}')
+    
+
+
+        
+
 @app.route('/query_group_details', methods=['POST'])
 def query_group_details():
     '''获取关注小班列表'''
@@ -268,33 +386,30 @@ def test():
     # 海莲1alv4ldkkhcxyln6
     conn = sqlite.connect()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM STRATEGY_VERDICT")
+    # cursor.execute("SELECT * FROM STRATEGY_VERDICT")
 
-    strategy_dict = strategy.get()
-    data = cursor.fetchall()
+    # strategy_dict = strategy.get()
+    # data = cursor.fetchall()
     # 给STRATEGY_VERDICT表增加2个字段OPERATION和REASON    
 
     
     # cursor.execute("ALTER TABLE STRATEGY_VERDICT ADD COLUMN OPERATION TEXT")
     # cursor.execute("ALTER TABLE STRATEGY_VERDICT ADD COLUMN REASON TEXT")
-    for row in data:
-        try:
-            strategy_id = row[1]
-            sub_id = row[2]
-            operation = strategy_dict[strategy_id]['subItems'][sub_id]['operation']
-        except:
-            operation = 'suspect'
-        # 更新表单
+    # for row in data:
+    #     try:
+            # strategy_id = row[1]
+            # sub_id = row[2]
+            # operation = strategy_dict[strategy_id]['subItems'][sub_id]['operation']
+        # except:
+    #         operation = 'suspect'
+    #     # 更新表单
 
-        cursor.execute("UPDATE STRATEGY_VERDICT SET OPERATION =? WHERE UNIQUE_ID = ? AND STRATEGY_ID = ? AND DATE = ?", (operation, row[0], strategy_id, row[3]))
+    #     cursor.execute("UPDATE STRATEGY_VERDICT SET OPERATION =? WHERE UNIQUE_ID = ? AND STRATEGY_ID = ? AND DATE = ?", (operation, row[0], strategy_id, row[3]))
     
         
-    conn.commit()
+    # conn.commit()
     cursor.close()
     conn.close()
-    # filter.start('7dDzzdH8d9Tu204vLGC21WBNcZv3KDAJyiMjAHNk%2BL8%3D','696zhagp08bnfae7', 1, '12345678')
-    # filter.start('m%2B4NaiyuUId5nvQ0pCCPmIKtvI7WnSD8%2FW8v6qLQ7NM%3D','2qcytz174mefxg9l', 1, '12345678')
-    # filter.start('m%2B4NaiyuUId5nvQ0pCCPmIKtvI7WnSD8%2FW8v6qLQ7NM%3D','1alv4ldkkhcxyln6', 1, '12345678')
     return Response(stream_with_context(filter.generator()), content_type='text/event-stream')
 
 

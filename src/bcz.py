@@ -52,6 +52,8 @@ class BCZ:
             "Pay-Support-H5": "alipay_mob_client"
         }
         self.hash_rmb = {}
+        self.buffered_groups = {}
+        self.buffered_daka_history = {}
 
     def getHeaders(self, token: str = '') -> dict:
         '''获取请求头'''
@@ -243,9 +245,17 @@ class BCZ:
             })
         return groups
 
-    def getGroupInfo(self, share_key: str, auth_token: str = '') -> dict:
+    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 10) -> dict:
         '''获取【班内主页】信息group/information'''
-        self.data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+        buffer_data = self.buffered_groups.get(share_key)
+        buffer_time = buffer_data.get('data_time') if buffer_data else None
+        logger.info(f'获取到缓存时间{buffer_time}')
+        # 如果当前时间比self.data_time晚少于buffered_time秒，则直接返回缓存数据
+        if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
+            logger.info(f'使用缓存数据')
+            return self.buffered_groups.get(share_key)
+        
+        
         url = f'{self.group_detail_url}?shareKey={share_key}'
         headers = self.getHeaders()
         main_response = requests.get(url, headers=headers, timeout=5)
@@ -266,8 +276,9 @@ class BCZ:
                 msg = f'使用内部授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或内部授权令牌无效'
                 logger.warning(f'{msg}\n{main_response.text}')
             auth_data = auth_response.json()['data']
-
+            
         return self.parseGroupInfo(main_data, auth_data)
+
 
     def getGroupsInfo(self, groups: list[dict], with_nickname: bool = True, only_favorite: bool = False) -> list:
         '''【多个 班内主页】批量获取小班信息'''
@@ -425,11 +436,23 @@ class BCZ:
         if today_daka_count != 0:
             group['today_daka_count'] = today_daka_count
         group['members'] = members
+        
+        self.buffered_groups[group_info['shareKey']] = group
+        return self.buffered_groups.get(group_info['shareKey'])
 
-        return group
-
-    def getGroupDakaHistory(self, share_key: str, parsed: bool = False) -> dict:
+    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 10) -> dict:
         '''获取小班成员历史打卡信息'''
+        if parsed:
+            # 暂定只有分离的记录模式
+            buffer_data = self.buffered_daka_history.get(share_key)
+            buffer_time = buffer_data.get('data_time') if buffer_data else None
+            logger.info(f'获取到缓存时间{buffer_time}')
+            
+            # 如果当前时间比self.data_time晚少于buffered_time秒，则直接返回缓存数据
+            if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
+                logger.info(f'使用缓存数据')
+                return self.buffered_daka_history.get(share_key)
+
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
         headers = self.getHeaders()
         week_response = requests.get(f'{url}&week=1', headers=headers, timeout=5)
@@ -442,6 +465,7 @@ class BCZ:
         last_week_data = last_week_response.json().get('data')
         daka_dict = {}
         last_week_daka_dict = {}
+        print(week_data)
         for member in week_data.get('list', []):
             id = member['uniqueId']
             daka_dict[id] = member['weekDakaDates']
@@ -450,7 +474,11 @@ class BCZ:
             last_week_daka_dict[id] = member['weekDakaDates']
         # 分离返回
         if parsed:
-            return {'this_week': daka_dict, 'last_week': last_week_daka_dict}
+            nickname_dict = {}
+            for member in week_data.get('list', []):
+                nickname_dict[member['uniqueId']] = member['nickname']
+            self.buffered_daka_history[share_key] = {'this_week': daka_dict, 'last_week': last_week_daka_dict, 'group_nickname': nickname_dict}
+            return self.buffered_daka_history.get(share_key)
         # 将daka_dict和last_week_daka_dict合并返回
         for id, daka_dates in daka_dict.items():
             if id in last_week_daka_dict:
