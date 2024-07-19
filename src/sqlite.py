@@ -685,7 +685,7 @@ class SQLite:
                 f'INSERT INTO FILTER_LOG (GROUP_ID, DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?)',
                 (
                     filter_log['group_id'],
-                    filter_log['datetime'],
+                    filter_log['date_time'],
                     filter_log['member_count'],
                     filter_log['accepted_count'],
                     json.dumps(filter_log['accept_list']),
@@ -700,7 +700,7 @@ class SQLite:
         result = {}
         # 找group_id按照时间排序从count_start开始的count_limit条记录
         result['data'] = cursor.execute(
-            f'SELECT * FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
+            f'SELECT DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
             (group_id, count_limit, count_start)
         ).fetchall()
         result['page_max'] = len(result['data'])//count_limit + 1

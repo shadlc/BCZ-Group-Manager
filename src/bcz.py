@@ -245,11 +245,11 @@ class BCZ:
             })
         return groups
 
-    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 10) -> dict:
+    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 5) -> dict:
         '''获取【班内主页】信息group/information'''
         buffer_data = self.buffered_groups.get(share_key)
         buffer_time = buffer_data.get('data_time') if buffer_data else None
-        logger.info(f'获取到缓存时间{buffer_time}')
+        logger.info(f'groupInfo: 获取到缓存时间{buffer_time}')
         # 如果当前时间比self.data_time晚少于buffered_time秒，则直接返回缓存数据
         if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
             logger.info(f'使用缓存数据')
@@ -440,13 +440,13 @@ class BCZ:
         self.buffered_groups[group_info['shareKey']] = group
         return self.buffered_groups.get(group_info['shareKey'])
 
-    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 10) -> dict:
+    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 5) -> dict:
         '''获取小班成员历史打卡信息'''
         if parsed:
             # 暂定只有分离的记录模式
             buffer_data = self.buffered_daka_history.get(share_key)
             buffer_time = buffer_data.get('data_time') if buffer_data else None
-            logger.info(f'获取到缓存时间{buffer_time}')
+            logger.info(f'dakaHistory: 获取到缓存时间{buffer_time}')
             
             # 如果当前时间比self.data_time晚少于buffered_time秒，则直接返回缓存数据
             if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
@@ -465,7 +465,7 @@ class BCZ:
         last_week_data = last_week_response.json().get('data')
         daka_dict = {}
         last_week_daka_dict = {}
-        print(week_data)
+        # print(week_data)
         for member in week_data.get('list', []):
             id = member['uniqueId']
             daka_dict[id] = member['weekDakaDates']
@@ -477,7 +477,8 @@ class BCZ:
             nickname_dict = {}
             for member in week_data.get('list', []):
                 nickname_dict[member['uniqueId']] = member['nickname']
-            self.buffered_daka_history[share_key] = {'this_week': daka_dict, 'last_week': last_week_daka_dict, 'group_nickname': nickname_dict}
+                data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
+            self.buffered_daka_history[share_key] = {'data_time': data_time, 'this_week': daka_dict, 'last_week': last_week_daka_dict, 'group_nickname': nickname_dict}
             return self.buffered_daka_history.get(share_key)
         # 将daka_dict和last_week_daka_dict合并返回
         for id, daka_dates in daka_dict.items():

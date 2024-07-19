@@ -266,7 +266,7 @@ let group_id = '';
         'count_start': (page_num - 1) * page_count,
         'count_limit': parseInt(page_count),
       }
-      return fetch('../query_filter_log', {
+      fetch('../query_filter_log', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(payload) 
@@ -277,11 +277,15 @@ let group_id = '';
           return;
         }
         let result = data.data;
+        result.data.unshift(['时间','人数','累计接受','接受名单','踢出名单','退出名单']);
+      
+        // 将result最前面加上分页信息
+        
         page_max = result.page_max;
         page_num = result.page_num;
         document.querySelectorAll('.filter-page-count').forEach((e)=>{
           e.innerHTML = `
-            <input type="text" value= "${page_num}"
+          
               style="margin-right: 0.2rem; width: ${(page_num.toString().length * 8) + 'px'}"
               oninput="this.style.width = (this.value.length * 8) + 'px'"
               onkeypress="eventFilterSearch(event)"
@@ -289,16 +293,16 @@ let group_id = '';
             />/${page_max}
           `
         });
-        let table_data = result.data;
+        
         let table = document.getElementById("filter_log_table");
         // 如果没有数据，则提示为空
-        if (table_data.length == 0) {
+        if (result.data.length == 0) {
           table.innerHTML = '<br><span class="center">暂无筛选数据</span><br><br>';
           return;
         }
         else {
           table.innerHTML = '';
-          fillDataToTable(table_data, table);
+          fillDataToTable(result.data, table);
         }
       })
       .catch(error => {

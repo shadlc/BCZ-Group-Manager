@@ -364,12 +364,14 @@ class Filter:
             for group in group_info:
                 # 将用户昵称、班内昵称等信息写入
                 group['nickname'] = user_info['name']
+                group['group_nickname'] = member_dict['group_nickname']
                 group['completed_time'] = member_dict['completed_time']
                 group['completed_time_stamp'] = member_dict['completed_time_stamp']
                 group['today_word_count'] = member_dict['today_word_count']
                 group['today_study_cheat'] = member_dict['today_study_cheat']
                 group['book_name'] = member_dict['book_name']
                 group['avatar'] = member_dict['avatar']
+                
                 
             time.sleep(2.5)
             personal_dict = self.sqlite.getPersonalInfo(uniqueId, conn, user_info = user_info, group_info = group_info)
@@ -427,7 +429,7 @@ class Filter:
                 self.member_dict = []
                 self.verdict_dict = {}
                 self.personal_dict = [] # 缓存个人信息，避免重复请求
-                self.filter_log_dict = {}
+                self.filter_log_dict = []
             conn.close()
             self.log('autosave done', '全局')
             self.log_dispatch('全局')
@@ -515,6 +517,11 @@ class Filter:
         group_name = member_dict_temp['name']
         self.log(f'准备中...小组id = {group_id};班长id = {leader_id}', group_name)
         self.log_dispatch(group_name)
+
+        with self.lock:
+            if self.autosave_is_running == False:
+                self.autosave_is_running = True
+                threading.Thread(target=self.autosave).start()
         
         newbies_count = 0
         removed_count = 0
@@ -567,7 +574,11 @@ class Filter:
             quit_list = []
             for personal_dict_temp in member_dict_temp["members"]:
                 uniqueId = personal_dict_temp['id']
-                memberId = personal_dict_temp['member_id']
+                try:
+                    memberId = personal_dict_temp['member_id']
+                except:
+                    print(personal_dict_temp)
+                    raise
                 # 由于getGroupInfo没有更新班内昵称获取模块，所以暂时修改了DakaHistory函数的返回值，将group_nickname加入到返回值中
                 personal_dict_temp['group_nickname'] = member_dict_temp['week_daka_info']['group_nickname'][uniqueId]
 
@@ -635,17 +646,20 @@ class Filter:
                             self.log(f"{key}:{value}", group_name)
                         self.log(operation, group_name)
                         if not result_code:
-                            self.log("[error]没有符合的子条目，默认接受，请检查策略", group_name)
+                            self.log("[error]没有符合的子条目，不操作，请检查策略", group_name)
                             continue
+                        if result_code == 1:
+                            # 只有第一次被检测才需要加入accept_list
+                            accept_list.append(uniqueId)
                     else:
                         # 已判断过，跳过
                         self.log(f"已判断过，读取结果：{strategy_dict['subItems'][verdict]['name']} → {strategy_dict['subItems'][verdict]['operation']}", group_name)
                         result_code = 1 if strategy_dict['subItems'][verdict]['operation'] == 'accept' else 2
                     # 处理结果
                     if result_code == 1:
-                        self.log(f"【✓】接受加入(6s)", group_name)
+                        
                         accepted_count += 1
-                        accept_list.append(uniqueId)
+                        self.log(f"【✓】接受加入(6s)", group_name)
                     elif result_code == 2:
                         self.log(f"【✗】准备踢出(6s)", group_name)
                         # 加入候补踢出列表，按小到大顺序插入列表
@@ -739,7 +753,7 @@ class Filter:
                 if (self.verdict_dict.get(strategy_index, None) == None):
                     self.verdict_dict[strategy_index] = {}
                 self.verdict_dict[strategy_index].update(verdict_dict_tosave)
-                self.filter_log_dict.extend({
+                self.filter_log_dict.append({
                     'group_id':group_id,
                     'date_time':datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     'member_count':member_dict_temp['member_count'],
