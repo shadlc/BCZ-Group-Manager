@@ -7,6 +7,12 @@ let group_id = '';
       if (current_group_id == group_id)
         return;
       group_id = current_group_id;
+
+      showModal('正在加载数据，请稍候...', '加载中');
+      queryFilterState();
+      bindScrollToTopBtn(document.querySelector('.member-info-container'));
+
+      
       getGroupDetailsOption()
       .then(()=>{
         let week_select = document.getElementById("week_select");
@@ -19,8 +25,8 @@ let group_id = '';
           loading_text.classList.add('hide');
           document.querySelector('.member-info-container').classList.remove('hide');
         }
+        hideAllModals();
       });
-      bindScrollToTopBtn(document.querySelector('.member-info-container'));
     }
 
     // 打开关闭公告模态框
@@ -86,7 +92,118 @@ let group_id = '';
         }, 500);
       }
     }
+    function StopFilter() {
+      // 停止筛选
+      showModal('正在停止筛选...<br>将在本轮【等待结束后】停止<br>可以关闭本窗口', '停止中');
+      fetch('./stop_filter', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},  
+        body: JSON.stringify({
+          'group_id': group_id
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        notify(data.msg);
+        // 将筛选按钮改成启动
+        let filter_btn = document.querySelector('#filter_btn');
+        filter_btn.textContent = '启动筛选';
+        filter_btn.onclick = toggleFilterModal;
+        hideAllModals();
+      })
+    }
+    function queryFilterState()
+    {
+      // 读取筛选状态
+      fetch('./query_filter_state', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},  
+        body: JSON.stringify({
+          'group_id': group_id
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let filter_btn = document.querySelector('#filter_btn');
+        if (data.data) {
+          filter_btn.textContent = '停止筛选';
+          filter_btn.onclick = StopFilter;
+        } else {
+          filter_btn.textContent = '启动筛选';
+          filter_btn.onclick = toggleFilterModal;
+        }
+      })
+    }
 
+
+
+
+    function selectStrategyAndStart(strategy_id){
+      // 用于在ToggleFilterModal中选择筛选策略并启动
+      showModal('正在启动筛选...<br>可以关闭本信息', '启动中');
+      fetch('./start_filter', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          'group_id': group_id,
+          'strategy_id': strategy_id
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        notify(data.msg);
+        // 将筛选按钮改成停止
+        let filter_btn = document.querySelector('#filter_btn');
+        filter_btn.textContent = '停止筛选';
+        filter_btn.onclick = StopFilter;
+        hideAllModals();
+      })
+
+    }
+    function toggleFilterModal() {
+      // 读取策略，然后显示选择窗口
+      fetch('../get_strategy_list', {
+        method: 'GET',
+        headers: {'Content-Type': 'application/json'},
+      }).then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let modal_content = '<table class="simple-table"><tr><th>名称</th><th>子条目名称</th></tr>'
+        
+        for (let i in data.data) {
+          let strategy = data.data[i];
+          sub_item_name = ''
+          for (let j in strategy.subItems){
+            // console.log(strategy)
+            sub_item_name += strategy.subItems[j].name + '<br>';
+          }
+          // console.log(i)
+          modal_content += `
+          <tr class="btn" onclick="selectStrategyAndStart('`+i+`')">
+            <td>`+strategy.name+`</td>
+            <td>`+sub_item_name+`</td>
+          </tr>
+          `;
+        }
+        modal_content += '</table>';
+        showModal(modal_content, '请选择筛选策略')
+      });
+    }
     // 获取小班信息
     function queryGroupDetails() {
       let loading_text = document.querySelector('.loading-text');
@@ -113,8 +230,8 @@ let group_id = '';
           notify('当前小班授权令牌已失效，请设置新的授权令牌');
         }
         setGroupInfo(group);
-        queryFilterLog('1');
         setMemberInfo(group);
+        queryFilterLog('1');
         return true;
       })
       .catch(error => {
@@ -243,9 +360,12 @@ let group_id = '';
         queryFilterLog(event?.target?.value);
       }
     }
-    page_num = 1
     function queryFilterLog(option = '1') {
       // 向后端请求筛选日志
+      filter_page_num = document.querySelector('.filter-page-num');
+      // filter_page_num的内容是 当前页/总页数
+      let page_num = parseInt(filter_page_num.textContent.split('/')[0]);
+      let page_max = parseInt(filter_page_num.textContent.split('/')[1]);
       if (option === '') {
         return;
       } else if (option == '-') {
@@ -259,12 +379,18 @@ let group_id = '';
           page_num = parseInt(option);
         }
       }
-      page_num = parseInt(document.querySelector('.filter-page-num').textContent)
-      page_count = document.querySelector('#filter-page-count').value
+      if (page_num > page_max) {
+        page_num = page_max;
+      }
+      else if (page_num < 1) {
+        page_num = 1;
+      }
+      page_count = parseInt(document.querySelector('#filter-page-count').value)
+      
       let payload = {
         'group_id': group_id,
         'count_start': (page_num - 1) * page_count,
-        'count_limit': parseInt(page_count),
+        'count_limit': page_count,
       }
       fetch('../query_filter_log', {
         method: 'POST',
@@ -283,16 +409,13 @@ let group_id = '';
         
         page_max = result.page_max;
         page_num = result.page_num;
-        document.querySelectorAll('.filter-page-count').forEach((e)=>{
-          e.innerHTML = `
-          
-              style="margin-right: 0.2rem; width: ${(page_num.toString().length * 8) + 'px'}"
-              oninput="this.style.width = (this.value.length * 8) + 'px'"
-              onkeypress="eventFilterSearch(event)"
-              onblur="eventFilterSearch(event)"
-            />/${page_max}
-          `
-        });
+
+        filter_page_num.style="margin-right: 0.2rem; width: ${(page_num.toString().length * 8) + 'px'}"
+        filter_page_num.oninput="this.style.width = (this.value.length * 8) + 'px'"
+        filter_page_num.onkeypress="eventFilterSearch(event)"
+        filter_page_num.onblur="eventFilterSearch(event)"
+        filter_page_num.textContent = `${page_num}/${page_max}`;
+        
         
         let table = document.getElementById("filter_log_table");
         // 如果没有数据，则提示为空
@@ -310,31 +433,62 @@ let group_id = '';
         notify('请求错误:' + error);
       });
     }
-    function reCheckStrategyVerdict(member_id, group_id) {
-      let payload = {
-        'group_id': group_id,
-        'unique_id': member_id,
+    function reCheckStrategyVerdict(member_id, group_id, strategy_id) {
+      // 在弹窗中按下重新检测按钮后触发
+      // 1.获取策略列表并询问用户选择策略
+      if (strategy_id == null) {
+        fetch('../get_strategy_list', {
+          method: 'GET',
+          headers: {'Content-Type': 'application/json'},
+        }).then(response => response.json())
+        .then(data => {
+          if (data.retcode != 0) {
+            notify(data.msg);
+            return;
+          }
+          let modal_content = '<table class="simple-table"><tr><th>名称</th><th>子条目名称</th></tr>'
+          for (let i in data.data) {
+            let strategy = data.data[i];
+            for (let j in strategy.subItems){
+              sub_item_name += strategy.subItems[j].name + '<br>';
+            }
+            modal_content += `
+            <tr class="btn" onclick="reCheckStrategyVerdict('`+member_id+`, `+group_id+`, '`+i+`')">
+              <td>`+strategy.name+`</td>
+              <td>`+sub_item_name+`</td>
+            </tr>
+            `;
+          }
+          modal_content += '</table>';
+          showModal(modal_content, '请选择 重新检测 策略')
+        });
       }
-      return fetch('../recheck_strategy_verdict', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.retcode != 0) {
-          return;
+      else{
+        showModal('正在重新检测，请稍候...', '重新检测中');
+        let payload = {
+          'group_id': group_id,
+          'unique_id': member_id,
+          'strategy_id': strategy_id
         }
-        notify('重新检测成功');
-        // document.querySelectorAll('.modal-close-btn').forEach((e)=>{
-        //   e.click();
-        // });
-      })
-      .catch(error => {
-        console.error('请求错误:', error);
-        notify('请求错误:' + error);
-      });
-      
+        return fetch('../recheck_strategy_verdict', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        })
+        .then(response => response.json())
+        .then(data => {
+          if (data.retcode != 0) {
+            return;
+          }
+          notify('重新检测成功');
+          hideAllModals();
+        })
+        .catch(error => {
+          console.error('请求错误:', error);
+          notify('请求错误:' + error);
+          hideAllModals();
+        });
+      }
     }
     function getStrategyVerdictDetailsAndShowModal(modal_content, member_id, modal_title, refreshable) {
       // 向后台请求策略详情
@@ -358,8 +512,7 @@ let group_id = '';
           if (strategy_verdict[2] == null) {
             strategy_verdict[2] = '';
           }
-          modal_content += `
-            <tr><td>`+strategy_verdict[0]+`</td><td>`+strategy_verdict[1]+`</td><td>`+strategy_verdict[2]+`</td></tr>`;
+          modal_content+=`<tr><td>`+strategy_verdict[0]+`</td><td>`+strategy_verdict[1]+`</td><td>`+strategy_verdict[2]+`</td></tr>`;
         }
         
         if (refreshable){
@@ -388,7 +541,6 @@ let group_id = '';
       }
       for (let i in group.members) {
         let member = group.members[i];
-        // console.log(member);
         let group_nickname_span = '';
         let badges = '';
         let display_left = document.querySelector('input[name="display_left"]:checked').value;
@@ -457,7 +609,6 @@ let group_id = '';
         } else if (!member.data_time) {
           continue;
         }
-        // console.log(refreshable);
         if (refreshable)
           member_table.onclick = () => {
               getStrategyVerdictDetailsAndShowModal(modal_content, member.id, '打卡详情', true);
@@ -496,6 +647,7 @@ let group_id = '';
               'auth_token': auth_token
             });
           })
+          origin_auth_token = auth_token;
         } else {
             postObserveGroup({
               'id': group_id,

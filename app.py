@@ -176,18 +176,12 @@ def recheck_strategy_verdict():
     '''重新审核策略，仅限在班成员'''
     unique_id = int(request.json.get('unique_id'))
     group_id = int(request.json.get('group_id'))
+    strategy_id = int(request.json.get('strategy_id'))
     if not unique_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-    try:
-        logger.info(f'重新审核策略: unique_id={unique_id}, group_id={group_id}')
-        groups_strategy_id = config.read('groups_strategy_id')
-        logger.info(f'groups_strategy_id={groups_strategy_id}')
-        strategy_id = groups_strategy_id[str(group_id)]
-    except KeyError:
-        return restful(400, '未配置该小班的策略ID')
     strategy_dict = strategy.get(strategy_id)
     # 从GROUP表获取sharekey
-    filter.log(f'获取中...<br>unique_id={unique_id} group_id={group_id}', '全局')
+    filter.log(f'获取中...<br>unique_id={unique_id}, group_id={group_id}, strategy_id={strategy_id}', '全局')
     filter.log_dispatch('全局')
     
     conn = sqlite.connect()
@@ -267,6 +261,55 @@ def query_filter_log():
         # logger.error(f'查询日志记录时发生错误: {e}')
         return restful(400, f'查询日志记录时发生错误(X_X): {e}')
     
+@app.route('/get_strategy_list', methods=['GET'])
+def query_strategy():
+    '''获取策略'''
+    return restful(200, '', strategy.get())
+
+@app.route('/start_filter', methods=['POST'])
+def start_filter():
+    '''开始筛选'''
+    group_id = int(request.json.get('group_id'))
+    strategy_id = request.json.get('strategy_id')
+    conn = sqlite.connect()
+    cursor = conn.cursor()
+    result = cursor.execute(f'SELECT SHARE_KEY FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
+    if not result or not result[0]:
+        return restful(404, '请先添加该小班 到观察列表')
+    share_key = result[0]
+    result = cursor.execute(f'SELECT AUTH_TOKEN FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
+
+    if not result or not result[0]:
+        return restful(404, '请设置班长AUTH_TOKEN')
+    auth_token = result[0]
+    try:
+        filter.start(auth_token, share_key, strategy_id)
+        return restful(200, '筛选成功启动! ヾ(≧▽≦*)o')
+    except Exception as e:
+        return restful(500, f'筛选启动失败：{e}')
+
+@app.route('/stop_filter', methods=['POST'])
+def stop_filter():
+    '''停止筛选'''
+    group_id = int(request.json.get('group_id'))
+    share_key = sqlite.queryGroupShareKey(str(group_id))
+    filter.stop(share_key)
+    return restful(200, '筛选已停止!')
+
+@app.route('/query_filter_state', methods=['POST'])
+def query_filter():
+    '''获取筛选运行状态'''
+    group_id = request.json.get('group_id')
+    logger.info(f'查询小班{group_id}的筛选状态')
+    return restful(200, '', filter.getState(sqlite.queryGroupShareKey((group_id))))
+    
+
+
+
+
+
+
+
 
 
         
@@ -378,38 +421,8 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
 
 
 # 处理SSE连接
-@app.route('/test')
-def test():
-    
-    # 山花4uvshv3axkatcq4f
-    # 抚霞2qcytz174mefxg9l
-    # 海莲1alv4ldkkhcxyln6
-    conn = sqlite.connect()
-    cursor = conn.cursor()
-    # cursor.execute("SELECT * FROM STRATEGY_VERDICT")
-
-    # strategy_dict = strategy.get()
-    # data = cursor.fetchall()
-    # 给STRATEGY_VERDICT表增加2个字段OPERATION和REASON    
-
-    
-    # cursor.execute("ALTER TABLE STRATEGY_VERDICT ADD COLUMN OPERATION TEXT")
-    # cursor.execute("ALTER TABLE STRATEGY_VERDICT ADD COLUMN REASON TEXT")
-    # for row in data:
-    #     try:
-            # strategy_id = row[1]
-            # sub_id = row[2]
-            # operation = strategy_dict[strategy_id]['subItems'][sub_id]['operation']
-        # except:
-    #         operation = 'suspect'
-    #     # 更新表单
-
-    #     cursor.execute("UPDATE STRATEGY_VERDICT SET OPERATION =? WHERE UNIQUE_ID = ? AND STRATEGY_ID = ? AND DATE = ?", (operation, row[0], strategy_id, row[3]))
-    
-        
-    # conn.commit()
-    cursor.close()
-    conn.close()
+@app.route('/message')
+def sse_message() -> Response:
     return Response(stream_with_context(filter.generator()), content_type='text/event-stream')
 
 

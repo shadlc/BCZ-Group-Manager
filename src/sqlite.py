@@ -225,15 +225,17 @@ class SQLite:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
         return False
     
-    def queryGroupShareKey(self, group_id: str, conn: sqlite3.Connection = None) -> str:
+    def queryGroupShareKey(self, group_id: str) -> str:
         '''查询小班分享码'''
+        conn = self.connect(self.db_path)
         cursor = conn.cursor()
         result = cursor.execute(f'SELECT SHARE_KEY FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
         logger.debug(f'查询小班{group_id}的分享码: {result}')
-        # 报错 Incorrect number of bindings supplied. The current statement uses 1, and there are 7 supplied.
+        conn.close()
         if result:
             return result[0]
         return ''
+        
 
 
 
@@ -681,6 +683,8 @@ class SQLite:
         '''保存筛选日志'''
         cursor = conn.cursor()
         for filter_log in filter_log_list:
+            if len(filter_log['accept_list']) + len(filter_log['remove_list']) + len(filter_log['quit_list']) == 0:
+                continue
             cursor.execute(
                 f'INSERT INTO FILTER_LOG (GROUP_ID, DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?)',
                 (
@@ -703,7 +707,17 @@ class SQLite:
             f'SELECT DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
             (group_id, count_limit, count_start)
         ).fetchall()
-        result['page_max'] = len(result['data'])//count_limit + 1
+        count = cursor.execute(
+            f'SELECT COUNT(*) FROM FILTER_LOG WHERE GROUP_ID = ?',
+            [group_id]
+        ).fetchone()
+        if not count:
+            count = 0
+        else:
+            count = count[0]
+        result['page_max'] = count//count_limit
+        if count%count_limit != 0:
+            result['page_max'] += 1
         result['page_num'] = count_start//count_limit + 1
         logger.info(f'queryFilterLog result: {result}')
         return result

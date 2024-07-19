@@ -135,7 +135,7 @@ class Filter:
         
     def getState(self, shareKey: str) -> bool:
         '''获取指定班筛选器状态：是否运行，筛选层次和进度'''
-        return self.activate_groups
+        return True if self.activate_groups.get(shareKey, None) is not None else False
 
 
 
@@ -144,11 +144,13 @@ class Filter:
     def stop(self, shareKey: str = None) -> None:
         # 停止筛选，不再分开monitor和activate功能
         if shareKey is None:
-            for shareKey in self.activate_groups:
-                self.stop(shareKey)
+            for activated_group in self.activate_groups:
+                self.stop(activated_group['tids'])
+            # 所有进程停止后，autosave会自动停止
             while self.autosave_is_running:
-                time.sleep(1) # 等待autosave线程退出
+                time.sleep(1) 
             self.log('autosave已停止', '全局')
+            self.log_dispatch('全局')
             return
         if self.activate_groups.get(shareKey, None) is None:
             return # 筛选线程没有运行
@@ -160,6 +162,8 @@ class Filter:
             self.log(f'筛选线程已停止，shareKey = {shareKey}', '全局')
         except Exception as e:
             self.log(f'停止筛选线程失败，shareKey = {shareKey}, error = {e}', '全局')
+        finally:
+            self.log_dispatch('全局')
             
 
 
@@ -412,7 +416,7 @@ class Filter:
     def autosave(self) -> None:
         '''每10s保存一次内存【3个数组】到数据库'''
         self.autosave_is_running = True
-        while(self.activate_groups):
+        while(len(self.activate_groups) > 0):
             time.sleep(self.autosave_interval)
             
             self.log('autosave now...','全局')
@@ -433,6 +437,8 @@ class Filter:
             conn.close()
             self.log('autosave done', '全局')
             self.log_dispatch('全局')
+        self.log('autosave stopped! ', '全局')
+        self.log_dispatch('全局')
         self.autosave_is_running = False
 
     def debug(self, message: str) -> None:
@@ -505,12 +511,12 @@ class Filter:
         group_id = member_dict_temp['id']
         # 因为保存策略index要用到group_id，所以先获取
         
-        
-        groups_strategy_id = self.config.read('groups_strategy_id')
-        str_group_id = str(group_id)
-        if str_group_id not in groups_strategy_id or groups_strategy_id[str_group_id]!= strategy_index:
-            groups_strategy_id[str_group_id] = strategy_index
-            self.config.save("groups_strategy_id", strategy_index)
+        # 暂时不保存策略映像
+        # groups_strategy_id = self.config.read('groups_strategy_id')
+        # str_group_id = str(group_id)
+        # if str_group_id not in groups_strategy_id or groups_strategy_id[str_group_id]!= strategy_index:
+        #     groups_strategy_id[str_group_id] = strategy_index
+        #     self.config.save("groups_strategy_id", strategy_index)
 
         leader_id = member_dict_temp['leader_id']
         group_count_limit = member_dict_temp['count_limit']
@@ -789,5 +795,7 @@ class Filter:
         
         self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index, share_key))
         self.activate_groups[share_key]['tids'].start()
+
+        time.sleep(1) # 前端技术性延迟
 
 

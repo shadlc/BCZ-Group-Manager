@@ -310,6 +310,15 @@ function toggleModal(event, modal_id='') {
   })
 }
 
+function hideAllModals() {
+  document.querySelectorAll('.modal').forEach((modal)=>{
+    if (modal.getAttribute('data-status') =='show') {
+      // 点击modal
+      modal.click();
+    }
+  })
+}
+
 // 为元素绑定返回顶部按钮
 function bindScrollToTopBtn(element) {
   let scroll_to_top_btn = document.createElement('div');

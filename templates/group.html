@@ -276,6 +276,7 @@
               <div class="btn-group">
                 <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
                 <div id="setting_btn" class="btn" onclick="toggleSettingModal()">设置</div>
+                <div id="filter_btn" class="btn" onclick="toggleFilterModal()">启动筛选</div>
               </div>
             </div>
             <div id="member_filter" class="search-input hide">
@@ -299,7 +300,7 @@
               <div class="filter-page-button" style="display: flex;">
                 <div class="btn" onclick="queryFilterLog('1')">&lt;&lt;</div> 
                 <div class="btn" onclick="queryFilterLog('-')">&lt;</div>
-                <div class="filter-page-num">1</div>
+                <div class="filter-page-num">1/1</div>
                 <div class="btn" onclick="queryFilterLog('+')">&gt;</div>
                 <div class="btn" onclick="queryFilterLog('-1')">&gt;&gt;</div>
               </div>
@@ -415,7 +416,7 @@
       initCloud(30);
       groupPage();
       // 建立到/test的sse连接
-      const source = new EventSource('/test');
+      const source = new EventSource('/message');
       source.onmessage = function (event) {
         const data = event.data.split('#');
         const messageObject = {};
