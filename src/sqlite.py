@@ -11,29 +11,6 @@ from src.config import Config
 
 logger = logging.getLogger(__name__)
 
-# FILTER_LOG TABLE 和 STRATEGY_VERDICT TABLE 数据示例：
-#     strategy_verdict_dict = [
-#         (Thread::)this_verdict_dict = {
-#             'date': '%Y-%M-%D',
-#             'uniqueId':strategy_index,
-#         }
-#     ]
-    
-#     filter_log = [
-#         {
-#             'uniqueId':uniqueId,
-#             'shareKey':share_key,
-#             'datetime':datetime.datetime.now(),
-#             'strategy':strategy_dict['name'],
-#             'subStrategy':sub_strat_dict['name'],
-#             'detail':{
-#                 'result':1,
-#                 'reason':'踢出小班'
-#             }
-#         }
-#     ]
-
-
 class SQLite:
     def __init__(self, config: Config) -> None:
         '''数据库类'''
@@ -163,11 +140,7 @@ class SQLite:
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,   -- 头像ID
                 URL TEXT UNIQUE                         -- 头像链接
             );
-            ''',
-            '''CREATE TABLE IF NOT EXISTS STRATEGIES (                   -- 策略表(在筛选成员后保存，相当于永久映像)
-                HASH_ID TEXT PRIMARY KEY,                   -- 策略ID
-                STRATEGY_JSON TEXT                       -- 策略内容
-            );'''
+            '''
         ]
         self.init()
 
@@ -722,19 +695,6 @@ class SQLite:
         logger.info(f'queryFilterLog result: {result}')
         return result
 
-
-    # def queryStrategyVerdictDetails(self, unique_id: str, conn: sqlite3.Connection) -> list:
-    #     '''小班详情页面，获取策略审核结果'''
-    #     cursor = conn.cursor()
-    #     result =cursor.execute(
-    #         f'SELECT DATE, OPERATION, REASON FROM STRATEGY_VERDICT WHERE UNIQUE_ID = ?',
-    #         [unique_id]
-    #     ).fetchall()
-    #     logger.info(f'queryStrategyVerdictDetails result: {result}')
-    #     if result:
-    #         return result
-    #     else:
-    #         return []
             
     def queryStrategyVerdict(self, strategy_id: str, unique_id: str, conn: sqlite3.Connection) -> list:
         '''获取策略审核结果sub_strategy_index，详情见filter.py'''
@@ -983,138 +943,6 @@ class SQLite:
             'total_completed_times': total_completed_times,
            'max_duration_days': max_duration_days
         }
-
-        
-    # observed_days = 30
-    # def queryLongestInfo(self, unique_id: str, conn: sqlite3.Connection, reference: dict = None) -> dict:
-    #     '''获取指定成员数据库中停留天数【峰值】和【连卡期望】，最近30天【打卡时间】，平均【打卡词数】'''
-    #     # 和 saveGroupsInfo 功能相对，但这是以成员为单位，而不是以小班为单位
-    #     cursor = conn.cursor()
-    #     # 先获取这个成员的小班列表
-    #     group_list = cursor.execute(
-    #         f'SELECT DISTINCT GROUP_ID FROM MEMBERS WHERE USER_ID = ?',
-    #         [unique_id]
-    #     ).fetchall()
-    #     # 遍历小班列表，获取最长停留天数和完成率、最长完成次数
-    #     for group_id in group_list:
-    #         result = cursor.execute(
-    #             f'''
-    #                 SELECT
-    #                     DURATION_DAYS,
-    #                     COMPLETED_TIMES,
-    #                 FROM MEMBERS
-    #                 WHERE USER_ID = ? AND GROUP_ID = ? ORDER BY DURATION_DAYS DESC LIMIT 1
-    #             ''',# TODAY_DATE和WORD_COUNT暂时没用到
-    #             [unique_id, group_id[0]]
-    #         ).fetchone()
-    #         if reference :
-    #             # 如果今天的数据还没存入MEMBERS表，会用reference字段传入
-    #             for item in reference:
-    #                 result.append([
-    #                     datetime.now().strftime('%Y-%m-%d'),
-    #                       -1,
-    #                         item['joinDays'],
-    #                           item['joinDays'] * item['finishingRate'],
-    #                             0,
-    #                               item['name']],
-    #                                 item['shareKey'])
-    #         latest_date = "00-00"
-    #         time_stamp = time.time()
-    #         competed_time_list = []
-    #         period = []
-    #         current_stay = 0
-    #         current_completed_times = 0
-    #         total_word_count = 0
-    #         for item in result:
-    #             today_date = item[0]
-    #             completed_time = item[1]
-    #             duration_days = item[2]
-    #             completed_times = item[3]
-    #             word_count = item[4]
-    #             group_name = item[5]
-
-    #             total_word_count += word_count
-
-    #             latest_date = max(latest_date, today_date)
-    #             if duration_days == 1 : # 入班第一天或24h内
-    #                 continue
-    #             competed_time_list.append(completed_time)
-                    
-    #             if duration_days > current_stay:
-    #                 current_stay = duration_days
-    #                 current_completed_times = completed_times
-    #             else:# 离开班级
-    #                 period.append((group_name, current_completed_times, current_stay, self.ComboExpectancy(current_stay, current_completed_times)))
-
-    #                 current_stay = duration_days
-    #                 current_completed_times = completed_times
-    #         period.append((group_name, current_completed_times, current_stay, self.ComboExpectancy(current_stay, current_completed_times)))
-    #         # 按照ComboExpectancy排序
-    #         period.sort(key=lambda x: x[3], reverse=True)
-            
-                    
-    #     return {"period": period, 
-    #             "latest_date": latest_date, 
-    #             "competed_time_list": competed_time_list,
-    #             "average_word_count": total_word_count/len(result)}
-        
-    # def getPersonalInfo(self, unique_id: str, conn: sqlite3.Connection) -> dict:
-    #     '''获取基于今日的个人信息，如果今天没获取过，返回None'''
-    #     cursor = conn.cursor()
-    #     # 查询最近日期，如果不是今天返回None
-    #     result = cursor.execute(
-    #         f'SELECT DATETIME, DESKMATE_DAYS, DEPENDABLE_FRAME FROM PERSONAL_INFO WHERE USER_ID = ? ORDER BY DATETIME DESC LIMIT 1',
-    #         [unique_id]
-    #     ).fetchone()
-    #     today_date = result[0][0] if result else None
-    #     if today_date is None or today_date != datetime.now().strftime('%Y-%m-%d'):
-    #         return None
-    #     # 查询最大的同桌天数
-    #     max_deskmate_days = result[0][1]
-    #     # 查询时间最近的靠谱头像框
-    #     dependable_frame = result[0][2]
-    #     # 由于有今天的校牌记录，说明小班信息已经存入MEMBERS表，所以从MEMBERS表中查询
-    #     # 查询最近日期的所有小班的完成次数和入班天数
-        
-    #     # result = cursor.execute(
-    #     #     f'''
-    #     #         SELECT 
-    #     #             GROUP_NAME,
-    #     #             COMPLETED_TIMES,
-    #     #             DURATION_DAYS,
-    #     #         FROM MEMBERS
-    #     #         WHERE USER_ID = ? AND DATA_TIME = ?
-    #     #     ''',
-    #     #     [unique_id, today_date]
-    #     # ).fetchall()
-    #     # # 遍历小班列表，获取最大期望连卡天数
-    #     # # 注意此处的最大期望是基于今日数据，而queryLongestInfo是基于历史数据
-    #     # max_combo_expectancy = 0
-    #     # max_completed_times = 0
-    #     # max_duration_days = 0
-    #     # max_group_name = ''
-    #     # for item in result:
-    #     #     group_name = item[0]
-    #     #     completed_times = item[1]
-    #     #     duration_days = item[2]
-    #     #     combo_expectancy = self.ComboExpectancy(duration_days, completed_times)
-    #     #     if combo_expectancy > max_combo_expectancy:
-    #     #         max_group_name = group_name
-    #     #         max_completed_times = completed_times
-    #     #         max_duration_days = duration_days
-    #     #         max_combo_expectancy = combo_expectancy
-
-    #     return {
-    #         'unique_id': unique_id,
-    #         'deskmate_days': max_deskmate_days,
-    #         'dependable_frame': dependable_frame,
-    #         # 'today_max_combo_expectancy': (
-    #         #     max_group_name,
-    #         #     max_completed_times,
-    #         #     max_duration_days,
-    #         #     max_combo_expectancy
-    #         # )
-    #     }
     
     def savePersonalInfo(self, personal_info_list : list, conn: sqlite3.Connection) -> None:
         '''保存个人信息'''

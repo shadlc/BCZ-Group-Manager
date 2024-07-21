@@ -1,4 +1,3 @@
-# 4.19计划：完成已经添加的用户(unique_id和accesstoken)、已经添加的班级的同步功能（和bcz.py之间）
 
 import json
 import threading
@@ -15,94 +14,6 @@ from src.sqlite import SQLite
 from src.bcz import BCZ
 # 跨文件引用多用from，方便改路径
 import sqlite3
-
-#
-# 开发思路：
-# 【1】最终目标：自动筛选器 + 完成前端发送的命令
-# 【2】当前问题：筛选器获取到的数据和内存和数据库间的存储问题
-# 【3】5.29当前sub问题：对于筛选器的内存数组三个，如下
-# 【4】其他备忘：1.需要逐步将shareKey替换为更短的groupid与已有代码统一；2.问一下shadlc，她的用户头像存了好多份，差不多删一下(done)
-
-#     verdict_dict = [
-#         (Thread::)this_verdict_dict = {
-#             'date': '%Y-%M-%D',
-#             'uniqueId':strategy_index,
-#         }
-#     ]
-    
-#     filter_log = [
-#         {
-#             'uniqueId':uniqueId,
-#             'shareKey':share_key,
-#             'datetime':self.time_stamp(),
-#             'strategy':strategy_dict['name'],
-#             'subStrategy':sub_strat_dict['name'],
-#             'detail':{
-#                 'result':1,
-#                 'reason':'踢出小班'
-#             }
-#         }
-#     ]
-# 重点如下:
-#     member_dict = {
-#         "uniqueId": {
-#             "today_date": 用户校牌获取的时间
-#             以下是用户基本信息，与小班无关的信息
-#             'deskmate_days': 与同桌同学的天数
-#             'daka_today': 今天是否打卡
-#             'team_avatar_frame': 小队头像框，是否靠谱
-#             'this_week_daka_days': 这周打卡天数
-#             'last_week_daka_days': 上周打卡天数
-#             'today_study_cheat': 今天是否学习作弊
-#             queryMemberGroup获得的信息可能是别的成员查询时顺便写入的，但用户校牌必须当天获取一次
-#             "list": [
-#                 queryMemberGroup返回的字典或queryMemberGroups返回父节点列表
-#                 'groupid':{
-#                     'uniqueId':
-#                     'today_date':
-#                     'group_id':
-#                     'completed_times':最新
-#                     'duration_days':最新
-#                     'avatar':仅保留最新，链接
-#                     'nickname': [所有曾用过的昵称]
-#                     'group_nickname': [所有曾用过的小班昵称]
-#                     'completed_time': [所有记录到的完成时间]
-#                     'word_count': [所有记录到的学习字数]
-#                     'duration_completed': [所有在班经历(在班天数,打卡天数),(,)...按照完成率排序]
-#                     'total_study_cheat': [所有记录到的学习作弊次数]
-#                     'total_stay_days': [所有记录到的总学习天数]
-#                     'total_completed_times': [所有记录到的总学习时长]
-#                     
-#                 },
-#      personal_dict = {
-#         "uniqueId": {
-#             "today_date": 用户校牌获取的时间
-#             "deskmateDays": 与同桌同学的天数
-#             "dependability": 依赖指数
-#             "group_list": [
-#                 {# 全部使用json复制的驼峰命名
-#                     "groupId": 小班id
-#                     "finishingRate": 小班完成率
-#                     "joinDays": 该成员加入小班天数
-#                 }
-#                ]     
-#               }
-#           }
-#    
-#
-#数据库缓存结构： 
-# MEMBERS TABLE(对应内存member_dict，读queryMemberGroup，写saveGroupInfo)主键是用户 + 小班 + 采集日期，不储存用户校牌
-# GROUPS TABLE 和 OBSERVED_GROUPS TABLE(筛选不需要)储存小班信息，此处不需要访问
-# FILTER_LOG TABLE (对应内存filter_log，读queryFilterLog，写saveFilterLog)记录历史筛选操作、便于回查（日期、用户id、筛选条件id、结果）
-# STRATEGY_VERDICT TABLE (对应内存verdict_dict，读queryStrategyVerdict，写saveStrategyVerdict)记录策略执行结果，以用户id为主键，便于重启、换班时获取上次执行结果，但有效期仅到23:59或策略修改（需要清空）
-# 以上数据库主要用于节省网络查询开销、线程重复计算开销，但是运行时还是只访问内存
-# 【3】6.4当前sub问题：完成三个内存数组的同步到数据库
-# 务必使用bfs方式推进，不可堆太多任务栈
-# 放弃内存方案，全部使用数据库查询，每4s查询二三十条，怎么会想到全部加在内存里？
-# 问题待办：需要写一个线程单独负责写入，其他线程独立读取
-# 
-# DifferMemberData函数：没必要！SELECT DISTINCT 即可，还可以 ORDER BY 时间 ASC
-
 
 
 
@@ -513,12 +424,6 @@ class Filter:
         group_id = member_dict_temp['id']
         # 因为保存策略index要用到group_id，所以先获取
         
-        # 暂时不保存策略映像
-        # groups_strategy_id = self.config.read('groups_strategy_id')
-        # str_group_id = str(group_id)
-        # if str_group_id not in groups_strategy_id or groups_strategy_id[str_group_id]!= strategy_index:
-        #     groups_strategy_id[str_group_id] = strategy_index
-        #     self.config.save("groups_strategy_id", strategy_index)
 
         leader_id = member_dict_temp['leader_id']
         group_count_limit = member_dict_temp['count_limit']

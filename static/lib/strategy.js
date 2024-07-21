@@ -431,16 +431,6 @@ function deleteSubItem(subItemName, confirmed) {
 }
 function addCondition(subItemName) {
 // 添加条件
-    // // 后台
-    // const subItem = currentStrategy.subItems.find(subItem => subItem.name === subItemName);
-    // const Condition = {
-    //     name: "请选择",
-    //     operator: ">",
-    //     value: 1
-    // };
-    // subItem.Conditions.push(Condition);
-
-
 
     // 前台：添加条件Tag 
     const ConditionTag = document.createElement('div');
