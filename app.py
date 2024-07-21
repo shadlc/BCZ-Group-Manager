@@ -165,6 +165,16 @@ def query_strategy_verdict_details():
         cursor = conn.cursor()
         result = cursor.execute(f'SELECT DATE, OPERATION, REASON FROM STRATEGY_VERDICT WHERE UNIQUE_ID = ?', (unique_id,)).fetchall()
         conn.close()
+        if result:
+            # 将result[2]（用;分隔）转换为字典
+            for i, entry in enumerate(result):
+                reason_str = ""
+                if entry[2]:
+                    for reason in entry[2].split(';'):
+                        reason_str += f'{reason}<br>'
+                    # 将reason_str的最后一个<br>去掉
+                    reason_str = reason_str[:-4]
+                result[i] = (entry[0], entry[1], reason_str)
         # result可能为空，这是正常情况
         return restful(200, '', result)
     except Exception as e:
@@ -176,7 +186,7 @@ def recheck_strategy_verdict():
     '''重新审核策略，仅限在班成员'''
     unique_id = int(request.json.get('unique_id'))
     group_id = int(request.json.get('group_id'))
-    strategy_id = int(request.json.get('strategy_id'))
+    strategy_id = (request.json.get('strategy_id'))
     if not unique_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     strategy_dict = strategy.get(strategy_id)
@@ -187,7 +197,7 @@ def recheck_strategy_verdict():
     conn = sqlite.connect()
 
 
-    share_key = sqlite.queryGroupShareKey(str(group_id), conn)
+    share_key = sqlite.queryGroupShareKey(str(group_id))
     member_dict_temp = bcz.getGroupInfo(share_key, buffered_time=30).get('members')
     rank_dict = bcz.getGroupDakaHistory(share_key, parsed=True, buffered_time=30)
     # logger.debug(f'总{member_dict_temp}')
@@ -211,7 +221,7 @@ def recheck_strategy_verdict():
                     rank_dict['last_week'].get(unique_id, None),
                         sub_strat_dict, '全局', conn)
         logger.debug(f'sub_strat_dict={sub_strat_dict} result={result}')
-        log_condition = sub_strat_dict['logCondition']
+        log_condition = int(sub_strat_dict['logCondition'])
         sub_strat_name = sub_strat_dict['name']
     
         reason_dict.update(result['reason'])
@@ -242,6 +252,56 @@ def recheck_strategy_verdict():
     filter.log_dispatch('全局')
     return restful(200, f'审核结果: {operation}<br>{reason}')
 
+@app.route('/copy_strategy', methods=['POST'])
+def copy_strategy():
+    '''复制策略'''
+    strategy_id = request.json.get('strategy_id')
+    if not strategy_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        original_strategy = strategy.get(strategy_id)
+        copied_strategy = original_strategy.copy()
+        copied_strategy['name'] = f'复制的{copied_strategy["name"]}'
+        strategy.update(copied_strategy)
+        return restful(200, '复制成功，复制的策略保存在内存中')
+    except Exception as e:
+        raise e
+        return restful(500, f'复制策略时发生错误(X_X): {e}')
+    
+    
+@app.route('/hash_strategy', methods=['POST'])
+def hash_strategy():
+    '''计算策略hash值'''
+    strategy_dict = request.json
+    if not strategy_dict:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        return restful(200, '', strategy.hash256(strategy_dict))
+    except Exception as e:
+        return restful(500, f'计算策略hash值时发生错误(X_X): {e}')
+    
+@app.route('/save_strategy', methods=['POST'])
+def save_strategy():
+    '''保存策略'''
+    strategy_dict = request.json.get('strategy_dict', None)
+    previous_strategy_id = request.json.get('previous_strategy_id')
+    if not strategy:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        strategy.delete(previous_strategy_id)
+        if strategy_dict:
+            strategy.update(strategy_dict)
+        time.sleep(1) # 前端技术性延迟
+        return restful(200, '保存成功! ヾ(≧▽≦*)o')
+    except Exception as e:
+        return restful(500, f'保存策略时发生错误(X_X): {e}')
+    
+@app.route('/save_all_strategies', methods=['GET'])
+def save_all_strategy():
+    '''保存所有策略'''
+    # 析构函数可能不靠谱，手动保存开关（doge）
+    strategy.save()
+    return restful(200, '你怎么知道的(╯‵□′)╯?')
 
 @app.route('/query_filter_log', methods=['POST'])
 def query_filter_log():

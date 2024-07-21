@@ -449,11 +449,12 @@ let group_id = '';
           let modal_content = '<table class="simple-table"><tr><th>名称</th><th>子条目名称</th></tr>'
           for (let i in data.data) {
             let strategy = data.data[i];
+            sub_item_name = ''
             for (let j in strategy.subItems){
               sub_item_name += strategy.subItems[j].name + '<br>';
             }
             modal_content += `
-            <tr class="btn" onclick="reCheckStrategyVerdict('`+member_id+`, `+group_id+`, '`+i+`')">
+            <tr class="btn" onclick="reCheckStrategyVerdict(`+member_id+`, `+group_id+`, '`+i+`')">
               <td>`+strategy.name+`</td>
               <td>`+sub_item_name+`</td>
             </tr>
@@ -480,7 +481,8 @@ let group_id = '';
           if (data.retcode != 0) {
             return;
           }
-          notify('重新检测成功');
+          notify('重新检测成功', 500);
+          notify(data.msg, 5000);
           hideAllModals();
         })
         .catch(error => {

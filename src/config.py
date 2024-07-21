@@ -3,6 +3,7 @@ import sys
 import time
 import json
 import logging
+import hashlib
 
 logger = logging.getLogger(__name__)
 
@@ -328,7 +329,19 @@ class Strategy:
             json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
             self.json_data = self.default_dict
             logger.info('初次启动，已在当前执行目录生成strategy.json文件')
-        
+    
+    def __del__(self) -> None:
+        '''保存配置文件'''
+        try:
+            json.dump(self.json_data, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f'保存配置文件发生错误\n {e}')
+
+    def hash256(self, data: dict) -> str:
+        '''计算hash值'''
+        s = json.dumps(data, ensure_ascii=False, sort_keys=True)
+        id = hashlib.sha256(s.encode('utf-8')).hexdigest()
+        return id
     
     def get(self, hash_id: str = None) -> list | dict | str | int | bool:
         '''获取指定配置'''
@@ -336,17 +349,25 @@ class Strategy:
             return self.json_data[hash_id]
         else:
             return self.json_data
-        
-    def update(self, prev_data: dict, new_data: dict) -> None:
+    
+    def update(self, new_data: dict) -> None:
         '''用dict更新配置文件'''
-        self.json_data.pop(hash(prev_data))
-        self.json_data[hash(new_data)] = new_data
+        self.json_data[self.hash256(new_data)] = new_data
 
-    def save(self) -> None:
+    def delete(self, hash_id: str) -> None:
+        '''删除指定配置'''
+        if hash_id in self.json_data:
+            del self.json_data[hash_id]
+
+    def save(self, json_data: dict = None) -> None:
         '''写入配置文件'''
+        if json_data is not None:
+            self.json_data = json_data
         try:
             json.dump(self.json_data, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
         except Exception as e:
             logger.error(f'保存配置文件发生错误\n {e}')
+
+    
 
     

@@ -52,10 +52,11 @@
           <a id="group_button" onclick="groupPage()">小班列表</a>
           <a id="data_button" onclick="dataPage()">数据查询</a>
           <a id="setting_button" onclick="settingPage()">系统设置</a>
+          <a id="strategy_button" onclick="strategyPage()">编辑策略</a>
         </div>
       </div>
       <div class="wall-container group-page hide" id="group-page">
-        <div class="back-button" on-click="SwitchPop()">◁　</div>
+        
         <span class="loading-text hide">
           <div class="loader">
             <span></span>
@@ -72,7 +73,7 @@
         </div>
       </div>
       <div class="wall-container data-page hide" id="data-page">
-        <div class="back-button" on-click="SwitchPop()">◁　</div>
+        
         <span class="loading-text">
           <div class="loader">
             <span></span>
@@ -159,7 +160,7 @@
         </div>
       </div>
       <div class="wall-container setting-page hide" id="setting-page">
-        <div class="back-button" on-click="SwitchPop()">◁　</div>
+        
         <span class="loading-text">
           <div class="loader">
             <span></span>
@@ -355,6 +356,17 @@
           </div>
         </div>
       </div>
+      <div class="wall-container strategy-page hide" id="strategy-page" style="background: transparent; border: none;">
+        <div class="blackboard" style="flex-direction: row;
+          display: flex;">
+          <span class="gloss"></span>
+          <span class="eraser" onclick="slideLeft(event)"></span>
+          <div class="strategy-list" style="width:20%;"></div>
+          <div class="strategy-info" style="width:80%;"></div>
+        </div>
+        <div class="strategy-detail"></div>
+        
+      </div>
     </div>
     </div>
   </main>
@@ -407,10 +419,13 @@
   <script src="lib/switch_box.js"></script>
   <script src="lib/jquery-3.5.1.min.js"></script>
   <script src="lib/notice_card.js"></script>
+  <!-- <script src="lib/notice_card_without_jquery.js"></script> -->
+  <script src="lib/strategy.js"></script>
   <script>
     var group_loaded = false;
     var data_loaded = false;
     var setting_loaded = false;
+    var strategy_loaded = false;
     //DOM加载完成后执行groupPage()函数
     window.onload = function () {
       initCloud(30);
@@ -437,6 +452,7 @@
       document.getElementById("group_button").classList.add("active");
       document.getElementById("data_button").classList.remove("active");
       document.getElementById("setting_button").classList.remove("active");
+      document.getElementById("strategy_button").classList.remove("active");
       SwitchRight('group-page')
       if (!group_loaded) {
         group_loaded = true;
@@ -448,6 +464,7 @@
       document.getElementById("group_button").classList.remove("active");
       document.getElementById("data_button").classList.add("active");
       document.getElementById("setting_button").classList.remove("active");
+      document.getElementById("strategy_button").classList.remove("active");
       SwitchRight('data-page')
       if (!data_loaded) {
         data_loaded = true;
@@ -455,14 +472,25 @@
       }
     }
     function settingPage() {
-      // document.getElementsByClassName("setting-page")[0].style.display = "block";
       document.getElementById("group_button").classList.remove("active");
       document.getElementById("data_button").classList.remove("active");
       document.getElementById("setting_button").classList.add("active");
+      document.getElementById("strategy_button").classList.remove("active");
       SwitchRight('setting-page')
       if (!setting_loaded) {
         setting_loaded = true;
         initSettingPage();
+      }
+    }
+    function strategyPage(){
+      document.getElementById("group_button").classList.remove("active");
+      document.getElementById("data_button").classList.remove("active");
+      document.getElementById("setting_button").classList.remove("active");
+      document.getElementById("strategy_button").classList.add("active");
+      SwitchRight('strategy-page')
+      if (!strategy_loaded) {
+        strategy_loaded = true;
+        initStrategyPage();
       }
     }
 

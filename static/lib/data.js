@@ -3,6 +3,7 @@ let page_num = 0
     let observe_groups = [];
 
     function initDataPage(){
+      showModal('正在加载数据...','');
       getInfo_2()
       .then((result)=>{
         if (!result) return;
@@ -24,6 +25,7 @@ let page_num = 0
         document.querySelectorAll('.data-container').forEach((e)=>{
           e.classList.remove('hide');
         });
+        hideAllModals();
       });
       bindScrollToTopBtn(document.querySelector('.data-page'));
     }

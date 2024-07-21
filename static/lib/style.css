@@ -234,6 +234,87 @@ img[src=""] {
   outline: none;
   border: none;
 }
+/*from filter_test.html*/
+.card {
+  align-self: start;
+  background-color: rgba(255, 255, 255, 0.5);
+  margin: 1rem;
+  padding: 0.5rem;
+  border-radius: 0.5rem;
+}
+
+.frame {
+  display: inline-flex;
+  flex-direction: column;
+  flex-grow: 1;
+}
+
+.center-frame {
+  display: inline-flex;
+  flex-direction: column;
+  flex-grow: 1;
+  justify-content: center;
+  align-items: center;
+}
+
+
+.tag {
+  display: flex;
+  width: calc(100% - 1rem);
+  margin: 0.5rem;
+  flex-grow: 1;
+  flex-direction: row;
+}
+
+.center-tag {
+  display: flex;
+  flex-direction: row;
+  flex-grow: 1;
+  justify-content: center;
+  align-items: center;
+  margin: 0.3rem;
+}
+.strategy-name {
+  font-weight: bold;
+  font-size: larger;
+  background: transparent;
+  width: 100%;
+  text-align: center;
+}
+.subItem-name{
+  font-weight: bold;
+  font-size: larger;
+  background: transparent;
+  width: 100%;
+  text-align: center;
+}
+.subItem-detail{
+  display: flex;
+  flex-direction: row;
+}
+.minPeople{
+  background: transparent;
+  width: 2rem;
+  text-align: center;
+}
+.operation,.logCondition{
+  background: transparent;
+  width: 5rem;
+  text-align: center;
+}
+.condition{
+  background: rgba(255, 255, 255, 0.5);
+  border-radius: 0.5rem;
+  height: 3rem;
+}
+.conditionValue{
+  width: 100%;
+  min-width: 2rem;
+}
+.actions{
+  flex-wrap: wrap;
+}
+/*end*/
 .btn-group {
   flex-basis: 100%;
   display: flex;
@@ -923,11 +1004,11 @@ table.simple-table td {
   align-items: flex-start;
   align-content: flex-start;
   justify-content: space-evenly;
-  width: 100%;
+  width: calc(100% - 2rem);
   height: fit-content;
   background: rgb(255, 250, 235, 0.85);
   border: solid 0.1rem var(--black);
-  padding: 1rem 0;
+  padding: 1rem;
   overflow: auto;
 }
 .wall-container::-webkit-scrollbar {

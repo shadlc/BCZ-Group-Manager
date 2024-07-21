@@ -180,15 +180,17 @@ class Filter:
             self.log(f'CONDITION: {name} not found', group_name)
             # 由于判断故障可能导致错误踢人，所以不返回False，而是抛出异常停止筛选
             raise NameError(f'CONDITION: {name} not found')
-        value = condition['value']
+        # 已知value一定是字符串，且是数字
+        try:
+            value = int(condition['value'])
+        except:
+            value = float(condition['value'])
         operator = condition['operator']
         # 如果value和member_value类型不同
         if type(value)!= type(member_value):
             
             try:
-                if type(value) == str:
-                    member_value = str(member_value)
-                elif type(value) == int:
+                if type(value) == int:
                     member_value = int(member_value)
                 elif type(value) == float:
                     member_value = float(member_value)
@@ -199,50 +201,50 @@ class Filter:
         
         if operator == "==":
             if member_value != value:
-                if log_condition == 2:
+                if log_condition == 2 or log_condition == 0:
                     refer_dict[name] = f"✗ {member_value} != {value}; "
                 return False
-            if log_condition == 1:
+            if log_condition == 1 or log_condition == 0:
                 refer_dict[name] = f"✓ {member_value} == {value}; "
             return True
         elif operator == "!=":
             if member_value == value:
-                if log_condition == 2:
+                if log_condition == 2 or log_condition == 0:
                     refer_dict[name] = f"✗ {member_value}  == {value}; "
                 return False
-            if log_condition == 1:
+            if log_condition == 1 or log_condition == 0:
                 refer_dict[name] = f"✓ {member_value} != {value}; "
             return True
         elif operator == ">":
             if member_value <= value:
-                if log_condition == 2:
+                if log_condition == 2 or log_condition == 0:
                     refer_dict[name] = f"✗ {member_value} <= {value}; "
                 return False
-            if log_condition == 1:
+            if log_condition == 1 or log_condition == 0:
                 refer_dict[name] = f"✓ {member_value} > {value}; "
             return True
         elif operator == "<":
             if member_value >= value:
-                if log_condition == 2:
+                if log_condition == 2 or log_condition == 0:
                     refer_dict[name] = f"✗ {member_value} >= {value}; "
                 return False
-            if log_condition == 1:
+            if log_condition == 1 or log_condition == 0:
                 refer_dict[name] = f"✓ {member_value} < {value}; "
             return True
         elif operator == ">=":
             if member_value < value:
-                if log_condition == 2:
+                if log_condition == 2 or log_condition == 0:
                     refer_dict[name] = f"✗ {member_value} < {value}; "
                 return False
-            if log_condition == 1:
+            if log_condition == 1 or log_condition == 0:
                 refer_dict[name] = f"✓ {member_value} >= {value}; "
             return True
         elif operator == "<=":
             if member_value > value:
-                if log_condition == 2:
+                if log_condition == 2 or log_condition == 0:
                     refer_dict[name] = f"✗ {member_value} > {value}; "
                 return False
-            if log_condition == 1:                
+            if log_condition == 1 or log_condition == 0:                
                 refer_dict[name] = f"✓ {member_value} <= {value}; "
             return True
         
@@ -259,7 +261,7 @@ class Filter:
         conditions = substrategy_dict['conditions'].copy()
         condition_name = []
         refer_dict = {}
-        log_condition = substrategy_dict['logCondition']
+        log_condition = int(substrategy_dict['logCondition'])
 
         for condition in substrategy_dict['conditions']:
             condition_name.append(condition['name'])
@@ -698,8 +700,9 @@ class Filter:
             has = 0
             for index, this_verdict_dict in enumerate(kick_list):
                 sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
-                minPeople_min = min(minPeople_min, sub_strat_dict["minPeople"]) # 取最小的minPeople
-                if sub_strat_dict["minPeople"] < remain_people_cnt:
+                minPeople_min = min(minPeople_min, int(sub_strat_dict["minPeople"])) # 取最小的minPeople
+                if int(sub_strat_dict["minPeople"]) < remain_people_cnt:
+                    self.log(f'minpeople:{int(sub_strat_dict["minPeople"])}')
                     remain_people_cnt -= 1
                     memberId = this_verdict_dict['memberId']
                     uniqueId = this_verdict_dict['uniqueId']
@@ -722,7 +725,8 @@ class Filter:
 
             # 踢人
             if remove_list:
-                if self.bcz.removeMembers(remove_list, share_key, authorized_token):
+                # if self.bcz.removeMembers(remove_list, share_key, authorized_token):
+                if True:
                     self.log(f"踢出成功", group_name)
                 else:
                     self.log(f"踢出失败", group_name)

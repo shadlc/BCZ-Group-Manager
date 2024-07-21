@@ -465,7 +465,7 @@ class BCZ:
         last_week_data = last_week_response.json().get('data')
         daka_dict = {}
         last_week_daka_dict = {}
-        # print(week_data)
+        
         for member in week_data.get('list', []):
             id = member['uniqueId']
             daka_dict[id] = member['weekDakaDates']

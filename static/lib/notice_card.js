@@ -10,12 +10,12 @@ function $newCard(msg) {
             }
             
 
-            // 创建新的card notice类的框  
+            // 创建新的notice类的框  
             const newCard = document.createElement('div');
             newCard.innerHTML = /*最外层的div并不是真正的card，转换jquery对象时还有一层*/`
                 <div>
                     <div class="notice-line" style="width: 100%; height: 3px; background: black; position: relative; top: 0; left: 0;"></div>
-                    <div class="card notice" style="height: ${height}px; position: relative; touch-action: none; background-color: #aaaaaa33; cursor:pointer; ">
+                    <div class="notice" style="height: ${height}px; position: relative; touch-action: none; background-color: #aaaaaa33; cursor:pointer; ">
                         ${msg}
                     </div>
                 </div>
@@ -155,50 +155,29 @@ function $newCard(msg) {
             }
             $newCard.css('opacity', '0');
             $newCard.animate({
-
                 marginLeft: 10,
                 marginRight: -10,
                 opacity: 0.5,
-
             }, 200, function () {
-
                 $newCard.animate({
-
                     marginLeft: 0,
                     marginRight: 0,
                     opacity: 1,
-
                 }, 200, function () {
-
                     // 线的宽度逐渐减少到0%  
-
                     $newCard.find('.notice-line').animate({
-
                         width: '0%'
-
                     }, delay, function () {
-
                         // 淡出通知框  
-
                         setTimeout(function () {
-
                             $newCard.animate({
-
                                 opacity: 0
-
                             }, 500, function () {
-
                                 // 删除通知框  
-
                                 $newCard.remove();
-
                             });
-
                         });
-
                     });
-
                 });
-
             });
         }
