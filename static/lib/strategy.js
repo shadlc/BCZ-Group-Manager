@@ -303,7 +303,6 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                     <div class="tag">
                         <select id="conditionName">
                             <option value="deskmate_days">同桌天数</option>
-                            <option value="total_days">总榜天数</option>
                             <option value="completed_time_stamp">今日已打卡0/1</option>
                             <option value="today_study_cheat">今日作弊0/1</option>
                             <option value="max_combo_expectancy">期望连卡天数</option>
@@ -439,7 +438,6 @@ function addCondition(subItemName) {
             <div class="tag">
                 <select id="conditionName">
                     <option value="deskmate_days">同桌天数</option>
-                    <option value="total_days">总榜天数</option>
                     <option value="completed_time_stamp">今日已打卡0/1</option>
                     <option value="today_study_cheat">今日作弊0/1</option>
                     <option value="max_combo_expectancy">期望连卡天数</option>

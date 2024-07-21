@@ -630,8 +630,8 @@ class Filter:
 
             # 踢人
             if remove_list:
-                # if self.bcz.removeMembers(remove_list, share_key, authorized_token):
-                if True:
+                if self.bcz.removeMembers(remove_list, share_key, authorized_token):
+                # if True:
                     self.log(f"踢出成功", group_name)
                 else:
                     self.log(f"踢出失败", group_name)

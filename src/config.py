@@ -158,162 +158,210 @@ class Config:
 class Strategy:
     # Strategy类更新较少，且是整体更新，故也是用json，创建新的类
     default_dict = {
-  "2824592116057406893":{
+  "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef": {
     "name": "示例策略",
-    "timeStart": "09:00",
-    "timeEnd": "10:00",
-    "comment": "时间标记暂未启用",
     "subItems": [
       {
         "name": "子条目1",
-        "operation": "accept",
-        "logCondition": 2,
-        "comment": "子条目按顺序判断，符合即不再继续",
+        "minPeople": "199",
+        "operation": "reject",
+        "logCondition": "2",
         "conditions": [
-          
           {
             "name": "completed_time_stamp",
-            "comment": "今日打卡时间,0表示未打卡",
-            "value": 0,
-            "operator": ">"
+            "operator": ">",
+            "value": "0"
           },
           {
             "name": "today_study_cheat",
-            "value": "否",
-            "operator": "=="
+            "operator": "==",
+            "value": "否"
           },
           {
             "name": "duration_days",
-            "value": 1,
-            "operator": ">="
+            "operator": ">=",
+            "value": "1"
           },
           {
             "name": "completed_times",
-            "value": 1,
-            "operator": ">="
+            "operator": ">=",
+            "value": "1"
           },
           {
             "name": "finishing_rate",
-            "value": 0.85,
-            "operator": ">"
+            "operator": ">",
+            "value": "0.85"
           },
           {
             "name": "drop_this_week",
-            "comment": "本周漏卡次数",
-            "value": 1,
-            "operator": "<"
+            "operator": "<",
+            "value": "1"
           },
           {
             "name": "drop_last_week",
-            "value": 1,
-            "operator": "<"
+            "operator": "<",
+            "value": "1"
           },
           {
             "name": "blacklisted",
-            "value": 0,
-            "operator": "=="
+            "operator": "==",
+            "value": "0"
           },
           {
             "name": "deskmate_days",
-            "value": 170,
-            "operator": ">="
+            "operator": ">=",
+            "value": "170"
           },
           {
             "name": "dependable_frame",
-            "comment": "4未加入，0不靠谱，1萌新，3靠谱",
-            "value": 3,
-            "operator": ">="
+            "operator": ">=",
+            "value": "3"
           },
           {
             "name": "modified_nickname",
-            "comment": "班内昵称已修改为1，但可能对方来不及改",
-            "value": 1,
-            "operator": "<="
+            "operator": "<=",
+            "value": "1"
           },
           {
             "name": "max_combo_expectancy",
-            "comment": "校牌小班+数据库预测最大连卡期望",
-            "value": 10,
-            "operator": ">"
+            "operator": ">",
+            "value": "10"
           }
         ]
       },
       {
         "name": "兜底",
+        "minPeople": "1",
         "operation": "reject",
-        "minPeople": 1,
-        "logCondition": -1,
-        "comment":"只要不符合以上任意且人数>195就踢",
-        "conditions": [
-        ] 
+        "logCondition": "-1",
+        "conditions": []
       }
     ]
   },
-  "3404039418897180481":{
-    "name": "2048",
+  "60a26b165db5b370ce9e9c2daf9779be2907f33eec598a2022766509828c630e": {
+    "name": "2048麦花喵.铂金",
     "subItems": [
       {
         "name": "老成员",
+        "minPeople": "1",
         "operation": "accept",
-        "minPeople": 1,
-        "logCondition": 0,
-        "comment": "-1不记录，0仅记录标题，1标题和满足的条件，2标题和不满足的条件",
-        "conditions":[
+        "logCondition": "0",
+        "conditions": [
           {
-            "name": "duration_days",
-            "value": 2,
-            "operator": ">"
+            "name": "completed_times",
+            "operator": ">=",
+            "value": "2"
           }
         ]
-
       },
       {
-        "name":"不打卡kick",
+        "name": "不打卡kick",
+        "minPeople": "148",
         "operation": "reject",
-        "minPeople": 1,
-        "logCondition": 0,
-        "conditions":[
+        "logCondition": "0",
+        "conditions": [
           {
-            "name": "duration_days",
-            "value": 1,
-            "operator": "=="
-          },
-          {
-            "name": "completed_time_stamp",
-            "value": 0,
-            "operator": "=="
+            "name": "completed_times",
+            "operator": "==",
+            "value": "0"
           }
         ]
       },
       {
         "name": "新成员kick",
+        "minPeople": "148",
         "operation": "reject",
-        "minPeople": 148,
-        "logCondition": 2,
-        "conditions":[
+        "logCondition": "0",
+        "conditions": [
           {
             "name": "completed_times",
-            "value": 1,
-            "operator": "=="
+            "operator": "==",
+            "value": "1"
           },
           {
             "name": "deskmate_days",
-            "value": 15,
-            "operator": "<"
+            "operator": "<",
+            "value": "60"
           },
           {
-            "name":"max_combo_expectancy",
-            "value": 15,
-            "operator": "<"
+            "name": "max_combo_expectancy",
+            "operator": "<",
+            "value": "45"
           }
         ]
       },
       {
-        "name": "兜底通过",
+        "name": "通过",
+        "minPeople": "1",
         "operation": "accept",
-        "minPeople": 1,
-        "logCondition": -1,
-        "conditions":[]
+        "logCondition": "-1",
+        "conditions": []
+      }
+    ]
+  },
+  "25325b285c37f3a4449174290a14a8f45955657d4c65124fe53edb776350e333": {
+    "name": "神探联盟.王者",
+    "subItems": [
+      {
+        "name": "老成员",
+        "minPeople": "1",
+        "operation": "accept",
+        "logCondition": "-1",
+        "conditions": [
+          {
+            "name": "completed_times",
+            "operator": ">=",
+            "value": "2"
+          }
+        ]
+      },
+      {
+        "name": "不打卡kick",
+        "minPeople": "197",
+        "operation": "reject",
+        "logCondition": "0",
+        "conditions": [
+          {
+            "name": "duration_days",
+            "operator": "==",
+            "value": "1"
+          },
+          {
+            "name": "completed_time_stamp",
+            "operator": "==",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "校牌不达标kick",
+        "minPeople": "197",
+        "operation": "reject",
+        "logCondition": "0",
+        "conditions": [
+          {
+            "name": "completed_times",
+            "operator": "<=",
+            "value": "1"
+          },
+          {
+            "name": "deskmate_days",
+            "operator": "<",
+            "value": "200"
+          },
+          {
+            "name": "max_combo_expectancy",
+            "operator": "<",
+            "value": "70"
+          }
+        ]
+      },
+      {
+        "name": "通过",
+        "minPeople": "1",
+        "operation": "accept",
+        "logCondition": "-1",
+        "conditions": []
       }
     ]
   }
