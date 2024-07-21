@@ -30,7 +30,6 @@ class SQLite:
                 FINISHING_RATE REAL,                -- 打卡率
                 CREATED_TIME TEXT,                  -- 建立时间
                 RANK INTEGER,                       -- 段位
-                RANKING INTEGER,                    -- 段位 排名(区分，暂时不用)
                 GROUP_TYPE INTEGER,                 -- 小班类型
                 AVATAR TEXT,                        -- 小班头像
                 AVATAR_FRAME TEXT,                  -- 小班像框
