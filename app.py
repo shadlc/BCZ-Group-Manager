@@ -465,7 +465,20 @@ def configure():
         except Exception as e:
             return restful(400, f'修改配置时发生错误(X_X): {e}')
         return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
-
+@app.route('/stop_all', methods=['GET'])
+def stop_all():
+    '''紧急停止'''
+    filter.stop()
+    return restful(200, '所有筛选已停止!')
+@app.route('/combo', methods=['GET'])
+def combo():
+    days = request.args.get('days', None)
+    if not days: 
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    days = days.split('/')
+    join_days = days[1]
+    completed_times = days[0]
+    return restful(200, '',  sqlite.ComboExpectancy(completed_times / join_days, join_days))
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     '''以RESTful的方式进行返回响应'''

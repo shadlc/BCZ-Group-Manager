@@ -153,6 +153,11 @@ function $newCard(msg) {
                     delay = msg.length * 60;
                 }
             }
+            if (delay == 99999000) {
+                // 错误代码
+                showModal('错误', '出现了错误，请检查');
+                showModal('错误发生时间', new Date().toLocaleString());
+            }
             $newCard.css('opacity', '0');
             $newCard.animate({
                 marginLeft: 10,

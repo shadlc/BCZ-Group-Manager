@@ -373,6 +373,10 @@ function showStrategyInfo(strategyHashId, no_save = false) {
 function copySubItem(subItemName) {
 // 复制子条目
     copied_name = `复制的${subItemName}`
+    const subItem = {
+        name: copied_name,
+        minPeople: 199
+    }
 
     // 复制子条目卡片  
 

@@ -20,6 +20,7 @@ class BCZ:
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
         self.group_detail_url = 'https://group.baicizhan.com/group/information'
         self.user_deskmate_url = 'https://social.baicizhan.com/api/deskmate/social/get_user_deskmate_info'
+        self.user_card_info = 'https://social.baicizhan.com/api/deskmate/personal_details'
         self.user_team_url = 'https://activity.baicizhan.com/api/activity/team-up-recite/person_home' # 注意参数字段名bcz_id
         self.get_week_rank_url = 'https://group.baicizhan.com/group/get_week_rank'
         self.remove_members_url = 'https://group.baicizhan.com/group/remove_members'
@@ -118,7 +119,7 @@ class BCZ:
         headers["Origin"] = "https://activity.baicizhan.com"
         headers["Referer"] = "https://activity.baicizhan.com"
         
-        response = requests.options(url, headers = headers, timeout = 5)# 先发一个OPTIONS测跨域POST
+        response = requests.options(url, headers = headers, timeout=10)# 先发一个OPTIONS测跨域POST
         json =  {
             "memberIds": user_id,
             "shareKey": share_key,
@@ -128,7 +129,7 @@ class BCZ:
         headers["Content-Type"] = "application/json"
         headers["Origin"] = "https://activity.baicizhan.com"
         headers["Referer"] = "https://activity.baicizhan.com"
-        response = requests.post(url, headers = headers, json = json, timeout = 5)
+        response = requests.post(url, headers = headers, json = json, timeout=10)
         if response.json().get("code",0) != 1:
             if response.json().get("code",0) == 999:
                 logger.info(f"删除的人已经不在小班中")
@@ -159,7 +160,7 @@ class BCZ:
             'name': None,
         }
         headers = self.getHeaders(token)
-        response = requests.get(self.own_info_url, headers=headers, timeout=5)
+        response = requests.get(self.own_info_url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'使用token获取用户信息失败!\n{response.text}')
         user_info = response.json().get('data')
@@ -174,7 +175,7 @@ class BCZ:
             return
         url = f'{self.user_deskmate_url}?uniqueId={user_id}'
         headers = self.getHeaders()
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取同桌失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
@@ -183,9 +184,11 @@ class BCZ:
         user_info['unique_id'] = user_id
         user_info['name'] = response.json()['data']['userInfo']['name']
         user_info['deskmate_days'] = response.json()['data']['deskmateDays']
+        response = requests.get(f'{self.user_card_info}?uniqueId={user_id}', headers=headers, timeout=10)
+        user_info['max_daka_days'] = response.json()['data']['dakaDays']
         # 获取小队信息
         url = f'{self.user_team_url}?bcz_id={user_id}'
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'获取小队信息失败!\n{response.text}')
         team_info = response.json().get('data').get('members')
@@ -207,7 +210,7 @@ class BCZ:
             return {}
         url = f'{self.group_list_url}?uniqueId={user_id}'
         headers = self.getHeaders()
-        response = requests.get(url, headers=headers, timeout=5)
+        response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
@@ -245,7 +248,7 @@ class BCZ:
             })
         return groups
 
-    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 5) -> dict:
+    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 3) -> dict:
         '''获取【班内主页】信息group/information'''
         buffer_data = self.buffered_groups.get(share_key)
         buffer_time = buffer_data.get('data_time') if buffer_data else None
@@ -258,7 +261,7 @@ class BCZ:
         
         url = f'{self.group_detail_url}?shareKey={share_key}'
         headers = self.getHeaders()
-        main_response = requests.get(url, headers=headers, timeout=5)
+        main_response = requests.get(url, headers=headers, timeout=10)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
             logger.warning(f'{msg}\n{main_response.text}')
@@ -271,7 +274,7 @@ class BCZ:
         auth_data = {}
         if auth_token:
             headers = self.getHeaders(auth_token)
-            auth_response = requests.get(url, headers=headers, timeout=5)
+            auth_response = requests.get(url, headers=headers, timeout=10)
             if auth_response.status_code != 200 or main_response.json().get('code') != 1:
                 msg = f'使用内部授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或内部授权令牌无效'
                 logger.warning(f'{msg}\n{main_response.text}')
@@ -440,7 +443,7 @@ class BCZ:
         self.buffered_groups[group_info['shareKey']] = group
         return self.buffered_groups.get(group_info['shareKey'])
 
-    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 5) -> dict:
+    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 3) -> dict:
         '''获取小班成员历史打卡信息'''
         if parsed:
             # 暂定只有分离的记录模式
@@ -455,12 +458,12 @@ class BCZ:
 
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
         headers = self.getHeaders()
-        week_response = requests.get(f'{url}&week=1', headers=headers, timeout=5)
+        week_response = requests.get(f'{url}&week=1', headers=headers, timeout=10)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班成员历史打卡信息失败! 小班不存在或主授权令牌无效'
             logger.warning(f'{msg}\n{week_response.text}')
             return {}
-        last_week_response = requests.get(f'{url}&week=2', headers=headers, timeout=5)
+        last_week_response = requests.get(f'{url}&week=2', headers=headers, timeout=10)
         week_data = week_response.json().get('data')
         last_week_data = last_week_response.json().get('data')
         daka_dict = {}
