@@ -496,13 +496,14 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
     if start_of_week <= date.today() <= end_of_week:
         is_this_week = True
     for group in groups:
-        if not group.get('members'):
-            continue
-
         group['week'] = week_date
         group['total_times'] = 0
         group['late_count'] = 0
         group['absence_count'] = 0
+
+        if not group.get('members'):
+            continue
+
         week_data = sqlite.queryMemberTable(
             {
                 'group_id': group['id'],

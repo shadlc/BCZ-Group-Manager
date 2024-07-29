@@ -1232,8 +1232,10 @@ table.simple-table td {
   align-content: stretch;
   justify-content: center;
   align-items: center;
+  width: 100%;
   min-height: 7rem;
   overflow: auto;
+  line-break: anywhere;
 }
 #group_result>span {
   font-weight: bold;
@@ -1526,7 +1528,7 @@ table.simple-table td {
   width: 2rem;
   height: 2rem;
   background: var(--white);
-  border: solid 0.2rem black;
+  border: solid 0.15rem black;
   border-radius: 100%;
   cursor: pointer;
   user-select: none;
