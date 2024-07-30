@@ -10,7 +10,6 @@ let group_id = '';
 
       showModal('正在加载数据，请稍候...', '加载中');
       queryFilterState();
-      bindScrollToTopBtn(document.querySelector('.member-info-container'));
 
       
       getGroupDetailsOption()

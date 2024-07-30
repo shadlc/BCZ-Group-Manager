@@ -244,11 +244,11 @@
                 <label for="display_left">展示已离开成员</label>
                 <div id="display_left" class="btn-group">
                   <div class="checkbox">
-                    <input type="radio" id="display_left_true" name="display_left" value="true" checked />
+                    <input type="radio" id="display_left_true" name="display_left" value="true"/>
                     <label for="display_left_true">是</label>
                   </div>
                   <div class="checkbox">
-                    <input type="radio" id="display_left_false" name="display_left" value="false" />
+                    <input type="radio" id="display_left_false" name="display_left" value="false" checked />
                     <label for="display_left_false">否</label>
                   </div>
                 </div>
@@ -381,7 +381,7 @@
         <span></span>
         <div>
           <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made
-            By Shadlc</span>
+            By Shadlc&Cerenilla</span>
         </div>
       </div>
     </footer>
@@ -446,6 +446,7 @@
         const card_message = messageObject['name'] + messageObject['message'];
         $newCard(card_message)
       };
+      bindScrollToTopBtn(document.querySelector("main"));
     }
     function groupPage() {
       // document.getElementsByClassName("group-page")[0].style.display = "block";
@@ -496,7 +497,6 @@
 
   </script>
 
-  <div id="scroll_top_btn" title="回到顶部">▲</div>
 </body>
 
 </html>

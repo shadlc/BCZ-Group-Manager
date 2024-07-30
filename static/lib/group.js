@@ -4,7 +4,6 @@
     .then((info)=>{
       if (!info) return;
       getGroupList();
-      bindScrollToTopBtn(document.querySelector('.group-page'));
     });
   }
   // 获取配置信息

@@ -1,6 +1,7 @@
 import sys
 import time
 import logging
+import datetime
 
 from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request, stream_with_context
 from werkzeug.serving import WSGIRequestHandler, _log
@@ -465,11 +466,14 @@ def configure():
         except Exception as e:
             return restful(400, f'修改配置时发生错误(X_X): {e}')
         return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
+
+# 以下几个是手动接口    
 @app.route('/stop_all', methods=['GET'])
 def stop_all():
     '''紧急停止'''
     filter.stop()
     return restful(200, '所有筛选已停止!')
+
 @app.route('/combo', methods=['GET'])
 def combo():
     days = request.args.get('days', None)
@@ -479,6 +483,17 @@ def combo():
     join_days = days[1]
     completed_times = days[0]
     return restful(200, '',  sqlite.ComboExpectancy(completed_times / join_days, join_days))
+
+@app.route('/slice_log', methods=['GET'])
+def slice_log():    
+    '''去掉7天前的STRATEGY_VERDICT记录'''
+    conn = sqlite.connect()
+    cursor = conn.cursor()
+    seven_days_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y-%m-%d')
+    cursor.execute('DELETE FROM STRATEGY_VERDICT WHERE DATE < ?', (seven_days_ago,))
+    conn.commit()
+    conn.close()
+    return restful(200, '7天前的日志记录已清理!')
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     '''以RESTful的方式进行返回响应'''

@@ -27,7 +27,6 @@ let page_num = 0
         });
         hideAllModals();
       });
-      bindScrollToTopBtn(document.querySelector('.data-page'));
     }
 
     // 获取数据查询信息
