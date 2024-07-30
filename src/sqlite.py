@@ -691,7 +691,7 @@ class SQLite:
         if count%count_limit != 0:
             result['page_max'] += 1
         result['page_num'] = count_start//count_limit + 1
-        logger.info(f'queryFilterLog result: {result}')
+        # logger.info(f'queryFilterLog result: {result}')
         return result
 
             
@@ -703,7 +703,7 @@ class SQLite:
             (strategy_id, unique_id, datetime.now().strftime('%Y-%m-%d'))
         )
         result = cursor.fetchone()
-        logger.info(f'queryStrategyVerdict result: {result}')
+        # logger.info(f'queryStrategyVerdict result: {result}')
         if result:
             return result[0]
         else:
@@ -741,7 +741,7 @@ class SQLite:
             [unique_id]
         )
         result = cursor.fetchall()
-        logger.info(f'queryBlacklist result: {result}')
+        # logger.info(f'queryBlacklist result: {result}')
         if result:
             return result
         else:
@@ -839,7 +839,7 @@ class SQLite:
             f'SELECT DATETIME, DEPENDABLE_FRAME FROM PERSONAL_INFO WHERE UNIQUE_ID = ? ORDER BY DATETIME DESC LIMIT 1',
             [unique_id]
         ).fetchone()
-        logger.debug(f'getPersonalInfo result: {result}')
+        # logger.debug(f'getPersonalInfo result: {result}')
         if result is None or result[0] is None or result[0] != datetime.now().strftime('%Y-%m-%d'):
             # 如果没有今日数据，则要求调用者提供
             if user_info is None or group_info is None:

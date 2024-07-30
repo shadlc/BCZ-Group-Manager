@@ -301,7 +301,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
             ConditionTag.innerHTML = `
                 <div class="tag condition">
                     <div class="tag">
-                        <select id="conditionName">
+                        <select class="conditionName">
                             <option value="deskmate_days">同桌天数</option>
                             <option value="completed_time_stamp">今日已打卡0/1</option>
                             <option value="today_study_cheat">今日作弊0/1</option>
@@ -310,7 +310,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                             <option value="dependable_frame">小队头像框</option>
                             <!-- (3靠谱4未知1萌新0不靠谱) -->
                             <option value="blacklisted">在王者黑名单</option>
-                            <option value="modified_nickname">班内已改昵称</option>
+                            <option value="group_nickname_contain">班内昵称包含</option>
                             <option value="drop_last_week">上周漏卡天数</option>
                             <option value="drop_this_week">本周漏卡天数</option>
                             <option value="duration_days">加入天数</option>
@@ -340,7 +340,20 @@ function showStrategyInfo(strategyHashId, no_save = false) {
             // 将tag添加到subItem
             subItemCard.appendChild(ConditionTag);
             // 设置名称默认值
-            ConditionTag.querySelector('#conditionName').value = Condition.name;
+            ConditionTag.querySelector('.conditionName').value = Condition.name;
+            // 添加onchange
+            ConditionTag.querySelector('.conditionName').onchange = function () {
+                if (this.value == 'group_nickname_contain'){
+                    // 将输入框改成文本框
+                    ConditionTag.querySelector('#conditionValue').type = 'text'
+                    // 隐藏符号
+                    ConditionTag.querySelector('#operator').style.display = 'none'
+                }
+                else{
+                    ConditionTag.querySelector('#conditionValue').type = 'number'
+                    ConditionTag.querySelector('#operator').style = ''
+                }
+            }
             
             // 设置操作符默认值
             ConditionTag.querySelector('#operator').value = Condition.operator;
@@ -440,7 +453,7 @@ function addCondition(subItemName) {
     ConditionTag.innerHTML = `
         <div class="tag condition">
             <div class="tag">
-                <select id="conditionName">
+                <select class="conditionName">
                     <option value="deskmate_days">同桌天数</option>
                     <option value="completed_time_stamp">今日已打卡0/1</option>
                     <option value="today_study_cheat">今日作弊0/1</option>
@@ -449,7 +462,7 @@ function addCondition(subItemName) {
                     <option value="dependable_frame">小队头像框</option>
                     <!-- (3靠谱4未知1萌新0不靠谱) -->
                     <option value="blacklisted">在王者黑名单</option>
-                    <option value="modified_nickname">班内已改昵称</option>
+                    <option value="group_nickname_contain">班内昵称包含</option>
                     <option value="drop_last_week">上周漏卡天数</option>
                     <option value="drop_this_week">本周漏卡天数</option>
                     <option value="duration_days">加入天数</option>
@@ -479,7 +492,20 @@ function addCondition(subItemName) {
     // 将tag添加到subItem
     document.getElementById(subItemName).appendChild(ConditionTag);
     // 设置名称默认值
-    ConditionTag.querySelector('#conditionName').value = 'deskmate_days';
+    ConditionTag.querySelector('.conditionName').value = 'deskmate_days';
+    // 添加onchange
+    ConditionTag.querySelector('.conditionName').onchange = function () {
+        if (this.value == 'group_nickname_contain'){
+            // 将输入框改成文本框
+            ConditionTag.querySelector('#conditionValue').type = 'text'
+            // 隐藏符号
+            ConditionTag.querySelector('#operator').style.display = 'none'
+        }
+        else{
+            ConditionTag.querySelector('#conditionValue').type = 'number'
+            ConditionTag.querySelector('#operator').style = ''
+        }
+    }
     
     // 设置操作符默认值
     ConditionTag.querySelector('#operator').value = '>';
@@ -517,7 +543,7 @@ function saveCurrentStrategy(copy_current_strategy = false) {
         const conditions = subItem.querySelectorAll('.condition');
         conditions.forEach((condition) => {
             let conditionData = {
-                name: condition.querySelector('#conditionName').value,
+                name: condition.querySelector('.conditionName').value,
                 operator: condition.querySelector('#operator').value,
                 value: condition.querySelector('#conditionValue').value
             };

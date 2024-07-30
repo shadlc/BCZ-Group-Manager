@@ -196,9 +196,18 @@ class Filter:
         # 【1】班内主页基础信息
         member_dict['finishing_rate'] = member_dict['completed_times'] / member_dict['duration_days']
         member_dict['modified_nickname'] = 0 if member_dict['nickname'] == member_dict['group_nickname'] else 1
-        for name in ['completed_time_stamp', 'today_study_cheat', 'duration_days', 'completed_times', 'finishing_rate', 'modified_nickname']:
+        for name in ['completed_time_stamp', 'today_study_cheat', 'duration_days', 'completed_times', 'finishing_rate', 'modified_nickname', 'group_nickname_contain']:
             try:
                 pos = condition_name.index(name)
+                if name == 'group_nickname_contain':
+                    if condition['value'] not in member_dict['group_nickname']:
+                        accept = 0
+                        break
+                    refer_dict[name] = f"✓ {member_dict[name]} contains {condition['value']}; "
+                    self.log(f"CONDITION: {name} contains {condition['value']}", group_name)
+                    condition_name.pop(pos)
+                    conditions.pop(pos)
+                    continue
                 if not self.condition(member_dict, refer_dict, conditions[pos], group_name, log_condition):
                     accept = 0
                     break
@@ -375,10 +384,15 @@ class Filter:
 
     def log(self, message: str, group_name: str) -> None:
         '''记录日志，分发到所有连接的消息队列'''
-        if self.logger_message.get(group_name, None) is None:
+        
+        if self.logger_message.get(group_name, None) is None or len(self.logger_message[group_name]) == 0:
             self.logger_message[group_name] = message
         else:
-            self.logger_message[group_name] += '<br>' + message
+            try:
+                self.logger_message[group_name] += '<br>' + message
+            except Exception as e:
+                self.log(f"log error: {e}(99999s)", group_name)
+                self.log_dispatch(group_name)
         
     
     def log_dispatch(self, group_name: str) -> None:
@@ -514,7 +528,7 @@ class Filter:
                     try:
                         memberId = personal_dict_temp['member_id']
                     except:
-                        self.log(personal_dict_temp, group_name)
+                        self.log(json.dumps(personal_dict_temp), group_name)
                         self.log(f"[{uniqueId}]没有member_id(99998s)", group_name)
                         self.log_dispatch(group_name)
                         continue
@@ -543,8 +557,8 @@ class Filter:
                         if verdict is None:
                             verdict = self.verdict_dict.get(uniqueId, None)
                             # 有可能verdict_dict还没保存到数据库
-                        if verdict is None:
-                            
+                        if verdict is None or ("不打卡" in strategy_dict['subItems'][verdict]['name'] and personal_dict_temp['completed_time_stamp'] > 0):
+                            # 如果名称中有“不打卡”字样，则需要重新判断
                             self.log(f"今日首次遇到", group_name)
                             # 先检查是否满足条件，满足则堆入待决策列表
                             reason = {}
@@ -583,7 +597,7 @@ class Filter:
                                         # self.log(f"不符合条件{sub_strat_dict['name']}", group_name)
                             for key, value in reason.items():
                                 self.log(f"{key}:{value}", group_name)
-                            self.log(operation, group_name)
+                            self.log(json.dumps(operation), group_name)
                             if not result_code:
                                 self.log("[error]没有符合的子条目，不操作，请检查策略", group_name)
                                 continue
@@ -592,10 +606,7 @@ class Filter:
                                 accept_list.append(uniqueId)
                         else:
                             # 已判断过，跳过
-                            # 如果名称中有“不打卡”字样，则需要重新判断
-                            if "不打卡" in strategy_dict['subItems'][verdict]['name'] and personal_dict_temp['completed_time_stamp'] > 0:
-                                self.log(f"已判断过，但上一次被判定为不打卡，下次重新判断", group_name)
-                                continue
+                            
                             self.log(f"已判断过，读取结果：{strategy_dict['subItems'][verdict]['name']} → {strategy_dict['subItems'][verdict]['operation']}", group_name)
                             result_code = 1 if strategy_dict['subItems'][verdict]['operation'] == 'accept' else 2
                         # 处理结果
