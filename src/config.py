@@ -374,7 +374,6 @@ class Strategy:
                 os.makedirs(path, exist_ok=True)
             self.json_data = json.load(open(self.file_path, encoding='utf-8'))
         except:
-            raise
             json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
             self.json_data = self.default_dict
             logger.info('初次启动，已在当前执行目录生成strategy.json文件')

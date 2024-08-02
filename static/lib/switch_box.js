@@ -38,9 +38,10 @@ function SwitchPop()
         $newCard('No history to pop...');
         return;
     }
-    // 将history_Right数据用→连接成字符串
-    var historyStr = historyRight.join('→');
-    $newCard(historyStr);
+    // 测试：将history_Right数据用→连接成字符串
+    // var historyStr = historyRight.join('→');
+    // $newCard(historyStr);
+
     // if (historyLeft.length > 1) {
     //     // 反向动画切换
     //     document.getElementById(historyLeft[historyLeft.length - 1]).style.animation = 'FadeRevert 0.8s forwards';

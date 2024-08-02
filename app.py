@@ -52,7 +52,7 @@ if not config.main_token:
 
 @app.route('/')
 def index():
-    return redirect('group')
+    return render_template('index.html')
 
 @app.route('/group', methods=['GET'])
 def group():

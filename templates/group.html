@@ -1,291 +1,42 @@
 <!DOCTYPE html>
-<html dir="ltr" lang="zh-CN">
+<html dir="ltr" lang="zh-CN" >
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="referrer" content="no-referrer" />
+    <title>小班数据管理</title>
+    <link rel="shortcut icon" href="favicon.ico" />
+    <link rel="apple-touch-icon" href="favicon.ico" />
+    <link rel="stylesheet" href="lib/style.css">
+  </head>
 
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="referrer" content="no-referrer">
-  <title>小班数据管理</title>
-  <link rel="shortcut icon" href="favicon.ico">
-  <link rel="apple-touch-icon" href="favicon.ico">
-  <link rel="stylesheet" href="lib/style.css">
-  <style>
-    /* #group-page {
-      z-index: 1;
-    }
-
-    #data-page {
-      z-index: 2;
-    }
-
-    #setting-page {
-      z-index: 3;
-    } */
-  </style>
-</head>
-
-<body class="outside-bg">
-  <div class="bg-items">
-    <span class="high-grass grass-border">
-      <span></span><span></span><span></span><span></span><span></span>
-    </span>
-    <span class="high-grass">
-      <span></span><span></span><span></span><span></span><span></span>
-    </span>
-    <span class="low-grass grass-border">
-      <span></span><span></span><span></span><span></span><span></span>
-    </span>
-    <span class="low-grass">
-      <span></span><span></span><span></span><span></span><span></span>
-    </span>
-    <div id="cloud_container">
+  <body class="outside-bg">
+    <div class="bg-items">
+      <span class="high-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="high-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass grass-border">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <span class="low-grass">
+        <span></span><span></span><span></span><span></span><span></span>
+      </span>
+      <div id="cloud_container"></div>
     </div>
-  </div>
-  <main>
-    <div class="wall notice-wall">
-    </div>
-    <div class="wall" style="width: 75%;">
-      <div class="eaves">
-        <div class="gloss"></div>
-        <div class="eaves-container">
-          <div class="back-button btn" onclick="SwitchPop()">◁　</div>
-          <a id="group_button" onclick="groupPage()">小班列表</a>
-          <a id="data_button" onclick="dataPage()">数据查询</a>
-          <a id="setting_button" onclick="settingPage()">系统设置</a>
-          <a id="strategy_button" onclick="strategyPage()">编辑策略</a>
-        </div>
-      </div>
-      <div class="wall-container group-page hide" id="group-page">
-        
-        <span class="loading-text hide">
-          <div class="loader">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          数据获取中，请稍后...
-        </span>
-        <div id="group_filter" class="search-input">
-          <span>🔍</span>
-          <input type="text" placeholder="筛选小班" onkeyup="groupFilter(event)">
-        </div>
-        <div class="group empty-group" onclick="toggleGroupSearchModal()">
-        </div>
-      </div>
-      <div class="wall-container data-page hide" id="data-page">
-        
-        <span class="loading-text">
-          <div class="loader">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          数据获取中，请稍后...
-        </span>
-        <div class="blackboard hide">
-          <span class="gloss"></span>
-          <span class="eraser" onclick="slideLeft(event)"></span>
-          <span id="status_text">
-          </span>
-        </div>
-        <div class="data-container hide">
-          <div class="input-group">
-            <div class="input">
-              <label for="group_id_select">小班ID</label>
-              <select id="group_id_select" onkeyup="eventSearch(event)">
-                <option value="">任意小班</option>
-              </select>
-            </div>
-            <div class="input">
-              <label for="group_name_input">小班名称</label>
-              <input id="group_name_input" type="text" onkeyup="eventSearch(event)" />
-            </div>
-            <div class="input">
-              <label for="sdate_select">开始日期</label>
-              <input id="sdate_select" type="date" onkeyup="eventSearch(event)" />
-            </div>
-            <div class="input">
-              <label for="edate_select">结束日期</label>
-              <input id="edate_select" type="date" onkeyup="eventSearch(event)" />
-            </div>
-            <div class="input">
-              <label for="cheat_select">是否作弊</label>
-              <select id="cheat_select" onkeyup="eventSearch(event)">
-                <option value="">任意</option>
-                <option value="true">是</option>
-                <option value="false">否</option>
-              </select>
-            </div>
-            <div class="input">
-              <label for="completed_time_select">打卡晚于</label>
-              <input id="completed_time_select" type="time" onkeyup="eventSearch(event)" />
-            </div>
-            <div class="input">
-              <label for="user_id_input">用户ID</label>
-              <input id="user_id_input" type="number" onkeyup="eventSearch(event)" />
-            </div>
-            <div class="input">
-              <label for="nickname_input">用户昵称</label>
-              <input id="nickname_input" type="text" onkeyup="eventSearch(event)" />
-            </div>
-            <div class="btn-group">
-              <div id="reset_btn" class="btn" onclick="resetSearch()">重置</div>
-              <div id="search_btn" class="btn" onclick="queryMemberTable()">查询</div>
-              <div id="download_btn" class="btn" onclick="downloadMemberTable(event)">下载</div>
-            </div>
-          </div>
-          <div class="table">
-            <div class="table-page">
-              <div class="page-button">
-                <div class="btn" onclick="queryMemberTable('1')">&lt;&lt;</div>
-                <div class="btn" onclick="queryMemberTable('-')">&lt;</div>
-                <div class="page-count">0/0</div>
-                <div class="btn" onclick="queryMemberTable('+')">&gt;</div>
-                <div class="btn" onclick="queryMemberTable('-1')">&gt;&gt;</div>
-              </div>
-              <select id="page_count">
-                <option value="20">20条/页</option>
-                <option value="50">50条/页</option>
-                <option value="100">100条/页</option>
-                <option value="200">200条/页</option>
-                <option value="500">500条/页</option>
-                <option value="2000">2000条/页</option>
-              </select>
-            </div>
-            <div class="table-content">
-              <table id="user_info_table">
-              </table>
-            </div>
+    <main>
+      <div class="wall">
+        <div class="eaves">
+          <div class="gloss"></div>
+          <div class="eaves-container">
+            <a id="my_class" class="active">小班列表</a>
+            <a href="data">数据查询</a>
+            <a href="setting">系统设置</a>
           </div>
         </div>
-      </div>
-      <div class="wall-container setting-page hide" id="setting-page">
-        
-        <span class="loading-text">
-          <div class="loader">
-            <span></span>
-            <span></span>
-            <span></span>
-          </div>
-          数据获取中, 请稍后...
-        </span>
-        <div class="container hide">
-          <div class="setting-group">
-            <div class="input">
-              <label for="cache_second_input">数据缓存时长</label>
-              <input id="cache_second_input" type="number" />
-            </div>
-            <span class="setting-desc">在[数据查询]页面查询时, 本程序会对今日数据进行一次查询, 为减少不必要的请求对源数据服务器造成负担, 设置数据缓存时长（单位：秒）,
-              只有经过该时间后才会进行新一轮的数据查询</span>
-
-            <div class="input">
-              <label>实时获取数据</label>
-              <div id="real_time_cache_favorite" class="btn-group">
-                <div class="checkbox">
-                  <input type="radio" id="real_time_cache_favorite_true" name="real_time_cache_favorite" value="true" />
-                  <label for="real_time_cache_favorite_true">是</label>
-                </div>
-                <div class="checkbox">
-                  <input type="radio" id="real_time_cache_favorite_false" name="real_time_cache_favorite"
-                    value="false" />
-                  <label for="real_time_cache_favorite_false">否</label>
-                </div>
-              </div>
-            </div>
-            <span class="setting-desc">开启此选项后，每次进入主页时，都会对所有已收藏(标星)小班进行一次实时查询, 方便实时观察打卡数据变化</span>
-
-            <div class="input">
-              <label for="daily_record_input">记录定时任务</label>
-              <input id="daily_record_input" type="text" />
-            </div>
-            <span class="setting-desc">即每日定时保存数据的时间, 默认为“59 23 * * *”, 即每晚23点59分保存数据, 具体语法请参考[Crontab],
-              此处修改不会立刻生效，请联系管理员重启应用</span>
-
-            <div class="input">
-              <label for="main_token_input">主授权令牌</label>
-              <input id="main_token_input" type="text" />
-            </div>
-            <span class="setting-desc"><strong>非常重要!</strong> 本程序用以获取所有基础数据的授权令牌，建议该用户不应加入任何小班</span>
-
-            <div class="input">
-              <label for="output_file_input">下载文件名</label>
-              <input id="output_file_input" type="text" />
-            </div>
-            <span class="setting-desc">在[数据查询]页面查询得到结果后,点击下载获取的表格文件的文件名</span>
-
-            <div class="btn-group">
-              <div id="save_btn" class="btn" onclick="saveConfig()">保存</div>
-            </div>
-          </div>
-          <div class="disclaimer">
-            <h1>免责声明</h1>
-            <p>感谢您选择使用本小班数据管理器。在使用本程序之前, 请您<strong>仔细阅读</strong>并理解以下免责声明内容：
-
-              1. 本程序基于[GPLv3]开源，仅供个人学习、研究和其他非商业性质的合法用途, 任何因违反相关法律法规或侵犯他人权益所导致的法律责任, 由用户自行承担。
-              2. 用户在使用本程序时, 应遵守所在国家或地区的法律法规, 并对使用该程序产生的一切后果负全部责任。
-              3. 本程序对于用户使用过程中可能产生的各种风险（包括但不限于被数据来源公司的封禁、用户自身合规问题等）不承担任何责任。
-              4. 用户违反本声明或者滥用本程序进行非法活动的, 数据来源公司将有权追究您的法律责任。
-              5. 本程序作者对用户使用本程序产生的一切纠纷、损失或伤害不承担任何责任。
-              6. 一旦用户开始使用本程序, 则视为用户已充分理解并同意本免责声明的全部内容, 如果您无法接受上述条款, 请<strong>立即停止</strong>使用本程序。</p>
-          </div>
-        </div>
-      </div>
-      <div class="wall-container group-detail-page hide" id="group-detail-page">
-
-        <div class="group-info-container"></div>
-        <div class="paper">
-          <div class="member-info-container hide">
-            <div class="input-group">
-              <div class="input">
-                <label for="week_select">周数</label>
-                <select id="week_select" onkeyup="eventSearch(event)"></select>
-              </div>
-              <div class="input wrap-input">
-                <label for="display_left">展示已离开成员</label>
-                <div id="display_left" class="btn-group">
-                  <div class="checkbox">
-                    <input type="radio" id="display_left_true" name="display_left" value="true"/>
-                    <label for="display_left_true">是</label>
-                  </div>
-                  <div class="checkbox">
-                    <input type="radio" id="display_left_false" name="display_left" value="false" checked />
-                    <label for="display_left_false">否</label>
-                  </div>
-                </div>
-              </div>
-              <div class="input wrap-input">
-                <label for="display_type">展示类型</label>
-                <div id="display_type" class="btn-group">
-                  <div class="checkbox">
-                    <input type="checkbox" id="display_cheat" checked />
-                    <label for="display_cheat">作弊</label>
-                  </div>
-                  <div class="checkbox">
-                    <input type="checkbox" id="display_late" checked />
-                    <label for="display_late">晚卡</label>
-                  </div>
-                  <div class="checkbox">
-                    <input type="checkbox" id="display_absence" checked />
-                    <label for="display_absence">缺卡</label>
-                  </div>
-                  <div class="checkbox">
-                    <input type="checkbox" id="display_all" />
-                    <label for="display_all">全员</label>
-                  </div>
-                </div>
-              </div>
-              <div class="btn-group">
-                <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
-                <div id="setting_btn" class="btn" onclick="toggleSettingModal()">设置</div>
-                <div id="filter_btn" class="btn" onclick="toggleFilterModal()">启动筛选</div>
-              </div>
-            </div>
-            <div id="member_filter" class="search-input hide">
-              <span>🔍</span>
-              <input type="text" placeholder="筛选用户" onkeyup="memberFilter(event)" />
-            </div>
-            <div class="details-container"></div>
-          </div>
+        <div class="wall-container">
           <span class="loading-text">
             <div class="loader">
               <span></span>
@@ -294,209 +45,369 @@
             </div>
             数据获取中，请稍后...
           </span>
+          <div id="group_filter" class="search-input hide">
+            <span>🔍</span>
+            <input type="text" placeholder="筛选小班" onkeyup="groupFilter(event)" />
+          </div>
+          <div class="group empty-group hide" onclick="toggleGroupSearchModal()">
+          </div>
         </div>
-        <div class="paper filter-log-container">
-          <div class="table">
-            <div class="table-page">
-              <div class="filter-page-button" style="display: flex;">
-                <div class="btn" onclick="queryFilterLog('1')">&lt;&lt;</div> 
-                <div class="btn" onclick="queryFilterLog('-')">&lt;</div>
-                <div class="filter-page-num">1/1</div>
-                <div class="btn" onclick="queryFilterLog('+')">&gt;</div>
-                <div class="btn" onclick="queryFilterLog('-1')">&gt;&gt;</div>
-              </div>
-              <select id="filter-page-count">
-                <option value="20">20条/页</option>
-                <option value="50">50条/页</option>
-                <option value="100">100条/页</option>
-                <option value="200">200条/页</option>
-                <option value="500">500条/页</option>
-                <option value="2000">2000条/页</option>
-              </select>
+        </div>
+      </div>
+      <div class="footer">
+        <footer>
+          <div class="info">
+            <input type="checkbox">
+            <span></span>
+            <span></span>
+            <span></span>
+            <div>
+              <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made By Shadlc</span>
             </div>
-            <div class="table-content">
-              <table id="filter_log_table">
-              </table>
-            </div>
+          </div>
+        </footer>
+      </div>
+      <div id="refresh_btn" class="left-corner-btn btn" onclick="refresh_data()">刷新</div>
+    </main>
+    <div id="group_search_modal" class="modal hide" data-status="hidden" onclick="toggleGroupSearchModal(event)">
+      <div class="modal-content">
+        <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>
+        <div class="modal-title">添加小班</div>
+        <div class="modal-body">
+          <div id="group_search">
+            <input type="text" id="group_search_input" placeholder="班长ID或16位小班分享码(非6位邀请码)" onkeyup="eventSearch(event)" />
+            <span class="btn" onclick="searchGroups()">搜索</span>
+          </div>
+          <div id="group_result">
+            <span>空空如也~</span>
           </div>
         </div>
       </div>
-      <div id="setting_modal" class="modal hide" data-status="hidden" onclick="toggleSettingModal(event)">
-        <div class="modal-content">
-          <span class="modal-close-btn" onclick="toggleSettingModal()"></span>
-          <div class="modal-title">小班设置</div>
-          <div class="modal-body">
-            <div class="setting-group">
-              <div class="input">
-                <label>每日记录开关</label>
-                <div id="record_select" class="btn-group">
-                  <div class="checkbox">
-                    <input type="radio" id="record_select_true" name="record_select" value="1" />
-                    <label for="record_select_true">开启</label>
-                  </div>
-                  <div class="checkbox">
-                    <input type="radio" id="record_select_false" name="record_select" value="0" />
-                    <label for="record_select_false">关闭</label>
-                  </div>
-                </div>
-              </div>
-              <div class="input">
-                <label for="late_time_input">晚卡时间</label>
-                <input type="time" id="late_time_input" />
-              </div>
-              <div class="input">
-                <label for="auth_token_input">授权令牌</label>
-                <input type="text" id="auth_token_input" />
-              </div>
-              <div class="input-group">
-                <div id="search_btn" class="btn" onclick="saveConfig()">保存设置</div>
-                <div id="delete_btn" class="btn red-border" onclick="deleteGroup()">删除小班</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-      <div class="wall-container strategy-page hide" id="strategy-page" style="background: transparent; border: none;">
-        <div class="blackboard" style="flex-direction: row;
-          display: flex;">
-          <span class="gloss"></span>
-          <span class="eraser" onclick="slideLeft(event)"></span>
-          <div class="strategy-list" style="width:20%;"></div>
-          <div class="strategy-info" style="width:80%;"></div>
-        </div>
-        <div class="strategy-detail"></div>
-        
-      </div>
     </div>
-    </div>
-  </main>
-
-
-  <div class="footer">
-    <footer>
-      <div class="info">
-        <input type="checkbox">
-        <span></span>
-        <span></span>
-        <span></span>
-        <div>
-          <span><a href="https://github.com/shadlc/BCZ-Group-Manager" target="_blank"><u>BCZ-Group-Manager</u></a> Made
-            By Shadlc&Cerenilla</span>
-        </div>
-      </div>
-    </footer>
-  </div>
-  <div id="refresh_btn" class="left-corner-btn btn" onclick="refresh_data()">刷新</div>
-  <div id="group_search_modal" class="modal hide" data-status="hidden" onclick="toggleGroupSearchModal(event)">
-    <div class="modal-content">
-      <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>
-      <div class="modal-title">添加小班</div>
-      <div class="modal-body">
-        <div id="group_search">
-          <input type="text" id="group_search_input" placeholder="班长ID或16位小班分享码(非6位邀请码)" onkeyup="eventSearch(event)">
-          <span class="btn" onclick="searchGroups()">搜索</span>
-        </div>
-        <div id="group_result">
-          <span>空空如也~</span>
-        </div>
-      </div>
-    </div>
-  </div>
-  <style>
-    .modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
-  </style>
+  </body>
   <script src="lib/script.js"></script>
-  <script src="lib/group.js"></script>
-  <script src="lib/data.js"></script>
-  <script src="lib/setting.js"></script>
-  <script src="lib/group_details.js"></script>
-  <script src="lib/switch_box.js"></script>
-  <script src="lib/jquery-3.5.1.min.js"></script>
-  <script src="lib/notice_card.js"></script>
-  <!-- <script src="lib/notice_card_without_jquery.js"></script> -->
-  <script src="lib/strategy.js"></script>
   <script>
-    var group_loaded = false;
-    var data_loaded = false;
-    var setting_loaded = false;
-    var strategy_loaded = false;
-    //DOM加载完成后执行groupPage()函数
-    window.onload = function () {
-      initCloud(30);
-      groupPage();
-      // 建立到/test的sse连接
-      const source = new EventSource('/message');
-      source.onmessage = function (event) {
-        const data = event.data.split('#');
-        const messageObject = {};
+    onload = ()=>{
+      initCloud(10);
+      getInfo()
+      .then((info)=>{
+        if (!info) return;
+        getGroupList();
+        bindScrollToTopBtn(document.querySelector('.wall-container'));
+      });
+    }
 
-        data.forEach(line => {
-          const [key, value] = line.split('$');
-          if (key && value) {
-            messageObject[key] = value;
-          }
+    // 获取配置信息
+    function getInfo() {
+      return fetch('configure')
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        return data.data;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
+
+    // 调整小班页面显示
+    function toggle_group_display(show) {
+      if (show) {
+        document.querySelectorAll('.loading-text').forEach((e)=>{
+          e.classList.add('hide');
         });
-        // 将以上所有值转换成字符串
-        const card_message = messageObject['name'] + messageObject['message'];
-        $newCard(card_message)
-      };
-      bindScrollToTopBtn(document.querySelector("main"));
-    }
-    function groupPage() {
-      // document.getElementsByClassName("group-page")[0].style.display = "block";
-      document.getElementById("group_button").classList.add("active");
-      document.getElementById("data_button").classList.remove("active");
-      document.getElementById("setting_button").classList.remove("active");
-      document.getElementById("strategy_button").classList.remove("active");
-      SwitchRight('group-page')
-      if (!group_loaded) {
-        group_loaded = true;
-        initGroupPage();
-      }
-    }
-    function dataPage() {
-      // document.getElementsByClassName("data-page")[0].style.display = "block";
-      document.getElementById("group_button").classList.remove("active");
-      document.getElementById("data_button").classList.add("active");
-      document.getElementById("setting_button").classList.remove("active");
-      document.getElementById("strategy_button").classList.remove("active");
-      SwitchRight('data-page')
-      if (!data_loaded) {
-        data_loaded = true;
-        initDataPage();
-      }
-    }
-    function settingPage() {
-      document.getElementById("group_button").classList.remove("active");
-      document.getElementById("data_button").classList.remove("active");
-      document.getElementById("setting_button").classList.add("active");
-      document.getElementById("strategy_button").classList.remove("active");
-      SwitchRight('setting-page')
-      if (!setting_loaded) {
-        setting_loaded = true;
-        initSettingPage();
-      }
-    }
-    function strategyPage(){
-      document.getElementById("group_button").classList.remove("active");
-      document.getElementById("data_button").classList.remove("active");
-      document.getElementById("setting_button").classList.remove("active");
-      document.getElementById("strategy_button").classList.add("active");
-      SwitchRight('strategy-page')
-      if (!strategy_loaded) {
-        strategy_loaded = true;
-        initStrategyPage();
+        document.querySelectorAll('#group_filter').forEach((e)=>{
+          e.classList.remove('hide');
+        });
+        document.querySelectorAll('.group').forEach((e)=>{
+          e.classList.remove('hide');
+        });
+      } else {
+        document.querySelectorAll('.loading-text').forEach((e)=>{
+          e.classList.remove('hide');
+        });
+        document.querySelectorAll('#group_filter').forEach((e)=>{
+          e.classList.add('hide');
+        });
+        document.querySelectorAll('.group').forEach((e)=>{
+          e.classList.add('hide');
+        });
       }
     }
 
-  </script>
+    // 获取小班信息
+    function getGroupList(cache_all=false) {
+      toggle_group_display(show=false);
+      let url = 'observe_group';
+      if (cache_all) {
+        url += '?cache_all=' + cache_all
+      }
+      return fetch(url)
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let groups = data.data;
+        document.getElementById('my_class').innerText = '小班列表(' + groups.length + ')';
+        document.querySelectorAll('.group:not(.empty-group)').forEach((e)=>{
+          e.remove();
+        });
+        let container = document.querySelector('.wall-container');
+        let empty_group = document.querySelector('.empty-group');
+        let group_count = Object.keys(groups).length;
+        let group_filter = document.getElementById('group_filter');
+        if (group_count >= 10) {
+          group_filter.classList.remove('hide');
+        } else {
+          group_filter.classList.add('hide');
+        }
+        for (let i in groups) {
+          let group = groups[i];
+          let favorite_checked = '';
+          if (group.favorite) {
+            favorite_checked = 'checked';
+          }
+          let group_content = `
+            <div class="info-table">
+              <div class="avatar">
+                <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
+                <img src="`+group.avatar_frame+`" />
+              </div>
+              <div class="group-info">
+                <span>`+group.name+`</span>
+                <span>`+group.today_daka_count+`/`+group.member_count+`已打卡</span>
+              </div>
+            </div>
+            <div class="door">
+              <div class="door-glass"></div>
+              <div class="door-knob"></div>
+              <img class="rank-flag" src="img/s`+group.rank+`.png"/>
+            </div>
+            <span class="group-favorite `+favorite_checked+`" onclick="addFavorite(event, '`+group.name+`', '`+group.id+`')" >★</span>
+          `
+          let group_div = document.createElement('div');
+          group_div.className = 'group';
+          if (group.valid == 2) {
+            // notify('小班'+group.name+'的数据获取失败! \n原因为: '+group.exception);
+            group_div.className += ' invalid';
+          }
+          group_div.innerHTML = group_content;
+          group_div.addEventListener('click', (e)=>{
+          if (e?.target) {
+            if (e?.target.classList.contains('group-favorite')) {
+              return;
+            }
+          }
+            window.location.href = 'group/' + group.id;
+          });
+          container.insertBefore(group_div, empty_group);
+        }
+        toggle_group_display(show=true);
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    }
 
-</body>
+    // 打开关闭小班搜索模态框
+    function toggleGroupSearchModal(event) {
+      if (event?.target) {
+        if (event?.target.id != 'group_search_modal') {
+          return;
+        }
+      }
+      let modal = document.getElementById('group_search_modal');
+      let modal_content = modal.children[0];
+      let status = modal.getAttribute('data-status');
+      modal.setAttribute('data-status', '');
+      if (status == 'show') {
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal.classList.add('hide');
+          modal.setAttribute('data-status', 'hidden');
+        }, 500);
+      } else if (status == 'hidden') {
+        modal.classList.remove('hide');
+        modal_content.style.transform = 'scale(0.9)';
+        modal.style.opacity = 0;
+        setTimeout(()=>{
+          modal_content.style.transform = 'scale(1)';
+          modal.style.opacity = 1;
+        }, 1);
+        setTimeout(()=>{
+          modal.setAttribute('data-status', 'show');
+        }, 500);
+      }
+    }
 
+    // 搜索小班
+    function searchGroups() {
+      let search_text = document.getElementById('group_search_input').value;
+      let container = document.getElementById('group_result');
+      let result_span = document.querySelector('#group_result>span');
+      let url = 'search_group';
+      if (isNaN(search_text) && search_text.length == 16) {
+        url += '?share_key=' + search_text;
+      } else if (search_text.length) {
+        url += '?uid=' + search_text;
+      } else {
+        notify('搜索条件不能为空(*/ω＼*)');
+        return;
+      }
+      container.innerHTML = 
+        `
+          <span class="loading-text">
+            <div class="loader">
+              <span></span>
+              <span></span>
+              <span></span>
+            </div>
+            数据获取中，请稍后...
+          </span>
+        `;
+      fetch(url)
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          container.innerHTML = '<span>空空如也~</span>';
+          notify(data.msg);
+          return;
+        }
+        document.querySelector('#group_result>span')?.remove();
+        let groups = data.data;
+        container.innerHTML = '';
+        for (let i in groups) {
+          let group = groups[i];
+          let badges = '';
+          if (group.leader === true) {
+            badges += '<span class="badge green-border">班长</span>';
+          } else if (group.leader === false) {
+            badges += '<span class="badge blue-border">成员</span>';
+          }
+          let group_content = `
+            <div class="info-table">
+              <div class="avatar">
+                <img src="https://vol-v6.bczcdn.com`+group.avatar+`" />
+                <img src="`+group.avatar_frame+`" />
+              </div>
+              <div class="group-info">
+                <span>`+group.name+`</span>
+                <span>小班ID: `+group.id+`</span>
+              </div>
+              <div class="group-detail">
+                <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`+Math.round(group.finishing_rate * 100)+`%</span>
+                <span>`+group.introduction+`</span>
+              </div>
+              <div class="group-extra">
+                `+badges+`
+              </div>
+            </div>
+          `
+          let group_div = document.createElement('div');
+          group_div.className = 'group brief';
+          group_div.innerHTML = group_content;
+          group_div.addEventListener('click', ()=>{
+            addObserveGroup(group);
+          });
+          container.appendChild(group_div);
+        }
+        if (container.innerHTML == '') {
+          container.innerHTML = '<span>空空如也~</span>';
+        }
+        return true;
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+        container.innerHTML = '<span>空空如也~</span>';
+      });
+    }
+
+    // 事件触发搜索
+    function eventSearch(event) {
+      if (event.key === "Enter") {
+        searchGroups(event?.target?.value);
+      }
+    }
+
+    // 添加关注小班
+    function addObserveGroup(group) {
+      let content = `
+        <line>是否添加此小班?</line>
+        <div class="modal-text">`
+          + `\n小班名称: ` + group.name
+          + `\n小班ID: ` + group.id
+          + `\n分享码: ` + group.share_key
+          + `</div>`;
+      showModal(content, '添加小班', ()=>{
+        let payload = {'share_key': group.share_key};
+        fetch('observe_group', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        })
+        .then(response => {
+          return response.json();
+        })
+        .then(data => {
+          notify(data.msg);
+        });
+      });
+    }
+
+    // 收藏小班
+    function addFavorite(event, group_name, group_id) {
+      let element = event.target;
+      let content = `<line>是否收藏小班[`+group_name+`]?</line><line>收藏后即可显示在最上端</line>`;
+      let favorite = 1;
+      if (element.classList.contains('checked')) {
+        content = `<line>是否取消收藏小班[`+group_name+`]?`;
+        favorite = 0;
+      }
+      showModal(content, '收藏小班', ()=>{
+        let payload = {'id': group_id, 'favorite': favorite};
+        fetch('observe_group', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify(payload)
+        })
+        .then(response => {
+          return response.json();
+        })
+        .then(data => {
+          notify(data.msg);
+        });
+      });
+    }
+
+    // 筛选小班
+    function groupFilter(event) {
+      let element = event.target;
+      let filter = element.value;
+      document.querySelectorAll('.group:not(.empty-group)').forEach((e)=>{
+        if (e.innerText.includes(filter)) {
+          e.classList.remove('hide');
+        } else {
+          e.classList.add('hide');
+        }
+      });
+    }
+
+    // 刷新全部小班数据
+    function refresh_data() {
+      showModal('是否为当前页面全部小班获取最新数据?', '刷新全部', ()=>{
+        getGroupList(true);
+      });
+    }
+
+</script>
 </html>

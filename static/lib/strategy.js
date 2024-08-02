@@ -174,7 +174,7 @@ function addSubItem() {
                 <div class="center-tag btn" onclick="copySubItem('${subItem.name}')">复制</div>
                 <div class="center-tag btn" onclick="deleteSubItem('${subItem.name}', false)">删除</div>
             </div>
-            <div class="tag">剩<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人时可执行</div>
+            <div class="tag">最低：<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人</div>
             <div class="tag">操作：<select class="operation" style="height: 2rem">
                     <option value="accept">接受</option>
                     <option value="reject">移出</option>
@@ -274,7 +274,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                 <div class="center-tag btn" onclick="copySubItem('${subItem.name}')">复制</div>
                 <div class="center-tag btn" onclick="deleteSubItem('${subItem.name}', false)">删除</div>
             </div>
-            <div class="tag">剩<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人时可执行</div>
+            <div class="tag">最低：<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人</div>
             <div class="tag">操作：<select class="operation" style="height: 2rem">
                     <option value="accept">接受</option>
                     <option value="reject">移出</option>
@@ -404,7 +404,7 @@ function copySubItem(subItemName) {
             <div class="center-tag btn" onclick="copySubItem('${subItem.name}')">复制</div>
             <div class="center-tag btn" onclick="deleteSubItem('${subItem.name}', false)">删除</div>
         </div>
-        <div class="tag">剩<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人时可执行</div>
+        <div class="tag">最低：<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人</div>
         <div class="tag">操作：<select class="operation" style="height: 2rem">
                 <option value="accept">接受</option>
                 <option value="reject">移出</option>
