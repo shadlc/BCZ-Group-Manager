@@ -316,6 +316,10 @@
       if (group.notice == '') {
         group.notice = '<span class="center">暂无公告</span>';
       }
+      let leader = '无';
+      if (group.leader) {
+        leader = group.leader+'('+group.leader_id+')';
+      }
       let group_content = `
         <span class="gloss"></span>
         <span class="eraser" onclick="slideLeft(event)"></span>
@@ -329,7 +333,7 @@
               <span>`+group.name+`</span>
             </div>
             <div class="group-detail">
-              <span>班长: `+group.leader+`(`+group.leader_id+`)</span>
+              <span>班长: `+leader+`</span>
               <span>人数`+group.member_count+`/`+group.count_limit+`, 完成率`
                 + Math.round(group.finishing_rate * 100)+`%, `
                 + (group.member_count - group.today_daka_count) +`人未打卡</span>
