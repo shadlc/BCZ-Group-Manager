@@ -138,8 +138,12 @@ class SQLite:
             '''CREATE TABLE IF NOT EXISTS AVATARS (                    -- 头像表
                 ID INTEGER PRIMARY KEY AUTOINCREMENT,   -- 头像ID
                 URL TEXT UNIQUE                         -- 头像链接
-            );
-            '''
+            );''',
+            '''CREATE TABLE IF NOT EXISTS WHITELIST (                   -- 白名单表
+                UNIQUE_ID INTEGER,           -- 用户ID
+                GROUP_ID TEXT,                       -- 小班ID
+                NICKNAME TEXT                      -- 用户昵称
+            );''',
         ]
         self.init()
 
@@ -195,6 +199,40 @@ class SQLite:
             return True
         except sqlite3.DatabaseError as e:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
+        return False
+    
+    def queryWhitelist(self, group_id: str, with_nickname: bool = False) -> list:
+        '''查询白名单'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        if with_nickname:
+            result = cursor.execute(f'SELECT UNIQUE_ID, NICKNAME FROM WHITELIST WHERE GROUP_ID = ?', (group_id,)).fetchall()
+        else:
+            result = cursor.execute(f'SELECT UNIQUE_ID FROM WHITELIST WHERE GROUP_ID = ?', (group_id,)).fetchall()
+        logger.debug(f'查询小班{group_id}的白名单: {result}')
+        conn.close()
+        return result
+    
+    def deleteWhitelist(self, group_id: str, user_id: str) -> bool:
+        '''删除白名单'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()        
+        result = cursor.execute(f'DELETE FROM WHITELIST WHERE GROUP_ID = ? AND UNIQUE_ID = ?', (group_id, user_id)).rowcount
+        conn.commit()
+        conn.close()
+        if result:
+            return True
+        return False
+    
+    def addWhitelist(self, group_id: str, user_id: str, nickname: str) -> bool:
+        '''添加白名单'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        result = cursor.execute(f'INSERT INTO WHITELIST (UNIQUE_ID, GROUP_ID, NICKNAME) VALUES (?, ?, ?)', (user_id, group_id, nickname)).rowcount
+        conn.commit()
+        conn.close()
+        if result:
+            return True
         return False
     
     def queryGroupShareKey(self, group_id: str) -> str:
@@ -817,6 +855,8 @@ class SQLite:
         # 我夜观星象，得到超越方程E*(x)^Q = 0.1Q，x为打卡率，求解Q即可
         if finishing_rate == 1:
             return join_days
+        if finishing_rate < 0.88: # 之前遇到的奇怪问题，小于0.88的同学基本会摆烂
+            finishing_rate /= 10
         rate = finishing_rate
         expectancy = join_days
         length = 0
@@ -827,6 +867,7 @@ class SQLite:
             expectancy *= rate # 11...11（Q个1）在100数位上发生的期望次数
             if expectancy <= length / 4:  # 如果期望大于length则代表有一个完整的length序列，我们要找到符合条件的length最大值
                 # 但这个/10，我的天文知识还不能解释。经过测试在join_days = 100..10000, x=0.01..0.99都很符合
+                logger.info( f'ComboExpectancy: {rate}% {join_days} {length} {expectancy}')
                 return length
         return join_days
 

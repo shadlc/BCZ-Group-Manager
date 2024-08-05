@@ -91,6 +91,89 @@ let group_id = '';
         }, 500);
       }
     }
+
+    function addWhitelist(){
+      // 添加白名单
+      // 向后台查询当前小班的白名单
+      fetch('../get_whitelist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          'group_id': group_id
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        let modal_content = '<table class="simple-table"><tr><th>id</th><th>昵称</th><th>操作</th></tr>'
+        for (let i in data.data) {
+          let member = data.data[i];
+          modal_content += `
+          <tr>
+            <td>`+member[0]+`</td>
+            <td>`+member[1]+`</td>
+            <td><a href="javascript:void(0)" onclick="removeWhitelist('`+member[0]+`')">移除</a></td>
+          </tr>
+          `;
+        }
+        modal_content += '</table>';
+        modal_content += '<div class="input-group"><input type="text" id="add_whitelist_input" placeholder="请输入要添加的id"><button class="btn" onclick="addWhitelistSubmit()">添加</button></div>';
+        showModal(modal_content, '当前小班白名单')
+      });
+    }
+    function addWhitelistSubmit(){
+      // 向后台添加白名单
+      let input = document.getElementById('add_whitelist_input');
+      let id = input.value.trim();
+      if (id == '') {
+        notify('请输入要添加的id');
+        return;
+      }
+      fetch('../add_whitelist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          'group_id': group_id,
+          'id': id
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        notify(data.msg);
+        queryGroupDetails();
+        hideAllModals();
+      })
+    }
+    function removeWhitelist(id){
+      // 向后台移除白名单
+      fetch('../remove_whitelist', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          'group_id': group_id,
+          'id': id
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        notify(data.msg);
+        queryGroupDetails();
+        hideAllModals();
+      })
+    }
+
+
     function StopFilter() {
       // 停止筛选
       showModal('正在停止筛选...<br>将在本轮【等待结束后】停止<br>可以关闭本窗口', '停止中');

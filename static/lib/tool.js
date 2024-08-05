@@ -1,0 +1,6 @@
+function initToolPage(){
+    
+}
+function findBlackList(){
+    
+}

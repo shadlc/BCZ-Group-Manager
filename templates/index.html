@@ -53,6 +53,7 @@
           <a id="data_button" onclick="dataPage()">数据查询</a>
           <a id="setting_button" onclick="settingPage()">系统设置</a>
           <a id="strategy_button" onclick="strategyPage()">编辑策略</a>
+          <a id="tool_button" onclick="toolPage()">工具箱</a>
         </div>
       </div>
       <div class="wall-container group-page hide" id="group-page">
@@ -278,6 +279,7 @@
                 <div id="search_btn" class="btn" onclick="queryGroupDetails()">查询</div>
                 <div id="setting_btn" class="btn" onclick="toggleSettingModal()">设置</div>
                 <div id="filter_btn" class="btn" onclick="toggleFilterModal()">启动筛选</div>
+                <div id="whitelist_btn" class="btn" onclick="addWhitelist()">添加白名单</div>
               </div>
             </div>
             <div id="member_filter" class="search-input hide">
@@ -367,6 +369,17 @@
         <div class="strategy-detail"></div>
         
       </div>
+      <div class="wall-container tool-page hide" id="tool-page">
+        <div class="btn-group">
+          <!-- 标题工具箱居中，然后每个工具是一个横排圆角div，每个div之间有间隔 -->
+          <div class="tag btn" onclick="findBlackList()">成员查黑名单</div>
+          <div class="tag btn" onclick="findSensitive()">敏感词查询</div>
+          <div class="tag btn" onclick="graphMemberInfo()">成员综合分析</div>
+        </div>
+        <div class="tool-content">
+          <!-- 函数中现场添加元素 -->
+        </div>
+      </div>
     </div>
     </div>
   </main>
@@ -421,11 +434,13 @@
   <script src="lib/notice_card.js"></script>
   <!-- <script src="lib/notice_card_without_jquery.js"></script> -->
   <script src="lib/strategy.js"></script>
+  <script src="lib/tool.js"></script>
   <script>
     var group_loaded = false;
     var data_loaded = false;
     var setting_loaded = false;
     var strategy_loaded = false;
+    var tool_loaded = false;
     //DOM加载完成后执行groupPage()函数
     window.onload = function () {
       initCloud(30);
@@ -448,50 +463,52 @@
       };
       bindScrollToTopBtn(document.querySelector("main"));
     }
-    function groupPage() {
-      // document.getElementsByClassName("group-page")[0].style.display = "block";
-      document.getElementById("group_button").classList.add("active");
+    function button_switch(button_id){
+      document.getElementById("group_button").classList.remove("active");
       document.getElementById("data_button").classList.remove("active");
       document.getElementById("setting_button").classList.remove("active");
       document.getElementById("strategy_button").classList.remove("active");
-      SwitchRight('group-page')
+      document.getElementById("tool_button").classList.remove("active");
+      document.getElementById(button_id).classList.add("active");
+    }
+    function groupPage() {
+      button_switch("group_button");
+      SwitchRight('group-page');
       if (!group_loaded) {
         group_loaded = true;
         initGroupPage();
       }
     }
     function dataPage() {
-      // document.getElementsByClassName("data-page")[0].style.display = "block";
-      document.getElementById("group_button").classList.remove("active");
-      document.getElementById("data_button").classList.add("active");
-      document.getElementById("setting_button").classList.remove("active");
-      document.getElementById("strategy_button").classList.remove("active");
-      SwitchRight('data-page')
+      button_switch("data_button");
+      SwitchRight('data-page');
       if (!data_loaded) {
         data_loaded = true;
         initDataPage();
       }
     }
     function settingPage() {
-      document.getElementById("group_button").classList.remove("active");
-      document.getElementById("data_button").classList.remove("active");
-      document.getElementById("setting_button").classList.add("active");
-      document.getElementById("strategy_button").classList.remove("active");
-      SwitchRight('setting-page')
+      button_switch("setting_button");
+      SwitchRight('setting-page');
       if (!setting_loaded) {
         setting_loaded = true;
         initSettingPage();
       }
     }
     function strategyPage(){
-      document.getElementById("group_button").classList.remove("active");
-      document.getElementById("data_button").classList.remove("active");
-      document.getElementById("setting_button").classList.remove("active");
-      document.getElementById("strategy_button").classList.add("active");
-      SwitchRight('strategy-page')
+      button_switch("strategy_button");
+      SwitchRight('strategy-page');
       if (!strategy_loaded) {
         strategy_loaded = true;
         initStrategyPage();
+      }
+    }
+    function toolPage() {
+      button_switch("tool_button");
+      SwitchRight('tool-page');
+      if (!tool_loaded) {
+        tool_loaded = true;
+        initToolPage();
       }
     }
 

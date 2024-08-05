@@ -467,6 +467,40 @@ def configure():
             return restful(400, f'修改配置时发生错误(X_X): {e}')
         return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
 
+@app.route('/get_whitelist', methods=['POST'])
+def get_whitelist():
+    group_id = str(request.json.get('group_id', ''))
+
+    if not group_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    return restful(200, '', sqlite.queryWhitelist(group_id, with_nickname = True))
+
+@app.route('/add_whitelist', methods=['POST'])
+def add_whitelist():
+    id = request.json.get('id', '')
+    group_id = request.json.get('group_id', '')
+    if not id or not group_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        sqlite.addWhitelist(group_id, id, bcz.getUserInfo(id).get('name', ''))
+        return restful(200, '添加成功! ヾ(≧▽≦*)o')
+    except Exception as e:
+        return restful(400, f'添加白名单时发生错误(X_X): {e}')
+
+
+@app.route('/remove_whitelist', methods=['POST'])
+def delete_whitelist():
+    id = request.json.get('id', '')
+    group_id = request.json.get('group_id', '')
+    if not id or not group_id:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    try:
+        sqlite.deleteWhitelist(group_id, id)
+        return restful(200, '删除成功! ヾ(≧▽≦*)o')
+    except Exception as e:
+        return restful(400, f'删除白名单时发生错误(X_X): {e}')
+
+
 # 以下几个是手动接口    
 @app.route('/stop_all', methods=['GET'])
 def stop_all():
@@ -480,8 +514,8 @@ def combo():
     if not days: 
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     days = days.split('/')
-    join_days = days[1]
-    completed_times = days[0]
+    join_days = int(days[1])
+    completed_times = int(days[0])
     return restful(200, '',  sqlite.ComboExpectancy(completed_times / join_days, join_days))
 
 @app.route('/slice_log', methods=['GET'])

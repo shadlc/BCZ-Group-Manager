@@ -323,7 +323,7 @@ class Filter:
         
         # 【4】校牌小班、历史小班信息
         max_info = personal_dict['period'][0]
-        personal_dict['max_combo_expectancy'] = max_info[1]
+        personal_dict['max_combo_expectancy'] = max_info[3]
         
 
         for name in ['modified_nickname', 'deskmate_days', 'dependable_frame', 'max_combo_expectancy']:
@@ -425,6 +425,7 @@ class Filter:
     def run(self, authorized_token: str,strategy_index:str, share_key: str) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
         strategy_dict = self.strategy_class.get(strategy_index)
+        white_list = self.sqlite.queryWhitelist(share_key)
         if strategy_dict is None:
             self.log(f"策略{strategy_index}不存在", '全局')
             self.log_dispatch('全局')
@@ -520,10 +521,11 @@ class Filter:
                 newbies_count = 0
                 removed_count = 0
                 old_members_count = 0
+                member_cnt = member_dict_temp['member_count']
                 accept_list = []
                 quit_list = []
                 important_remove_list = [] # 重要踢出列表，不打卡的
-                for personal_dict_temp in member_dict_temp["members"]:
+                for i, personal_dict_temp in enumerate(member_dict_temp["members"]):
                     uniqueId = personal_dict_temp['id']
                     try:
                         memberId = personal_dict_temp['member_id']
@@ -559,11 +561,13 @@ class Filter:
                             # 有可能verdict_dict还没保存到数据库
                         if verdict is None or ("不打卡" in strategy_dict['subItems'][verdict]['name'] and personal_dict_temp['completed_time_stamp'] > 0):
                             # 如果名称中有“不打卡”字样，则需要重新判断
+                            self.log(f'判断序号[{i}/{member_cnt}]', group_name)
                             self.log(f"今日首次遇到", group_name)
                             # 先检查是否满足条件，满足则堆入待决策列表
                             reason = {}
                             operation = ''
                             for index, sub_strat_dict in enumerate(strategy_dict["subItems"]):
+                                
                                 
                                 result = self.check(
                                     personal_dict_temp,
@@ -597,9 +601,9 @@ class Filter:
                                         # self.log(f"不符合条件{sub_strat_dict['name']}", group_name)
                             for key, value in reason.items():
                                 self.log(f"{key}:{value}", group_name)
-                            self.log(json.dumps(operation), group_name)
+                            self.log(json.dumps(operation, ensure_ascii=False), group_name)
                             if not result_code:
-                                self.log("[error]没有符合的子条目，不操作，请检查策略", group_name)
+                                self.log("【▲】没有符合的子条目，不操作，请检查策略", group_name)
                                 continue
                             if result_code == 1:
                                 # 只有第一次被检测才需要加入accept_list
@@ -615,7 +619,11 @@ class Filter:
                             accepted_count += 1
                             self.log(f"【✓】接受加入(6s)", group_name)
                         elif result_code == 2 or result_code == 3:
-                            self.log(f"【✗】准备踢出(6s)", group_name)
+                            if uniqueId in white_list:
+                                self.log(f"【〇】白名单，不操作(6s)", group_name)
+                                continue
+                            else:
+                                self.log(f"【✗】准备踢出(6s)", group_name)
                             # 加入候补踢出列表，按小到大顺序插入列表
                             inserted = 0
                             important = 0
@@ -646,7 +654,7 @@ class Filter:
                 # 序号小的先踢(执行)
                 # kick_list 候补踢出列表，remove_list 立刻踢出列表
                 minPeople_min = 200
-                remain_people_cnt = member_cnt = member_dict_temp['member_count']
+                remain_people_cnt = member_cnt
                 remove_list = []
                 remove_list_uniqueId = []
                 new_kick_list = []
@@ -768,7 +776,8 @@ class Filter:
                     delay = max(delay - delay_delta, 3.5)
                 else:
                     delay = min(delay + delay_delta, 57.5) # 筛选暂停，延迟增加
-                self.log(f"本次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共{total_accepted_count}人），踢出{removed_count}人（共{total_removed_count}人）<br>下次检测延迟{delay}s({delay}s)", group_name)
+                # 将总人数标黄
+                self.log(f"本次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）<br>下次检测延迟{delay}s({delay}s)", group_name)
                 self.log_dispatch(group_name)
                 time.sleep(delay)
         
