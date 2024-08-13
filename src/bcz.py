@@ -329,7 +329,7 @@ class BCZ:
                 'data_time': data_time,
             })
             if member['leader']:
-                group['leader'] = member['nickname']
+                group['leader'] = nickname
                 group['leader_id'] = member_id
 
         # 利用班内排行榜即可获取小班昵称，因此注释该段
@@ -351,7 +351,7 @@ class BCZ:
                 nickname = re.sub(self.invalid_pattern, '', member['nickname'])
                 for member_info in members:
                     if member_id == member_info['id'] and member_info['nickname'] != nickname:
-                        member_info['group_nickname'] = member['nickname']
+                        member_info['group_nickname'] = nickname
 
         if today_daka_count != 0:
             group['today_daka_count'] = today_daka_count
