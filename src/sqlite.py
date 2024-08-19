@@ -209,6 +209,8 @@ class SQLite:
             result = cursor.execute(f'SELECT UNIQUE_ID, NICKNAME FROM WHITELIST WHERE GROUP_ID = ?', (group_id,)).fetchall()
         else:
             result = cursor.execute(f'SELECT UNIQUE_ID FROM WHITELIST WHERE GROUP_ID = ?', (group_id,)).fetchall()
+            # 将result改为id构成的list
+            result = [item[0] for item in result]
         logger.debug(f'查询小班{group_id}的白名单: {result}')
         conn.close()
         return result
@@ -707,6 +709,28 @@ class SQLite:
                     json.dumps(filter_log['quit_list'])
                 ))
         conn.commit()
+
+    def queryTodayAcceptedStatus(self, unique_id_list: list) -> list:
+        '''获取指定成员当天是否已经接受'''
+        conn = self.connect()
+        cursor = conn.cursor()
+        result = {}
+        for unique_id in unique_id_list:
+            cursor.execute(
+                f'SELECT OPERATION FROM STRATEGY_VERDICT WHERE UNIQUE_ID = ? AND DATE = ?',
+                (unique_id, datetime.now().strftime('%Y-%m-%d'))
+            )
+            # 取出最后一位作为标志，1接收，2拒绝
+            item = cursor.fetchone()
+            if item is None:
+                result[unique_id] = '0'
+                continue
+            item = item[0][-1]
+            if item == '1' or item == '2' or item == '3':
+                result[unique_id] = item
+            else:
+                result[unique_id] = '0'
+        return result
 
     def queryFilterLog(self, group_id: str, count_start: int, count_limit: int, conn: sqlite3.Connection) -> list:
         '''获取筛选日志，用于group_detail展示'''

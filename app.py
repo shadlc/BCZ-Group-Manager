@@ -321,7 +321,17 @@ def query_filter_log():
     except Exception as e:
         # logger.error(f'查询日志记录时发生错误: {e}')
         return restful(400, f'查询日志记录时发生错误(X_X): {e}')
-    
+
+@app.route('/query_today_filter_log', methods=['POST'])
+def query_today_filter_log():
+    '''获取今日过滤日志'''
+    group_id_list = request.json.get('group_id_list', [])
+    logs = sqlite.queryTodayAcceptedStatus(group_id_list)
+    if not logs:
+        return restful(404, '未查询到今日日志记录Σ(っ °Д °;)っ')
+    return restful(200, '', logs)
+
+
 @app.route('/get_strategy_list', methods=['GET'])
 def query_strategy():
     '''获取策略'''
@@ -330,7 +340,8 @@ def query_strategy():
 @app.route('/start_filter', methods=['POST'])
 def start_filter():
     '''开始筛选'''
-    group_id = int(request.json.get('group_id'))
+    slice_log()
+    group_id = str(request.json.get('group_id'))
     strategy_id = request.json.get('strategy_id')
     conn = sqlite.connect()
     cursor = conn.cursor()
@@ -344,7 +355,7 @@ def start_filter():
         return restful(404, '请设置班长AUTH_TOKEN')
     auth_token = result[0]
     try:
-        filter.start(auth_token, share_key, strategy_id)
+        filter.start(auth_token, share_key, group_id, strategy_id)
         return restful(200, '筛选成功启动! ヾ(≧▽≦*)o')
     except Exception as e:
         return restful(500, f'筛选启动失败：{e}')

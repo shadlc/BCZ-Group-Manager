@@ -312,7 +312,7 @@ let group_id = '';
           notify('当前小班授权令牌已失效，请设置新的授权令牌');
         }
         setGroupInfo(group);
-        setMemberInfo(group);
+        getAcceptedFilter(group);//包含setMemberInfo
         queryFilterLog('1');
         return true;
       })
@@ -574,7 +574,31 @@ let group_id = '';
         });
       }
     }
-    function getStrategyVerdictDetailsAndShowModal(modal_content, member_id, modal_title, refreshable) {
+    function getAcceptedFilter(group) {
+      payroll = [];
+      for (let i in group.members) {
+        payroll.push(group.members[i].id);
+      }
+      return fetch('../query_today_filter_log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          'group_id_list': payroll,
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          return;
+        }
+        setMemberInfo(group, data.data);
+      })
+      .catch(error => {
+        console.error('请求错误:', error);
+        notify('请求错误:' + error);
+      });
+    } 
+    function getStrategyVerdictDetailsAndShowModal(modal_content, member_id, modal_title, refreshable, accepted_filter) {
       // 向后台请求策略详情
       let payload = {
         // 'week': current_week,
@@ -613,7 +637,7 @@ let group_id = '';
     }
 
     // 通过数据设置展示成员信息
-    function setMemberInfo(group) {
+    function setMemberInfo(group, accepted_filter) {
       let container = document.querySelector('.details-container');
       container.innerHTML = '';
       let member_count = Object.keys(group.members).length;
@@ -623,6 +647,7 @@ let group_id = '';
       } else {
         member_filter.classList.add('hide');
       }
+      console.log(accepted_filter)
       for (let i in group.members) {
         let member = group.members[i];
         let group_nickname_span = '';
@@ -631,6 +656,17 @@ let group_id = '';
         if (member.group_nickname) {
           group_nickname_span += '<span>' + member.group_nickname + '</span>';
         }
+        
+        if (accepted_filter[member.id] == '1') {
+          badges += '<span class="badge green-border">已接受</span>';
+        }
+        else if (accepted_filter[member.id] == '0') {
+          badges += '<span class="badge red-border">未知</span>';
+        }
+        else{
+          badges += '<span class="badge yellow-border">准备踢出</span>';
+        }
+
         if (!member.data_time && display_left == 'true') {
           badges += '<span class="badge border">已离开</span>';
         } else if (!member.data_time && display_left == 'false') {

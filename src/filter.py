@@ -7,6 +7,7 @@ from src.config import Strategy
 import flask_sse
 import uuid
 import logging
+import random
 logger = logging.getLogger(__name__)
 
 import time
@@ -357,6 +358,7 @@ class Filter:
             time.sleep(self.autosave_interval)
             
             self.log('autosave now...','全局')
+            self.log_dispatch('全局')
             conn = self.sqlite.connect()
             with self.lock:
                 # self.log('save member_dict:'+str(self.member_dict))
@@ -422,10 +424,10 @@ class Filter:
             with self.clients_message_lock:
                 self.clients_message.pop(client_id, None)
 
-    def run(self, authorized_token: str,strategy_index:str, share_key: str) -> None:
+    def run(self, authorized_token: str,strategy_index:str, share_key: str, group_id: str) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
         strategy_dict = self.strategy_class.get(strategy_index)
-        white_list = self.sqlite.queryWhitelist(share_key)
+        white_list = self.sqlite.queryWhitelist(group_id)
         if strategy_dict is None:
             self.log(f"策略{strategy_index}不存在", '全局')
             self.log_dispatch('全局')
@@ -590,10 +592,10 @@ class Filter:
                                         operation += f'符合{sub_strat_name}<br>'
                                         # self.log(f"符合条件{sub_strat_dict['name']} → {sub_strat_dict['operation']}", group_name)
                                     verdict = index
-                                    verdict_dict_tosave[uniqueId] = (index, operation, reason)
                                     result_code = 1 if sub_strat_dict['operation'] == 'accept' else 2
                                     if "不打卡" in sub_strat_name:
                                         result_code = 3 # 踢出优先级最高
+                                    verdict_dict_tosave[uniqueId] = (index, f'{operation}{result_code}', reason)
                                     break
                                 else:
                                     if log_condition == 2 or log_condition == 0:
@@ -619,8 +621,9 @@ class Filter:
                             accepted_count += 1
                             self.log(f"【✓】接受加入(6s)", group_name)
                         elif result_code == 2 or result_code == 3:
-                            if uniqueId in white_list:
-                                self.log(f"【〇】白名单，不操作(6s)", group_name)
+                            # self.log(f"uniqueId:{uniqueId},white_list:{white_list}",group_name)
+                            if str(uniqueId) in white_list:
+                                self.log(f"【〇】白名单，不操作(12s)", group_name)
                                 continue
                             else:
                                 self.log(f"【✗】准备踢出(6s)", group_name)
@@ -663,7 +666,7 @@ class Filter:
                     sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
                     minPeople_min = min(minPeople_min, int(sub_strat_dict["minPeople"])) # 取最小的minPeople
                     if int(sub_strat_dict["minPeople"]) < remain_people_cnt:
-                        self.log(f'minpeople:{int(sub_strat_dict["minPeople"])}', group_name)
+                        # self.log(f'minpeople:{int(sub_strat_dict["minPeople"])}', group_name)
                         remain_people_cnt -= 1
                         memberId = this_verdict_dict['memberId']
                         uniqueId = this_verdict_dict['uniqueId']
@@ -680,21 +683,24 @@ class Filter:
                         if not has:
                             has = 1
                             self.log('本轮踢出：', group_name)
-                        self.log(f"{this_verdict_dict['name']}({this_verdict_dict['uniqueId']})", group_name)
+                        self.log(f"{this_verdict_dict['name']}[{this_verdict_dict['uniqueId']}]", group_name)
                     else:
                         memberId = this_verdict_dict['memberId']
                         uniqueId = this_verdict_dict['uniqueId']
                         new_kick_list.append(this_verdict_dict) # 加入待踢出列表
                         # self.log(f'[uId{uniqueId}@{this_verdict_dict["name"]}]暂不踢出，剩余{remain_people_cnt}人，最少{minPeople_min}人')
                 kick_list = new_kick_list
+                if has:
+                    self.log("(15s)", group_name)
+                    self.log_dispatch(group_name)
 
                 # 踢人
                 if important_remove_list:
                     if self.bcz.removeMembers(important_remove_list, share_key, authorized_token):
                         self.log(f"踢出不打卡优先列表成功", group_name)
                     else:
-                        self.log(f"踢出不打卡优先列表失败", group_name)
-                self.log_dispatch(group_name)
+                        self.log(f"踢出不打卡优先列表失败(20s)", group_name)
+                    self.log_dispatch(group_name)
                 if remove_list:
                     # 获取当前分钟，如果分钟个位数是0或1，则等待到个位数变成2的秒数
                     current_second = int(datetime.datetime.now().strftime("%S"))
@@ -702,17 +708,16 @@ class Filter:
                     if current_minute_units == 9: current_minute_units = -1
                     if current_minute_units <= 1:
                         # 获取到分钟尾数为2的秒数
-                        wait_second = 60 - current_second + (1 - current_minute_units) * 60
-                        self.log(f"普通踢出:排名即将更新，踢人前等待{wait_second}s", group_name)
+                        wait_second = 60 - current_second + (1 - current_minute_units) * 60 + random.randint(5, 20)
+                        self.log(f"总接受{total_accepted_count - total_quit_count}人<br>普通踢出:排名即将更新，踢人前等待({wait_second}s)", group_name)
                         self.log_dispatch(group_name)
                         time.sleep(wait_second)
                     if self.bcz.removeMembers(remove_list, share_key, authorized_token):
                     # if True:
                         self.log(f"普通踢出成功", group_name)
                     else:
-                        self.log(f"普通踢出失败", group_name)
+                        self.log(f"普通踢出失败(20s)", group_name)
                 self.log_dispatch(group_name)
-                remove_list_uniqueId.extend(important_remove_list) # 加入不打卡优先踢出列表
 
                 # 成员列表更新
                 has = 0
@@ -777,7 +782,7 @@ class Filter:
                 else:
                     delay = min(delay + delay_delta, 57.5) # 筛选暂停，延迟增加
                 # 将总人数标黄
-                self.log(f"本次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）<br>下次检测延迟{delay}s({delay}s)", group_name)
+                self.log(f"第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）<br>下次检测延迟{delay}s({delay}s)", group_name)
                 self.log_dispatch(group_name)
                 time.sleep(delay)
         
@@ -795,16 +800,15 @@ class Filter:
                     threading.Thread(target=self.stop, args=()).start()
                     raise e
 
-            
 
-    def start(self, authorized_token: str, share_key: str, strategy_index: str) -> None:
+    def start(self, authorized_token: str, share_key: str, group_id: str, strategy_index: str) -> None:
         # 是否验证？待测试，如果没有那就可怕了
         self.stop(share_key) # 防止重复运行
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
 
         
-        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index, share_key))
+        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index, share_key, group_id))
         self.activate_groups[share_key]['tids'].start()
 
         time.sleep(1) # 前端技术性延迟
