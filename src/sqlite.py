@@ -715,10 +715,12 @@ class SQLite:
         conn = self.connect()
         cursor = conn.cursor()
         result = {}
+        this_monday = datetime.now() - timedelta(days=datetime.now().weekday())
+        today = datetime.now().strftime('%Y-%m-%d')
         for unique_id in unique_id_list:
             cursor.execute(
-                f'SELECT OPERATION FROM STRATEGY_VERDICT WHERE UNIQUE_ID = ? AND DATE = ?',
-                (unique_id, datetime.now().strftime('%Y-%m-%d'))
+                f'SELECT OPERATION FROM STRATEGY_VERDICT WHERE UNIQUE_ID = ? AND DATE <= ? AND DATE >= ?',
+                (unique_id, today, this_monday.strftime('%Y-%m-%d'))
             )
             # 取出最后一位作为标志，1接收，2拒绝
             item = cursor.fetchone()

@@ -426,6 +426,9 @@ class Filter:
 
     def run(self, authorized_token: str,strategy_index:str, share_key: str, group_id: str) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
+        # 为了让请求线程更合理，不再使用main_token，将authorized_token覆盖share_key
+        share_key = authorized_token
+
         strategy_dict = self.strategy_class.get(strategy_index)
         white_list = self.sqlite.queryWhitelist(group_id)
         if strategy_dict is None:
@@ -532,9 +535,9 @@ class Filter:
                     try:
                         memberId = personal_dict_temp['member_id']
                     except:
-                        self.log(json.dumps(personal_dict_temp), group_name)
-                        self.log(f"[{uniqueId}]没有member_id(99998s)", group_name)
-                        self.log_dispatch(group_name)
+                        # self.log(json.dumps(personal_dict_temp), group_name)
+                        # self.log(f"[{uniqueId}]没有member_id(99998s)", group_name)
+                        # self.log_dispatch(group_name)
                         continue
                     # 由于getGroupInfo没有更新班内昵称获取模块，所以暂时修改了DakaHistory函数的返回值，将group_nickname加入到返回值中
                     personal_dict_temp['group_nickname'] = member_dict_temp['week_daka_info']['group_nickname'][uniqueId]
