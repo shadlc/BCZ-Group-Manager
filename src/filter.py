@@ -8,6 +8,8 @@ import flask_sse
 import uuid
 import logging
 import random
+import pyautogui
+import traceback
 logger = logging.getLogger(__name__)
 
 import time
@@ -424,10 +426,53 @@ class Filter:
             with self.clients_message_lock:
                 self.clients_message.pop(client_id, None)
 
-    def run(self, authorized_token: str,strategy_index:str, share_key: str, group_id: str) -> None:
+    def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
-        # 为了让请求线程更合理，不再使用main_token，将authorized_token覆盖share_key
-        share_key = authorized_token
+
+        pyautogui.FAILSAFE = False # 关闭自动退出功能
+
+        member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+        group_id = member_dict_temp['id']
+        # 因为保存策略index要用到group_id，所以先获取
+        
+
+        leader_id = member_dict_temp['leader_id']
+        group_count_limit = member_dict_temp['count_limit']
+        group_name = member_dict_temp['name']# log要有group_name
+
+        # 等待直到启动时间
+        if scheduled_hour is not None and scheduled_minute is not None:
+            now = datetime.datetime.now()
+            if now.hour > scheduled_hour or (now.hour == scheduled_hour and now.minute >= scheduled_minute):
+                self.log('已经超过启动时间，立即启动(10s)', group_name)
+                self.log_dispatch(group_name)
+            else:
+                self.log(f'设置了未来启动{scheduled_hour}:{scheduled_minute}，等待({(scheduled_hour-now.hour)*3600+(scheduled_minute-now.minute)*60}s)', group_name)
+                self.log_dispatch(group_name)
+                caps_state = True
+                while True:
+                    now = datetime.datetime.now()
+                    if now.hour == scheduled_hour and now.minute == scheduled_minute:
+                        break
+                    time.sleep(8)
+                    pyautogui.press('capslock') # 防止系统休眠
+                    caps_state = not caps_state
+                    self.log(f"等待启动时间：{now.hour}:{now.minute}，目标{scheduled_hour}:{scheduled_minute}，还有{(scheduled_hour-now.hour)*60+(scheduled_minute-now.minute)}min(10s)", group_name)
+                    self.log_dispatch(group_name)
+                self.log('启动时间到！(10s)', group_name)
+                self.log_dispatch(group_name)
+                if not caps_state:
+                    pyautogui.press('capslock') 
+
+
+        # 筛选策略-链
+        self.log(f'剩余{len(strategy_index_list)}个任务', group_name)
+        strategy_index = strategy_index_list[0]
+        strategy_index_list.pop(0)
+
+        # 远程发卡机
+        pass_key = self.config.pass_key
+        # 用法：记下pass_key，将需要加入白名单的用户unique_id乘上(pass_key*10000+日期MMDD)，让该用户将结果的前4位加入班内昵称即可不踢出。
 
         strategy_dict = self.strategy_class.get(strategy_index)
         white_list = self.sqlite.queryWhitelist(group_id)
@@ -440,7 +485,6 @@ class Filter:
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
 
-        today_date = datetime.datetime.now().strftime("%m-%d")
         delay = 3
         delay_delta = 1.5 
 
@@ -455,14 +499,7 @@ class Filter:
         
         member_list = [] # 当前成员列表
         member_check_count = {} # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
-        member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
-        group_id = member_dict_temp['id']
-        # 因为保存策略index要用到group_id，所以先获取
         
-
-        leader_id = member_dict_temp['leader_id']
-        group_count_limit = member_dict_temp['count_limit']
-        group_name = member_dict_temp['name']
 
         
 
@@ -495,7 +532,8 @@ class Filter:
         
         while self.activate_groups[share_key]['stop'] == False:
             try:
-                
+                pyautogui.press('capslock') 
+                pass_key_today = int(pass_key)*10000+int(time.strftime("%m%d"))
                 
 
                 # 线程上传空间，操作commit后放入共享空间然后清空
@@ -530,7 +568,9 @@ class Filter:
                 accept_list = []
                 quit_list = []
                 important_remove_list = [] # 重要踢出列表，不打卡的
+                pyautogui.press('capslock') 
                 for i, personal_dict_temp in enumerate(member_dict_temp["members"]):
+                    
                     uniqueId = personal_dict_temp['id']
                     try:
                         memberId = personal_dict_temp['member_id']
@@ -540,7 +580,10 @@ class Filter:
                         # self.log_dispatch(group_name)
                         continue
                     # 由于getGroupInfo没有更新班内昵称获取模块，所以暂时修改了DakaHistory函数的返回值，将group_nickname加入到返回值中
-                    personal_dict_temp['group_nickname'] = member_dict_temp['week_daka_info']['group_nickname'][uniqueId]
+                    try:
+                        personal_dict_temp['group_nickname'] = member_dict_temp['week_daka_info']['group_nickname'][uniqueId]
+                    except:
+                        personal_dict_temp['group_nickname'] = ''
 
                     if self.activate_groups[share_key]['stop'] == True:
                         break
@@ -550,8 +593,14 @@ class Filter:
                         # self.log(f'[id:{uniqueId}]班长')
                         continue
                     if uniqueId not in member_list:
-                        member_list.append(uniqueId)
+                        
                         self.log(f'新成员:{personal_dict_temp["group_nickname"]}({personal_dict_temp["nickname"]})[{uniqueId}]', group_name)
+                        # 如果当前时间戳 - 完成时间戳 < 180s，不处理，因为可能还没完成打卡
+                        if (int(time.time()) - personal_dict_temp['completed_time_stamp']) < 60:
+                            self.log(f"DELTA:{(int(time.time()) - personal_dict_temp['completed_time_stamp'])}< 60，不处理(6s)", group_name)   
+                            self.log_dispatch(group_name)
+                            continue
+                        member_list.append(uniqueId)
                         newbies_count += 1 # 新增成员
                         
                         
@@ -596,8 +645,11 @@ class Filter:
                                         # self.log(f"符合条件{sub_strat_dict['name']} → {sub_strat_dict['operation']}", group_name)
                                     verdict = index
                                     result_code = 1 if sub_strat_dict['operation'] == 'accept' else 2
-                                    if "不打卡" in sub_strat_name:
-                                        result_code = 3 # 踢出优先级最高
+                                    if result_code == 2:
+                                        if str(uniqueId) in white_list or str(uniqueId * pass_key_today)[:4] in personal_dict_temp['group_nickname']:
+                                            result_code = -1
+                                        elif "不打卡" in sub_strat_name:
+                                            result_code = 3 # 踢出优先级最高
                                     verdict_dict_tosave[uniqueId] = (index, f'{operation}{result_code}', reason)
                                     break
                                 else:
@@ -623,10 +675,16 @@ class Filter:
                             
                             accepted_count += 1
                             self.log(f"【✓】接受加入(6s)", group_name)
-                        elif result_code == 2 or result_code == 3:
+                        elif result_code == 2 or result_code == 3 or result_code == -1:
                             # self.log(f"uniqueId:{uniqueId},white_list:{white_list}",group_name)
-                            if str(uniqueId) in white_list:
-                                self.log(f"【〇】白名单，不操作(12s)", group_name)
+                            print('!!', uniqueId, pass_key_today)
+                            if str(uniqueId * pass_key_today)[:4] in personal_dict_temp['group_nickname']:
+                                self.log(f"【〇】远程添加白名单，不操作(18s)", group_name)
+                                self.log_dispatch(group_name)
+                                continue
+                            elif str(uniqueId) in white_list:
+                                self.log(f"【〇】白名单，不操作(18s)", group_name)
+                                self.log_dispatch(group_name)
                                 continue
                             else:
                                 self.log(f"【✗】准备踢出(6s)", group_name)
@@ -712,9 +770,10 @@ class Filter:
                     if current_minute_units <= 1:
                         # 获取到分钟尾数为2的秒数
                         wait_second = 60 - current_second + (1 - current_minute_units) * 60 + random.randint(5, 20)
-                        self.log(f"总接受{total_accepted_count - total_quit_count}人<br>普通踢出:排名即将更新，踢人前等待({wait_second}s)", group_name)
-                        self.log_dispatch(group_name)
-                        time.sleep(wait_second)
+                        # 暂时废除该功能
+                        # self.log(f"总接受{total_accepted_count - total_quit_count}人<br>普通踢出:排名即将更新，踢人前等待({wait_second}s)", group_name)
+                        # self.log_dispatch(group_name)
+                        # time.sleep(wait_second)
                     if self.bcz.removeMembers(remove_list, share_key, authorized_token):
                     # if True:
                         self.log(f"普通踢出成功", group_name)
@@ -786,32 +845,50 @@ class Filter:
                     delay = min(delay + delay_delta, 57.5) # 筛选暂停，延迟增加
                 # 将总人数标黄
                 self.log(f"第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）<br>下次检测延迟{delay}s({delay}s)", group_name)
+
                 self.log_dispatch(group_name)
+                if total_accepted_count - total_quit_count > 197:
+                    self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
+                    self.log_dispatch(group_name)
+                    break
                 time.sleep(delay)
         
             except Exception as e:
-                if len(self.clients_message) == 0:
+                # if len(self.clients_message) == 0:
                     # 无人值守，等待10s后重试
-                    self.log(f"有点问题呐...等待10s后重试(10s)", group_name)
+                    self.log(f"\033[1;31m有点问题呐...等待10s后重试(10s)\033[0m", group_name)
+                    self.log(e, group_name)
+                    # 打印堆栈信息
+                    traceback.print_exc()
                     self.log_dispatch(group_name)
                     time.sleep(10.5)
                     pass
-                else:
-                    self.log(f"出现错误！{e}(99999s)", group_name)
-                    self.log_dispatch(group_name)
-                    # 创建线程调用filter.stop()
-                    threading.Thread(target=self.stop, args=()).start()
-                    raise e
+                # else:
+                #     self.log(f"出现错误！{e}(99999s)", group_name)
+                #     self.log_dispatch(group_name)
+                #     # 创建线程调用filter.stop()
+                #     threading.Thread(target=self.stop, args=()).start()
+                
+        self.log(f'{strategy_dict["name"]}筛选结束！', group_name)
+        if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
+            self.log(f'进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选', group_name)
+            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id))
+            self.activate_groups[share_key]['tids'].start()
+        else:
+            self.log('所有筛选结束！', group_name)
+            threading.Thread(target=self.stop, args=(share_key,)).start()
+        self.log('(99998s)', group_name)
+        self.log_dispatch(group_name)
 
 
-    def start(self, authorized_token: str, share_key: str, group_id: str, strategy_index: str) -> None:
-        # 是否验证？待测试，如果没有那就可怕了
+
+    def start(self, authorized_token: str, share_key: str, group_id: str, strategy_index_list: list[str], scheduled_hour: int = None, scheduled_minute: int = None) -> None:
+        # 时间含义：24h，到当天的scheduled_hour:scheduled_minute时，开始筛选
         self.stop(share_key) # 防止重复运行
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
 
-        
-        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index, share_key, group_id))
+        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute))
         self.activate_groups[share_key]['tids'].start()
 
         time.sleep(1) # 前端技术性延迟

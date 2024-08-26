@@ -248,7 +248,7 @@ class BCZ:
             })
         return groups
 
-    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 3) -> dict:
+    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 1) -> dict:
         '''获取【班内主页】信息group/information'''
         buffer_data = self.buffered_groups.get(share_key)
         buffer_time = buffer_data.get('data_time') if buffer_data else None
@@ -443,7 +443,7 @@ class BCZ:
         self.buffered_groups[group_info['shareKey']] = group
         return self.buffered_groups.get(group_info['shareKey'])
 
-    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 3) -> dict:
+    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 1) -> dict:
         '''获取小班成员历史打卡信息'''
         if parsed:
             # 暂定只有分离的记录模式

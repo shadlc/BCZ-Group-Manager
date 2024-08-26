@@ -150,8 +150,14 @@ function $newCard(msg) {
                     // console.log(delay);
                 }
                 catch (error) {
-                    delay = msg.length * 60;
+                    delay = msg.length * 120;
                 }
+            }
+            console.log(delay);
+            // 如果delay不是数字，则设置为msg*60
+
+            if (isNaN(delay)) {
+                delay = msg.length * 120;
             }
             if (delay == 99999000) {
                 // 错误代码

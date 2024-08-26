@@ -342,7 +342,11 @@ def start_filter():
     '''开始筛选'''
     slice_log()
     group_id = str(request.json.get('group_id'))
-    strategy_id = request.json.get('strategy_id')
+    strategy_id_list = request.json.get('strategy_id_list')
+    scheduled_hour = request.json.get('scheduled_hour', None)
+    scheduled_minute = request.json.get('scheduled_minute', None)
+    print(f'开始筛选: group_id={group_id}, strategy_id_list={strategy_id_list}, scheduled_hour={scheduled_hour}, scheduled_minute={scheduled_minute}')
+    # return restful(200, '测试成功...')
     conn = sqlite.connect()
     cursor = conn.cursor()
     result = cursor.execute(f'SELECT SHARE_KEY FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
@@ -355,7 +359,7 @@ def start_filter():
         return restful(404, '请设置班长AUTH_TOKEN')
     auth_token = result[0]
     try:
-        filter.start(auth_token, share_key, group_id, strategy_id)
+        filter.start(auth_token, share_key, group_id, strategy_id_list, scheduled_hour, scheduled_minute)
         return restful(200, '筛选成功启动! ヾ(≧▽≦*)o')
     except Exception as e:
         return restful(500, f'筛选启动失败：{e}')

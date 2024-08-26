@@ -229,7 +229,7 @@ let group_id = '';
 
 
     function selectStrategyAndStart(strategy_id){
-      // 用于在ToggleFilterModal中选择筛选策略并启动
+      // 用于在ToggleFilterModal中选择筛选策略并启动，暂时废弃
       showModal('正在启动筛选...<br>可以关闭本信息', '启动中');
       fetch('./start_filter', {
         method: 'POST',
@@ -265,7 +265,7 @@ let group_id = '';
           notify(data.msg);
           return;
         }
-        let modal_content = '<table class="simple-table"><tr><th>名称</th><th>子条目名称</th></tr>'
+        let modal_content = '<div id="strategy_list"><table class="simple-table"><tr><th>名称</th><th>子条目名称</th></tr>'
         
         for (let i in data.data) {
           let strategy = data.data[i];
@@ -276,16 +276,79 @@ let group_id = '';
           }
           // console.log(i)
           modal_content += `
-          <tr class="btn" onclick="selectStrategyAndStart('`+i+`')">
+          <tr class="btn" onclick="pushStrategyList('${i}','${strategy.name}')">
             <td>`+strategy.name+`</td>
             <td>`+sub_item_name+`</td>
           </tr>
           `;
         }
         modal_content += '</table>';
+        // 每选择一个策略，push一个div到下面的链中，最后一起发送出去
+        modal_content += '<p>接受198人完成筛选，下面是已选策略链：</p><div class="center" id="strategy_list_container"></div>';
+        // 添加启动时间，用输入框，提交时再检查是否合法
+        modal_content += '<div class="input-group"><input type="text" id="start_time_input" style="width: 15rem; " placeholder="启动时间 如08:30 立即启动不填"></div>';
+        // 发送按钮
+        modal_content += '<button class="center btn" onclick="startFilter()">启动</button></div>'; 
         showModal(modal_content, '请选择筛选策略')
       });
     }
+    function pushStrategyList(strategy_id, strategy_name){
+      // 向下面的链中添加一个div
+      let container = document.querySelector('#strategy_list_container');
+      let strategy_div = document.createElement('div');
+      strategy_div.setAttribute('class','strategy-item');
+      let strategy_info = document.createElement('span');
+      strategy_div.id = strategy_id;
+      strategy_info.textContent = `${strategy_name}(点击删除)`;
+      // 被点击时删除自身
+      strategy_info.onclick = function(){
+        this.parentNode.parentNode.removeChild(this.parentNode);
+      }
+      strategy_div.appendChild(strategy_info);
+      container.appendChild(strategy_div)
+    }
+    function startFilter(){
+      // 向后台发送筛选策略
+      let strategy_list = document.querySelectorAll('.strategy-item');
+      let strategy_id_list = [];
+      for (let i = 0; i < strategy_list.length; i++) {
+        strategy_id_list.push(strategy_list[i].id);
+      }
+      console.log(strategy_id_list  )
+      if (strategy_id_list.length == 0) {
+        notify('请选择筛选策略');
+        return;
+      }
+      // 只需发送hour和minute
+      scheduled_time = document.getElementById('start_time_input').value.split(':');
+      let scheduled_hour = parseInt(scheduled_time[0]); 
+      let scheduled_minute = parseInt(scheduled_time[1]);
+      showModal('正在启动筛选...<br>可以关闭本信息', '启动中');
+      fetch('./start_filter', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          'group_id': group_id,
+          'strategy_id_list': strategy_id_list,
+          'scheduled_hour': scheduled_hour,  
+          'scheduled_minute': scheduled_minute
+        })
+      })
+      .then(response => response.json())
+      .then(data => {
+        if (data.retcode != 0) {
+          notify(data.msg);
+          return;
+        }
+        notify(data.msg);
+        // 将筛选按钮改成停止
+        let filter_btn = document.querySelector('#filter_btn');
+        filter_btn.textContent = '停止筛选';
+        filter_btn.onclick = StopFilter;
+        hideAllModals();
+      })
+    }
+
     // 获取小班信息
     function queryGroupDetails() {
       let loading_text = document.querySelector('.loading-text');
@@ -647,7 +710,7 @@ let group_id = '';
       } else {
         member_filter.classList.add('hide');
       }
-      console.log(accepted_filter)
+      // console.log(accepted_filter)
       for (let i in group.members) {
         let member = group.members[i];
         let group_nickname_span = '';
@@ -662,6 +725,9 @@ let group_id = '';
         }
         else if (accepted_filter[member.id] == '0') {
           badges += '<span class="badge red-border">未知</span>';
+        }
+        else if (accepted_filter[member.id] == '-1') {
+          badges += '<span class="badge green-border">白名单</span>';
         }
         else{
           badges += '<span class="badge yellow-border">准备踢出</span>';

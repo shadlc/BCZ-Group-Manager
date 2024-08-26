@@ -4,6 +4,7 @@ import time
 import json
 import logging
 import hashlib
+import random
 
 logger = logging.getLogger(__name__)
 
@@ -20,6 +21,8 @@ class Config:
             'daily_record': '59 23 * * *',
             'daily_verify': '00 04 * * *',
             'cache_second': 600,
+            'pass_key': random.randint(1000, 9999), # 用于筛选时班长远程发卡
+            # 用法：记下pass_key，将需要加入白名单的用户unique_id乘上(pass_key*10000+日期MMDD)，让该用户将结果的前4位加入班内昵称即可不踢出。
             'real_time_cache_favorite': False,
             'groups_strategy_id':{}
         }
@@ -33,6 +36,7 @@ class Config:
         self.daily_record = self.raw.get('daily_record', '')
         self.daily_verify = self.raw.get('daily_verify', '')
         self.cache_second = self.raw.get('cache_second', '')
+        self.pass_key = self.raw.get('pass_key', '')
         self.real_time_cache_favorite = self.raw.get('real_time_cache_favorite', '')
         self.verify()
 
