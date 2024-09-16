@@ -55,7 +55,7 @@
 - **`daily_record`以`Crontab`语法自动记录每天数据，默认为晚上23点59分，即`59 23 * * *`**
 - **`daily_verify`晚于自动记录时间后的打卡数据会遗失，因此以`Crontab`语法自动校验本周与上周打卡记录，补上遗失的打卡数据，默认为凌晨4点整，即`00 04 * * *`**
 - **`cache_second`数据查询功能实时数据的查询间隔，设置缓存时间防止过于频繁的实时查询，默认为600秒**
-
+- **`pass_key`班长远程授权白名单用户。使用方法是让被添加者进班后改名加上[(4位日期x10000+pass_key)x用户百词斩id]的前四位**
 
 ## 🔌 API
 
@@ -189,6 +189,10 @@ GET `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_vo`
 
 ### 铜板记录
 GET `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_records`
+
+## ⚠️ 注意事项
+
+ - 使用周一无人值守模式时，笔记本电脑请记得插电，并设置休眠、睡眠时间为永不（但可以尽快关闭显示器）
 
 ## ⚠️ 免责申明
 

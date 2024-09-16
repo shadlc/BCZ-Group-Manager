@@ -297,12 +297,11 @@ def save_strategy():
     except Exception as e:
         return restful(500, f'保存策略时发生错误(X_X): {e}')
     
-@app.route('/save_all_strategies', methods=['GET'])
+@app.route('/save_all_strategies', methods=['GET', 'POST'])
 def save_all_strategy():
     '''保存所有策略'''
-    # 析构函数可能不靠谱，手动保存开关（doge）
     strategy.save()
-    return restful(200, '你怎么知道的(╯‵□′)╯?')
+    return restful(200, '保存成功! ヾ(≧▽≦*)o')
 
 @app.route('/query_filter_log', methods=['POST'])
 def query_filter_log():

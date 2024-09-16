@@ -243,7 +243,8 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                 <div class="center-tag btn" onclick="addSubItem()">添加子条目</div>
                 <div class="center-tag btn" onclick="copyCurrentStrategy()">复制策略</div>
                 <div class="center-tag btn" onclick="deleteCurrentStrategy()">删除本策略</div>
-                <div class="center-tag btn" onclick="saveCurrentStrategy()">保存本策略</div>
+                <div class="center-tag btn" onclick="saveCurrentStrategy()">上传本策略</div>
+                <div class="center-tag btn" onclick="saveAllStrategies()">保存所有上传的策略</div>
             </div>
         </div>
     `;
@@ -523,7 +524,27 @@ function deleteCondition(button) {
 }
 
 
-
+function saveAllStrategies() {
+    // 直接请求/save_all_strategies接口，将所有策略保存到数据库
+    return fetch(`../save_all_strategies`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            strategy_dict: strategies
+        })
+    }).then(response => {
+        if (response.ok) {
+            notify('保存成功');
+            hideAllModals();
+        }
+    }).catch(error => {
+        notify(`保存失败：${error}`);
+        hideAllModals();
+    });
+}
+    
 
 function saveCurrentStrategy(copy_current_strategy = false) {
     // currentStrategyDiv = document.querySelector('.strategy-info');
@@ -561,14 +582,14 @@ function saveCurrentStrategy(copy_current_strategy = false) {
     
     return hashStrategy(currentStrategy).then( hashId => {
         if (hashId === currentStrategyHashId) {
-            notify("策略未修改，无需保存", 500);
+            notify("策略未修改，无需重新上传", 500);
             if (copy_current_strategy) copyCurrentStrategy(hashId);
             return;
         } // 未修改，不保存
         delete strategies[currentStrategyHashId];
         strategies[hashId] = currentStrategy;
 
-        showModal('保存修改中，请稍候...<br>此页面可关闭', '提示');
+        showModal('上传中，请稍候...<br>此页面可关闭', '提示');
         // 发送到服务器
         return fetch(`../save_strategy`, {
             method: 'POST',
@@ -581,9 +602,9 @@ function saveCurrentStrategy(copy_current_strategy = false) {
             })
         }).then(response => {
             if (response.ok){
-                notify('保存成功');
+                notify('上传成功');
                 if (copy_current_strategy) showModal(`复制成功，将要复制策略名称${currentStrategy.name}`, '提示');
-                else showModal('保存成功，即将重新加载', '提示');
+                else showModal('上传成功，即将重新加载', '提示');
                 // 刷新页面
                 setTimeout(() => {
                     initStrategyPage().then((data) => {
@@ -593,7 +614,7 @@ function saveCurrentStrategy(copy_current_strategy = false) {
                 }, 1000);
             }
         }).catch(error => {
-            notify(`保存失败：${error}`);
+            notify(`上传失败：${error}`);
             hideAllModals();
         });
     });
