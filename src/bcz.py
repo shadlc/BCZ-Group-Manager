@@ -410,7 +410,7 @@ class BCZ:
                 'data_time': data_time,
             })
             if member['leader']:
-                group['leader'] = member['nickname']
+                group['leader'] = nickname
                 group['leader_id'] = member_id
 
         # 利用班内排行榜即可获取小班昵称，因此注释该段
