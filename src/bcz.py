@@ -432,7 +432,7 @@ class BCZ:
                 nickname = re.sub(self.invalid_pattern, '', member['nickname'])
                 for member_info in members:
                     if member_id == member_info['id'] and member_info['nickname'] != nickname:
-                        member_info['group_nickname'] = member['nickname']
+                        member_info['group_nickname'] = nickname
         else:
             group['token_invalid'] = True
 
