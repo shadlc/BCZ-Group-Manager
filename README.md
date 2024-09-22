@@ -190,10 +190,6 @@ GET `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_vo`
 ### 铜板记录
 GET `https://learn.baicizhan.com/api/mall/proxy/creditmall/get_credit_records`
 
-## ⚠️ 注意事项
-
- - 使用周一无人值守模式时，笔记本电脑请记得插电，并设置休眠、睡眠时间为永不（但可以尽快关闭显示器）
-
 ## ⚠️ 免责申明
 
 感谢您选择使用本小班数据管理器。在使用本程序之前, 请您**仔细阅读**并理解以下免责声明内容：

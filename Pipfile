@@ -10,7 +10,6 @@ requests = "*"
 flask = "*"
 flask-sse = "*"
 httpx = "*"
-pyautogui = "*"
 
 [dev-packages]
 

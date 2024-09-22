@@ -46,7 +46,7 @@ processing = False
 logger = logging.getLogger(__name__)
 
 if not config.main_token:
-    logger.info('未配置授权令牌，请在[config.json]文件中填入正确main_token后重启，程序会在5秒后自动退出')
+    print('未配置授权令牌，请在[config.json]文件中填入正确main_token后重启，程序会在5秒后自动退出')
     time.sleep(5)
     sys.exit(0)
 

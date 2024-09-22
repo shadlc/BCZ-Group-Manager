@@ -82,7 +82,6 @@ class BCZ:
             current_headers['Cookie'] += f'{key}={value};'
         # 需要转为str
         return current_headers
-        return current_headers
 
 
     def fetch(self, url: str, method: str = 'GET', headers: dict = {}, payload = None) -> httpx.Response:
@@ -149,7 +148,7 @@ class BCZ:
             token_valid = True
         return {
             'token_valid': token_valid,
-            'uid': main_info['uid'], 
+            'uid': main_info['uid'],
             'name': main_info['name'],
         }
 
