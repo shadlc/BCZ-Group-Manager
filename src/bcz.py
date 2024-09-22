@@ -55,6 +55,9 @@ class BCZ:
         self.hash_rmb = {}
         self.buffered_groups = {}
         self.buffered_daka_history = {}
+        self.poster_tracker = [] # 记录已发送过的海报内容
+        self.buffered_poster_list = {} # 记录grade1-grade5的海报列表
+        self.poster_fetch_time = {} # 记录上次获取grade1-grade5的海报的时间
 
     def getHeaders(self, token: str = '') -> dict:
         '''获取请求头'''
@@ -107,6 +110,97 @@ class BCZ:
             return response
         
     
+    def joinGroup(self, share_key: str, access_token: str) -> bool:
+        '''加入小班'''
+        headers = self.getHeaders(access_token)
+        headers["Content-Type"] = "application/json"
+        # headers["Origin"] = "https://group.baicizhan.com"
+        # headers["Referer"] = "https://group.baicizhan.com"
+        json = {
+            "shareKey": share_key,
+            "source": 3
+        }
+        response = requests.post(f"https://group.baicizhan.com/group/join", headers=headers, json=json, timeout=10)
+        if response.json().get("code",0) != 1:
+            logger.info(f"加入小班失败，请检查{response.json()}")
+            return False
+        logger.info(f"加入小班成功")
+
+    def quitGroup(self, share_key: str, access_token: str) -> bool:
+        '''退出小班'''
+        headers = self.getHeaders(access_token)
+        headers['Content-Type'] = 'application/json; charset=UTF-8'
+        response_json = requests.post(f'https://group.baicizhan.com/group/quit?shareKey={share_key}', data='{}', headers=headers).json()
+        if response_json.get("code",0) != 1:
+            logger.info(f"退出小班失败，请检查{response_json}")
+            return False
+        logger.info(f"退出小班成功")
+        return True
+
+    def sendPoster(self, share_key: str, group_id: str, grade: int, access_token: str, poster: str, poster_session: int) -> bool:
+        '''发送海报'''
+        
+        if self.poster_fetch_time[grade-1] + 60 < time.time():
+            get_url = 'https://group.baicizhan.com/group/get_recruitment_post_list?anchorId=0&direction=1'
+            self.poster_fetch_time = time.time()
+            headers = self.getHeaders(access_token)
+            response = requests.get(get_url, headers=headers, timeout=10)
+            self.buffered_poster_list[grade-1] = response.json().get('data')['recruitmentPostVoList']
+
+
+        min_index = 1000000
+        for content in self.poster_tracker: # 之前发过的海报内容
+            for i, post in enumerate(self.buffered_poster_list[grade-1]):
+                if post['content'] == content:
+                    min_index = min(min_index, i)
+                    break
+        
+        if min_index < poster_session:
+            logger.info(f"年级{grade}区的海报间隔{min_index}过短，继续等待")
+            return False
+        
+        
+        get_url = 'https://group.baicizhan.com/group/get_recruitment_style_info'
+        headers = self.getHeaders(access_token)
+        response = requests.get(get_url, headers=headers, timeout=10)
+        style_info = response.json().get('data')['list']
+        style = -1
+        for style in style_info:
+            if post['credit'] == 0 and post['count'] > 0: # 查询还有没有免费的海报
+                style = style['id']
+                break
+        for style in style_info:
+            if post['count'] > 0:
+                style = style['id']
+                break
+        if style == -1:
+            logger.info(f"没有可用的海报样式")
+            return False
+        
+
+        post_url = 'https://group.baicizhan.com/group/publish_post'
+        headers = self.getHeaders(access_token)
+        headers["Content-Type"] = "application/json"
+        headers["Origin"] = "https://group.baicizhan.com"
+        headers["Referer"] = "https://group.baicizhan.com/wanted_board/create"
+        json = {
+            "content": poster,
+            "groupId": group_id,
+            "style": style,
+            "type": 1,
+        }
+        response = requests.post(post_url, headers=headers, json=json, timeout=10)
+        data = response.json()
+        if data.get("code",0) != 1:
+            logger.info(f"发送海报失败，请检查{response.json()}")
+            return False
+        if data['data']['state'] == 2:
+            logger.info('已过审')
+            return True
+        else:
+            logger.info('▲ 海报存在问题，请检查')
+            return False
+
     # 移除成员
     def removeMembers(self, user_id: list, share_key: str, access_token: str) -> bool:
         
@@ -207,12 +301,12 @@ class BCZ:
             user_info['dependable_frame'] = 4
         return user_info
 
-    def getUserGroupInfo(self, user_id: str = None) -> list[dict]:
+    def getUserGroupInfo(self, user_id: str = None, access_token: str = '') -> list[dict]:
         '''获取【我的小班】信息own_groups'''
         if not user_id:
             return {}
         url = f'{self.group_list_url}?uniqueId={user_id}'
-        headers = self.getHeaders()
+        headers = self.getHeaders(access_token)
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
