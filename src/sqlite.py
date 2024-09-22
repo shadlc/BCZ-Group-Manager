@@ -237,6 +237,28 @@ class SQLite:
             return True
         return False
     
+    def queryGroupName(self, group_id: str) -> str:
+        '''查询小班名称'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        result = cursor.execute(f'SELECT NAME FROM GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
+        logger.debug(f'查询小班{group_id}的名称: {result}')
+        conn.close()
+        if result:
+            return result[0]
+        return ''
+    
+    def queryGroupAuthToken(self, group_id: str) -> str:
+        '''查询小班授权令牌'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        result = cursor.execute(f'SELECT AUTH_TOKEN FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
+        logger.debug(f'查询小班{group_id}的授权令牌: {result}')
+        conn.close()
+        if result:
+            return result[0]
+        return ''
+    
     def queryGroupShareKey(self, group_id: str) -> str:
         '''查询小班分享码'''
         conn = self.connect(self.db_path)
@@ -247,7 +269,7 @@ class SQLite:
         if result:
             return result[0]
         return ''
-        
+
 
 
 
