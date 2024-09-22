@@ -33,22 +33,28 @@ class Schedule:
                 now = time.localtime()
                 if (now.tm_min in self.cron[0] and
                         now.tm_hour in self.cron[1] and
-                        now.tm_mday in self.cron[2] and
-                        now.tm_mon in self.cron[3] and
-                        now.tm_wday in self.cron[4]):
+                        now.tm_mday in self.cron[2] and # 日期
+                        now.tm_mon in self.cron[3] and # 月份
+                        now.tm_wday in self.cron[4]): # 星期，0-6，0为星期一
                     logger.info(f'执行计划[{self.crontab_expr}]')
                     threading.Thread(
                         target=self.exec,
                         args=args,
                         kwargs=kwargs,
-                        daemon=True,
+                        daemon=True, # 计划任务线程不阻塞主线程
                     ).start()
+                    while (now.tm_min in self.cron[0] and
+                        now.tm_hour in self.cron[1] and
+                        now.tm_mday in self.cron[2] and
+                        now.tm_mon in self.cron[3] and
+                        now.tm_wday in self.cron[4]):
+                        time.sleep(60) # 同一个时间段，只执行一次
                 time.sleep(60)
             except:
                 traceback.print_exc()
 
     def parse_crontab(self, crontab_expr: str) -> list:
-        '''解析crontab'''
+        '''解析crontab 45-49,59 23 * * *'''
         fields = crontab_expr.split(' ')
         minute = self.parse_field(fields[0], 0, 59)
         hour = self.parse_field(fields[1], 0, 23)
@@ -58,7 +64,7 @@ class Schedule:
         return (minute, hour, day_of_month, month, day_of_week)
 
     def parse_field(self, field: str, min_value: int, max_value: int):
-        '''解析field'''
+        '''解析field, *通配，-范围，逗号分隔'''
         if field == '*':
             return set(range(min_value, max_value + 1))
         values = set()

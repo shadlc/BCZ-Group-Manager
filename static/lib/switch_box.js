@@ -21,11 +21,19 @@ function SwitchRight(elementShow)
         elementHide = document.getElementById(historyRight[historyRight.length - 1]);
         elementHide.style.animation = 'Fade 0.8s forwards';
         elementHide.classList.add('back');
+        // 定时器：0.8s后给元素display: none
+        setTimeout(function () {
+            elementHide.style.display = 'none';
+        }, 800);
 
     }
-    document.getElementById(elementShow).classList.remove('hide');
-    document.getElementById(elementShow).classList.remove('back');
-    document.getElementById(elementShow).style.animation = 'Show 0.8s forwards';
+    var element_show = document.getElementById(elementShow);
+    element_show.classList.remove('hide');
+    element_show.classList.remove('back');
+    element_show.style.display = 'flex';
+    element_show.style.animation = 'Show 0.8s forwards';
+    
+    
     // 记录历史记录
     historyRight.push(elementShow);
 }
@@ -50,11 +58,18 @@ function SwitchPop()
     //     document.getElementById(historyLeft[historyLeft.length - 1]).style.animation = 'ShowRevert 0.8s forwards';
     // }
     // if (historyRight.length > 1) {
-        document.getElementById(historyRight[historyRight.length - 1]).style.animation = 'FadeRevert 0.8s forwards';
-        document.getElementById(historyRight[historyRight.length - 1]).classList.add('back');
+        element_hide = document.getElementById(historyRight[historyRight.length - 1]);
+        element_hide.style.animation = 'FadeRevert 0.8s forwards';
+        element_hide.classList.add('back');
+        setTimeout(function () {
+            element_hide.style.display = 'none';
+        }, 800);
+
         historyRight.pop();
-        document.getElementById(historyRight[historyRight.length - 1]).classList.remove('back');
-        document.getElementById(historyRight[historyRight.length - 1]).style.animation = 'ShowRevert 0.8s forwards';
+        element_show = document.getElementById(historyRight[historyRight.length - 1]);
+        element_show.classList.remove('back');
+        element_show.style.display = 'flex';
+        element_show.style.animation = 'ShowRevert 0.8s forwards';
     // }
 }
 

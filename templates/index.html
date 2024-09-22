@@ -53,6 +53,7 @@
           <a id="setting_button" onclick="settingPage()">系统设置</a>
           <a id="strategy_button" onclick="strategyPage()">编辑策略</a>
           <a id="tool_button" onclick="toolPage()">工具箱</a>
+          <a id="monitor_button" onclick="monitorPage()">自动管理</a>
         </div>
       </div>
       <div class="wall-container group-page hide" id="group-page">
@@ -379,6 +380,9 @@
           <!-- 函数中现场添加元素 -->
         </div>
       </div>
+      <div class="wall-container monitor-page hide" id="monitor-page">
+        <div class="monitor-container"></div>
+      </div>
     </div>
     </div>
   </main>
@@ -441,6 +445,7 @@
     var setting_loaded = false;
     var strategy_loaded = false;
     var tool_loaded = false;
+    var monitor_loaded = false;
     //DOM加载完成后执行groupPage()函数
     window.onload = function () {
       initCloud(30);
@@ -469,6 +474,7 @@
       document.getElementById("setting_button").classList.remove("active");
       document.getElementById("strategy_button").classList.remove("active");
       document.getElementById("tool_button").classList.remove("active");
+      document.getElementById("monitor_button").classList.remove("active");
       document.getElementById(button_id).classList.add("active");
     }
     function groupPage() {
@@ -509,6 +515,14 @@
       if (!tool_loaded) {
         tool_loaded = true;
         initToolPage();
+      }
+    }
+    function monitorPage() {
+      button_switch("monitor_button");
+      SwitchRight('monitor-page');
+      if (!monitor_loaded) {
+        monitor_loaded = true;
+        initMonitorPage();
       }
     }
 
