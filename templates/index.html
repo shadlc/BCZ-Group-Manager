@@ -42,13 +42,12 @@
     </div>
   </div>
   <main>
-    <div class="wall notice-wall">
-    </div>
-    <div class="wall" style="width: 75%;">
+    <!-- <div class="wall notice-wall">
+    </div> -->
+    <div class="wall" style="width: 100%;">
       <div class="eaves">
         <div class="gloss"></div>
         <div class="eaves-container">
-          <div class="back-button btn" onclick="SwitchPop()">◁　</div>
           <a id="group_button" onclick="groupPage()">小班列表</a>
           <a id="data_button" onclick="dataPage()">数据查询</a>
           <a id="setting_button" onclick="settingPage()">系统设置</a>
@@ -399,7 +398,8 @@
       </div>
     </footer>
   </div>
-  <div id="refresh_btn" class="left-corner-btn btn" onclick="refresh_data()">刷新</div>
+  <div class="left-corner-btn btn" onclick="SwitchPop()">◁　</div>
+  <div id="refresh_btn" class="left-corner-btn btn" style="left:4.5rem;" onclick="refresh_data()">刷新</div>
   <div id="group_search_modal" class="modal hide" data-status="hidden" onclick="toggleGroupSearchModal(event)">
     <div class="modal-content">
       <span class="modal-close-btn" onclick="toggleGroupSearchModal()"></span>

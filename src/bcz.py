@@ -163,6 +163,10 @@ class BCZ:
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'使用token获取用户信息失败!\n{response.text}')
         user_info = response.json().get('data')
+        if user_info is None:
+            data['uid'] = 'None'
+            data['name'] = 'None'
+            return data
         data['uid'] = user_info['mine']['uniqueId']
         data['name'] = user_info['mine']['name']
         return data

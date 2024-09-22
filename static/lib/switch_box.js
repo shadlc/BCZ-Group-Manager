@@ -35,7 +35,7 @@ function SwitchPop()
     if (historyRight.length === 1) {
         // 浏览器返回上一页
         // window.history.back();
-        $newCard('No history to pop...');
+        notify('没有可弹出的历史记录');
         return;
     }
     // 测试：将history_Right数据用→连接成字符串
