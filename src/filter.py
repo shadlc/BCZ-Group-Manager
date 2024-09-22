@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 import time
 from src.sqlite import SQLite
+from src.schedule import Schedule
 from src.bcz import BCZ
 # 跨文件引用多用from，方便改路径
 import sqlite3
@@ -43,6 +44,25 @@ class Filter:
         
         self.clients_message = {}
         self.logger_message = {}
+
+        self.tidal_token = {}
+        self.poster_token = {}
+
+        try:
+            with open("tidal_token.json", "r", encoding="utf-8") as f:
+                self.tidal_token = json.load(f)
+        except:
+            json.dump({}, open("tidal_token.json", "w", encoding="utf-8"))
+            default = {"name":"", "token":"", "grade":"1/2/3/4/5"}
+            logger.warning(f"用户可以在tidal_token.json添加潮汐令牌\n示例{default}")
+            
+        try:
+            with open("poster_token.json", "r", encoding="utf-8") as f:
+                self.poster_token = json.load(f)
+        except:
+            json.dump({}, open("poster_token.json", "w", encoding="utf-8"))
+            default = {"name":"", "token":"", "grade":"1/2/3/4/5"}
+            logger.warning(f"用户可以在poster_token.json添加海报令牌\n示例{default}")
 
         # 加载logger文件
         # log_file_name = f"filter-{datetime.datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.log"
@@ -440,7 +460,7 @@ class Filter:
             with self.clients_message_lock:
                 self.clients_message.pop(client_id, None)
 
-    def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None) -> None:
+    def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 999999) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
 
         # pyautogui.FAILSAFE = False # 关闭自动退出功能
@@ -864,10 +884,65 @@ class Filter:
 
                 # 根据加入人数多少，调整延迟
                 # 例如最少是196，则198或以上时延迟减少，否则增加
-                if newbies_count > 0: # 正在筛选，延迟减少
-                    delay = max(delay - delay_delta, 3.5)
-                else:
-                    delay = min(delay + delay_delta, 57.5) # 筛选暂停，延迟增加
+                delay = min(max(delay - delay_delta * (newbies_count - 1), 3.5), 57.5) # 筛选暂停，延迟增加
+                def update_tidal_token_class_list(user):
+                        # 更新tidal_token_class_list
+                        user['join_groups'] = []
+                        user['join_groups_days'] = []
+                            
+                        user_groups_info = self.bcz.getUserGroupInfo('0', user['token']) # uniqueId填0时获取自身
+                        for info in user_groups_info:
+                            user['join_groups'].append(info['id'])
+                            user['join_groups_days'].append(info['join_days'])
+
+                if delay > 25 and poster != '': # 使用海报令牌
+                    for user in self.poster_token:
+                        grade = user['grade']
+                        self.bcz.sendPoster(share_key, group_id, grade, poster, poster_session)
+
+                elif delay > 15:# 加入潮汐令牌
+                    # 从现有的找，如果没有，找个新的
+                    checked = 0
+                    for user in self.tidal_token:
+                        join_groups_list = user.get('join_groups', None)
+                        join_groups_days = user.get('join_groups_days', None)
+                        if join_groups_list is not None and group_id not in join_groups_list:
+                            # 前面已经获取过班级列表 并且 该令牌没加入该班级，则加入
+                            self.bcz.joinGroup(share_key, user['token'])
+                            checked = 1
+                            break
+                    if checked == 0:
+                        for user in self.tidal_token:
+                            if user.get('join_groups', None) is None:
+                                # 前面没有获取过班级列表
+                                update_tidal_token_class_list(user)
+                                time.sleep(1)
+                                if group_id not in user['join_groups']:
+                                    self.bcz.joinGroup(share_key, user['token'])
+                                    checked = 1
+                                    break
+                        if checked == 0:
+                            self.log(f"delay = {delay}s, 没有可用的tidal_token了", group_name)
+
+                elif delay < 5: # 移除潮汐令牌
+                    checked = 0
+                    for user in self.tidal_token:
+                        try:
+                            index = user['join_groups'].index(group_id)
+                        except ValueError:
+                            continue
+                        if user['join_groups_days'][index] < 3:
+                            # 防止退出加入时间过长的班级
+                            self.bcz.quitGroup(share_key, user['token'])
+                            checked = 1
+                            update_tidal_token_class_list(user)
+                            break
+
+                    if checked == 0:
+                        self.log(f"delay = {delay}s, 移除tidal_token完毕", group_name)
+                    
+
+                    
                 # 将总人数标黄
                 self.log(f"第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）<br>下次检测延迟{delay}s({delay}s)", group_name)
 
@@ -922,3 +997,107 @@ class Filter:
         
 
 
+class Monitor:
+    default_dict = {# 仅示例，一启动到时间就会自动执行，填入access_token生效，请谨慎操作
+        # "2268794":{# KO班级ID
+        #   "poster": "忽闻江上弄哀筝，苦含情，遣谁听！烟敛云收，依约是湘灵。欲待曲终寻问取，人不见，数峰青。",
+        #   "poster_session": 12, # 至少12个间隔者才能再次分享
+        #   "strategies": [
+        #     {
+        #         "enable": False,# 启用开关
+        #         "crontab": "* 5-7 * * 0", # 每周一早上5:00-7:00，一个时段只执行一次
+        #         "strategy_list":[
+        #             "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef",# 示例策略
+        #             "60a26b165db5b370ce9e9c2daf9779be2907f33eec598a2022766509828c630e" # 2048麦花喵.铂金
+        #         ]
+        #     },
+        #     {
+        #         "enable": False,
+        #         "crontab": "* 9 * * 0", # 每周一早上9:00-10:00
+        #         "strategy_list":[
+        #             "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef"# 示例策略
+        #         ]
+        #     }
+        #   ]
+        # }
+    }
+    def __init__(self, filter: Filter, sqlite: SQLite) -> None:
+        '''初始化配置文件'''
+        self.file_path = f'monitor.json'
+        self.filter = filter
+        self.sqlite = sqlite
+        try:
+            if path := os.path.dirname(self.file_path):
+                os.makedirs(path, exist_ok=True)
+            self.json_data = json.load(open(self.file_path, encoding='utf-8'))
+        except:
+            json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+            self.json_data = self.default_dict
+            logger.info('初次启动，已在当前执行目录生成monitor.json文件')
+        self.activate()
+    
+    def __del__(self) -> None:
+        '''保存配置文件'''
+        try:
+            json.dump(self.json_data, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f'保存配置文件发生错误\n {e}')
+
+    def activate(self, current_group_id: str = None) -> None:
+        '''激活定时任务'''
+        if current_group_id is not None:
+            items = [self.json_data[current_group_id]]
+        else:
+            items = self.json_data
+        for group_id, item in items.items():
+            if item['enable']:
+                crontab = item['crontab']
+                share_key = self.sqlite.queryGroupShareKey(group_id)
+                if share_key == '':
+                    raise Exception('请先添加该小班 到观察列表')
+                auth_token = self.sqlite.queryGroupAuthToken(group_id)
+                if auth_token == '':
+                    raise Exception('请设置班长AUTH_TOKEN')
+                name = self.sqlite.queryGroupName(group_id)
+                strategy_list = item['strategy_list']
+                poster = item['poster']
+                poster_session = item['poster_session']
+                logger.info(f'激活定时任务: {name}.{group_id}@{crontab}\n{strategy_list}')
+                self.deactivate(group_id, share_key)
+                Schedule(crontab, lambda: self.filter.run(auth_token, strategy_list, share_key, group_id, poster = poster, poster_session = poster_session))
+
+    def deactivate(self, current_share_key = None) -> None:
+        '''停用定时任务'''
+        if current_share_key is not None:
+            self.filter.stop(current_share_key)
+        else:
+            for group_id, item in self.json_data.items():
+                # 不检查是否启用，用于阻止设置错位的启动
+                share_key = self.sqlite.queryGroupShareKey(group_id)
+                self.filter.stop(share_key)
+
+    def get(self, group_id: str = None) -> list | dict | str | int | bool:
+        '''获取指定配置'''
+        if group_id is not None:
+            return self.json_data[group_id]
+        else:
+            return self.json_data
+    
+    def update(self, group_id: str, new_data: dict) -> None:
+        '''用dict更新配置文件，立即生效'''
+        self.json_data[group_id] = new_data
+        self.activate(group_id)
+
+    def delete(self, group_id: str) -> None:
+        '''删除指定配置'''
+        if group_id in self.json_data:
+            del self.json_data[group_id]
+
+    def save(self, json_data: dict = None) -> None:
+        '''写入配置文件'''
+        if json_data is not None:
+            self.json_data = json_data
+        try:
+            json.dump(self.json_data, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
+        except Exception as e:
+            logger.error(f'保存配置文件发生错误\n {e}')

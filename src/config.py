@@ -5,6 +5,7 @@ import json
 import logging
 import hashlib
 import random
+from src.schedule import Schedule
 
 logger = logging.getLogger(__name__)
 
@@ -291,72 +292,6 @@ class Strategy:
             "name": "max_combo_expectancy",
             "operator": "<",
             "value": "45"
-          }
-        ]
-      },
-      {
-        "name": "通过",
-        "minPeople": "1",
-        "operation": "accept",
-        "logCondition": "-1",
-        "conditions": []
-      }
-    ]
-  },
-  "25325b285c37f3a4449174290a14a8f45955657d4c65124fe53edb776350e333": {
-    "name": "神探联盟.王者",
-    "subItems": [
-      {
-        "name": "老成员",
-        "minPeople": "1",
-        "operation": "accept",
-        "logCondition": "-1",
-        "conditions": [
-          {
-            "name": "completed_times",
-            "operator": ">=",
-            "value": "2"
-          }
-        ]
-      },
-      {
-        "name": "不打卡kick",
-        "minPeople": "197",
-        "operation": "reject",
-        "logCondition": "0",
-        "conditions": [
-          {
-            "name": "duration_days",
-            "operator": "==",
-            "value": "1"
-          },
-          {
-            "name": "completed_time_stamp",
-            "operator": "==",
-            "value": "0"
-          }
-        ]
-      },
-      {
-        "name": "校牌不达标kick",
-        "minPeople": "197",
-        "operation": "reject",
-        "logCondition": "0",
-        "conditions": [
-          {
-            "name": "completed_times",
-            "operator": "<=",
-            "value": "1"
-          },
-          {
-            "name": "deskmate_days",
-            "operator": "<",
-            "value": "200"
-          },
-          {
-            "name": "max_combo_expectancy",
-            "operator": "<",
-            "value": "70"
           }
         ]
       },

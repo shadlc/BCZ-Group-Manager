@@ -14,7 +14,7 @@ from src.config import Config, Strategy
 from src.sqlite import SQLite
 from src.xlsx import Xlsx
 from src.schedule import Schedule
-from src.filter import Filter
+from src.filter import Filter, Monitor
 
 # if '--debug' in sys.argv or (hasattr(sys, 'gettrace') and sys.gettrace() is not None):
 if '--debug' in sys.argv:
@@ -42,6 +42,7 @@ bcz = BCZ(config)
 xlsx = Xlsx(config)
 sqlite = SQLite(config)
 filter = Filter(strategy, bcz, sqlite, sse, config)
+monitor = Monitor(filter, sqlite)
 processing = False
 logger = logging.getLogger(__name__)
 
@@ -345,19 +346,14 @@ def start_filter():
     scheduled_hour = request.json.get('scheduled_hour', None)
     scheduled_minute = request.json.get('scheduled_minute', None)
     print(f'开始筛选: group_id={group_id}, strategy_id_list={strategy_id_list}, scheduled_hour={scheduled_hour}, scheduled_minute={scheduled_minute}')
-    # return restful(200, '测试成功...')
-    conn = sqlite.connect()
-    cursor = conn.cursor()
-    result = cursor.execute(f'SELECT SHARE_KEY FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
-    if not result or not result[0]:
-        return restful(404, '请先添加该小班 到观察列表')
-    share_key = result[0]
-    result = cursor.execute(f'SELECT AUTH_TOKEN FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
-
-    if not result or not result[0]:
-        return restful(404, '请设置班长AUTH_TOKEN')
-    auth_token = result[0]
     try:
+        share_key = sqlite.queryGroupShareKey(group_id)
+        if share_key == '':
+            return restful(404, '请先添加该小班 到观察列表')
+        auth_token = sqlite.queryGroupAuthToken(group_id)
+        if auth_token == '':
+            return restful(404, '请设置班长AUTH_TOKEN')
+
         filter.start(auth_token, share_key, group_id, strategy_id_list, scheduled_hour, scheduled_minute)
         return restful(200, '筛选成功启动! ヾ(≧▽≦*)o')
     except Exception as e:
