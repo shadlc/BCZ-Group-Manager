@@ -4,6 +4,7 @@ import threading
 import datetime
 from src.config import Config
 from src.config import Strategy
+from src.sync import db_sync
 import flask_sse
 import uuid
 import logging
@@ -195,7 +196,7 @@ class Filter:
             return True
         
 
-    def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, group_name:str, conn: sqlite3.Connection) -> dict:
+    def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, group_name:str, late_daka_time:str, conn: sqlite3.Connection) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
         # self.log (f'正在验证id = {member_dict["id"]} with {substrategy_dict["name"]} in {member_dict["group_name"]}')
@@ -247,7 +248,7 @@ class Filter:
             return {'result':1,'reason':f''}
             
         
-        # 【2】本班两周内历史信息
+        # 【2】本班1个月内历史信息（满卡计算2周，早卡计算1个月）
         # 先获取今日星期，然后计算从该成员上周一到今天打卡天数和漏卡天数，注意上周一之后才入班的情况单独处理
         # week_info示例:['05-24','05-25','05-27']
         
@@ -263,8 +264,15 @@ class Filter:
         
         member_dict['drop_last_week'] = last_week_total_days - last_week_daka_days # 计算两周内漏卡天数
         member_dict['drop_this_week'] = this_week_total_days - this_week_daka_days
+
+        member_dict['wanka_index'] = 0
+        daka_time_dict = self.sqlite.getCompletedTime(uniqueId, 7, conn)
+        for today_date, daka_time in daka_time_dict.items(): # 06:52:52这样的
+            # print(daka_time, late_daka_time)
+            if daka_time > late_daka_time:
+                member_dict['wanka_index'] += 1
         
-        for name in ['drop_last_week', 'drop_this_week']:
+        for name in ['drop_last_week', 'drop_this_week', 'wanka_index']:
             try:
                 pos = condition_name.index(name)
                 if not self.condition(member_dict, refer_dict, conditions[pos], group_name, log_condition):
@@ -314,10 +322,10 @@ class Filter:
         
         personal_tosave = False
         if personal_dict is None:
-            self.log(f"正在获取校牌", group_name)
+            # self.log(f"正在获取校牌", group_name)
             personal_tosave = True
         else:
-            self.log(f"今日校牌已获取", group_name)
+            # self.log(f"今日校牌已获取", group_name)
             personal_tosave = False
         if personal_tosave:
             user_info = self.bcz.getUserInfo(uniqueId)
@@ -344,6 +352,9 @@ class Filter:
             group_info = []
         
         # 【4】校牌小班、历史小班信息
+        if len(personal_dict['period']) == 0:
+            self.log(f"该用户没有小班信息", group_name)
+            return {'result':0,'reason':refer_dict,'personal_info':user_info, 'group_info':group_info}
         max_info = personal_dict['period'][0]
         personal_dict['max_combo_expectancy'] = max_info[3]
         
@@ -408,7 +419,7 @@ class Filter:
     def log(self, message: str, group_name: str) -> None:
         '''记录日志，分发到所有连接的消息队列'''
         
-        if self.logger_message.get(group_name, None) is None or len(self.logger_message[group_name]) == 0:
+        if (type(self.logger_message.get(group_name, None)) != str):
             self.logger_message[group_name] = message
         else:
             try:
@@ -424,23 +435,28 @@ class Filter:
     def log_dispatch(self, group_name: str, to_file: bool = False) -> None:
         if self.logger_message.get(group_name, None) is None:
             return
+
         logger_message = self.logger_message[group_name]
         if to_file:
             br_to_endl_str = logger_message.replace('<br>', '\n')
             # 通过group_name获取share_key
             share_key = ''
             for key, value in self.activate_groups.items():
-                if value['name'] == group_name:
-                    share_key = key
-                    break
+                try:
+                    if value['name'] == group_name:
+                        share_key = key
+                        break
+                except: # 有可能有的组还没有初始化
+                    pass
             if share_key == '':
                 self.log(f"log_dispatch error: share_key not found", group_name)
             else:
-                time_str = datetime.datetime.now().strftime('%H:%M:%S ') 
-                self.activate_groups[share_key]['log_file'].write(time_str + br_to_endl_str)
+                time_str = datetime.datetime.now().strftime('%m-%d %H:%M:%S,%f ') 
+                # 暂时不记录日志文件（其实数据库够用）
+                # self.activate_groups[share_key]['log_file'].write(f"{time_str}[{group_name}]{br_to_endl_str}\n")
 
         message = f'#name$[{group_name}]#message${logger_message}'
-        logger.info(message)
+        logger.info(f'[{group_name}]{logger_message}')
         with self.clients_message_lock:
             for client_id, queue in self.clients_message.items():
                 queue.append(message)
@@ -536,7 +552,7 @@ class Filter:
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
 
-        delay = 24.5
+        delay = 5
         delay_delta = 1.5 
         
 
@@ -582,6 +598,7 @@ class Filter:
                 # raise ValueError('test')
                 # 每次循环都重新加载白名单
                 white_list = self.sqlite.queryWhitelist(group_id)
+                late_daka_time = self.sqlite.queryGroupLateDakaTime(group_id)
 
                 # pyautogui.press('capslock') 
                 pass_key_today = int(pass_key)+int(time.strftime("%m%d"))*10000
@@ -615,13 +632,15 @@ class Filter:
                 newbies_count = 0
                 removed_count = 0
                 old_members_count = 0
+                current_daka_count = 0
                 member_cnt = member_dict_temp['member_count']
                 accept_list = []
                 quit_list = []
                 important_remove_list = [] # 重要踢出列表，不打卡的
                 # pyautogui.press('capslock') 
                 for i, personal_dict_temp in enumerate(member_dict_temp["members"]):
-                    
+                    if personal_dict_temp['completed_time_stamp'] > 0:
+                        current_daka_count += 1
                     uniqueId = personal_dict_temp['id']
                     try:
                         memberId = personal_dict_temp['member_id']
@@ -647,7 +666,7 @@ class Filter:
                         
                         # 如果当前时间戳 - 完成时间戳 < 180s，不处理，因为可能还没完成打卡
                         if (int(time.time()) - personal_dict_temp['completed_time_stamp']) < 60:
-                            self.log(f'新成员:{personal_dict_temp["group_nickname"]}({personal_dict_temp["nickname"]})[{uniqueId}]', group_name)
+                            self.log(f'{personal_dict_temp["group_nickname"]}({personal_dict_temp["nickname"]})[{uniqueId}]', group_name)
                             self.log(f"DELTA:{(int(time.time()) - personal_dict_temp['completed_time_stamp'])}< 60，不处理(6s)", group_name)   
                             self.log_dispatch(group_name)
                             continue
@@ -660,16 +679,17 @@ class Filter:
                         # 对每个成员，先判断是否已决策（仅本次运行期间有效，局部储存）
                         # verdict 含义：None-未决策，0...n-已决策，符合子条目的序号（越小越优先）
                         result_code = 0 # 操作码：1-接受，2-踢出
+                        reason = {}
+                        operation = ''
                         verdict = self.sqlite.queryStrategyVerdict(strategy_index, uniqueId, conn)
                         if verdict is None:
                             verdict = self.verdict_dict.get(uniqueId, None)
                             # 有可能verdict_dict还没保存到数据库
+                        self.log(f'[{check_count}轮{i}/{member_cnt}]{personal_dict_temp["nickname"]}({personal_dict_temp["group_nickname"]})({uniqueId}) ', group_name)
                         if verdict is None or ("不打卡" in strategy_dict['subItems'][verdict]['name'] and personal_dict_temp['completed_time_stamp'] > 0):
                             # 如果名称中有“不打卡”字样，则需要重新判断
-                            self.log(f'新成员[{i}/{member_cnt}]{personal_dict_temp["group_nickname"]}({personal_dict_temp["nickname"]})[{uniqueId}]', group_name)
                             # 先检查是否满足条件，满足则堆入待决策列表
-                            reason = {}
-                            operation = ''
+                            
                             for index, sub_strat_dict in enumerate(strategy_dict["subItems"]):
                                 
                                 
@@ -677,7 +697,7 @@ class Filter:
                                     personal_dict_temp,
                                     member_dict_temp["week_daka_info"]['this_week'].get(uniqueId, None),
                                         member_dict_temp["week_daka_info"]['last_week'].get(uniqueId, None),
-                                        sub_strat_dict, group_name, conn)
+                                        sub_strat_dict, group_name, late_daka_time, conn)
                                 log_condition = int(sub_strat_dict['logCondition'])
                                 sub_strat_name = sub_strat_dict['name']
                                 
@@ -705,10 +725,7 @@ class Filter:
                                 else:
                                     if log_condition == 2 or log_condition == 0:
                                         operation += f'不符合{sub_strat_name}<br>'
-                                        # self.log(f"不符合条件{sub_strat_dict['name']}", group_name)
-                            for key, value in reason.items():
-                                self.log(f"{key}:{value}", group_name)
-                            # self.log(json.dumps(operation, ensure_ascii=False), group_name)
+                                        
                             if not result_code:
                                 self.log("【▲】没有符合的子条目，不操作，请检查策略", group_name)
                                 continue
@@ -718,25 +735,25 @@ class Filter:
                         else:
                             # 已判断过，跳过
                             
-                            self.log(f"已判断过，读取结果：{strategy_dict['subItems'][verdict]['name']} → {strategy_dict['subItems'][verdict]['operation']}", group_name)
+                            reason[f"已判断为：{strategy_dict['subItems'][verdict]['name']}"] = strategy_dict['subItems'][verdict]['operation']
                             result_code = 1 if strategy_dict['subItems'][verdict]['operation'] == 'accept' else 2
                         # 处理结果
                         if result_code == 1:
                             accepted_count += 1
-                            self.log(f"【✓】接受加入(6s)", group_name)
+                            self.log(f"【✓】接受加入", group_name)
                         elif result_code == 2 or result_code == 3 or result_code == -1:
                             # self.log(f"uniqueId:{uniqueId},white_list:{white_list}",group_name)
                             # print('!!', uniqueId, pass_key_today)
                             if str(uniqueId * pass_key_today)[:4] in personal_dict_temp['group_nickname']:
-                                self.log(f"【〇】远程添加白名单，不操作(18s)", group_name)
+                                self.log(f"【〇】远程添加白名单，不操作", group_name)
                                 self.log_dispatch(group_name, True)
                                 continue
                             elif str(uniqueId) in white_list:
-                                self.log(f"【〇】白名单，不操作(18s)", group_name)
+                                self.log(f"【〇】白名单，不操作", group_name)
                                 self.log_dispatch(group_name, True)
                                 continue
                             else:
-                                self.log(f"【✗】准备踢出(6s)", group_name)
+                                self.log(f"【✗】准备踢出", group_name)
                             # 加入候补踢出列表，按小到大顺序插入列表
                             inserted = 0
                             important = 0
@@ -751,6 +768,13 @@ class Filter:
                             if inserted == 0:
                                 # 未找到合适位置，直接加入末尾，最后
                                 kick_list.append({"memberId":memberId,"uniqueId":uniqueId,"verdict":verdict,"important":important,"name":personal_dict_temp["nickname"]})
+                        first = 0
+                        for key, value in reason.items():
+                            if first == 0:
+                                self.log(f"[原因]{key}:{value}", group_name)
+                                first = 1
+                            else:
+                                self.log(f"{key}:{value}", group_name)
                         self.log_dispatch(group_name, True)
                     else:
                         # 老成员，已经处理过
@@ -819,10 +843,10 @@ class Filter:
                     if current_minute_units <= 2:
                         # 获取到分钟尾数为2的秒数
                         wait_second = 60 - current_second + (2 - current_minute_units) * 60 + random.randint(0, 15)
-                        
-                        self.log(f"总接受{total_accepted_count - total_quit_count}人<br>普通踢出:排名即将更新，踢人前等待({wait_second}s)", group_name)
-                        self.log_dispatch(group_name)
-                        # time.sleep(wait_second)
+                        if group_count_limit - current_daka_count < 5: # 推测为正在冲榜
+                            self.log(f"总接受{total_accepted_count - total_quit_count}人<br>普通踢出:即将更新，踢人前等待({wait_second}s)", group_name)
+                            self.log_dispatch(group_name)
+                            # time.sleep(wait_second)
                     if self.bcz.removeMembers(remove_list, share_key, authorized_token):
                     # if True:
                         self.log(f"普通踢出成功", group_name)
@@ -900,47 +924,47 @@ class Filter:
                         for info in user_groups_info:
                             user['join_groups'].append(info['id'])
                             user['join_groups_days'].append(info['join_days'])
-
-                if delay > 20 and poster != '': # 使用海报令牌
-                    target_grade = check_count % 5 + 1
-                    for user in self.poster_token:
-                        grade = user['grade']
-                        if grade != target_grade:
-                            continue
-                        user_token = user['access_token']
-                        name = user['name']
-                        min_index = self.bcz.getPosterState(grade, user_token, poster)
-                        if min_index > poster_session + random_poster_session:
-                            self.log(f"{min_index} > {poster_session}，正在使用海报令牌级组{user['grade']}{user['name']}(60s)", group_name)
-                            if user.get('join_groups', None) is None:
-                                update_tidal_token_class_list(user)
-                                time.sleep(1)
-                            temp = 0
-                            print(type(group_id))
-                            print(type(user['join_groups'][0]))
-                            if group_id not in user['join_groups']:
-                                if len(user['join_groups']) < 6:
-                                    if self.bcz.joinGroup(share_key, user_token):
-                                        self.log(f"{name}加入{group_id}成功", group_name)
-                                        update_tidal_token_class_list(user)
-                                    else:
-                                        self.log(f"{name}加入{group_id}{group_name}失败(60s)", group_name)
-                                        break # 一般是小班已满员，直接退出
+                with self.lock:
+                    if delay > 20 and poster != '': # 使用海报令牌
+                        target_grade = check_count % 5 + 1
+                        self.log(f"目标年级{target_grade}", group_name)
+                        for user in self.poster_token:
+                            grade = user['grade']
+                            if grade != target_grade:
+                                continue
+                            user_token = user['access_token']
+                            name = user['name']
+                            min_index = self.bcz.getPosterState(grade, user_token, poster)
+                            if min_index > poster_session + random_poster_session:
+                                self.log(f"💖 \033[1;37m{min_index} > {poster_session}，正在使用海报令牌级组{user['grade']}{user['name']}\033[0m(60s)", group_name)
+                                self.log_dispatch(group_name)
+                                if user.get('join_groups', None) is None:
+                                    update_tidal_token_class_list(user)
                                     time.sleep(1)
-                                    temp = 1
-                                else:
-                                    self.log(f"{name}加入{group_id}失败，班位已满(60s)", group_name)
-                                    continue
-                            self.bcz.sendPoster(group_id, grade, user_token, poster)
-                            self.log(f"{grade}{name}发送海报成功", group_name)
-                            random_poster_session = random.randint(1, 4)
-                            time.sleep(1)
-                            if temp == 1:
-                                self.bcz.quitGroup(share_key, user_token)
-                                update_tidal_token_class_list(user)
-                                self.log(f"退出{group_id}成功", group_name)
-                        else:
-                            self.log(f"{min_index} < {poster_session}，不使用海报令牌{user['grade']}{user['name']}(60s)", group_name)
+                                temp = 0
+                                if group_id not in user['join_groups']:
+                                    if len(user['join_groups']) < 6:
+                                        if self.bcz.joinGroup(share_key, user_token):
+                                            self.log(f"{name}加入{group_id}成功", group_name)
+                                            update_tidal_token_class_list(user)
+                                        else:
+                                            self.log(f"{name}加入{group_id}{group_name}失败(60s)", group_name)
+                                            break # 一般是小班已满员，直接退出
+                                        time.sleep(1)
+                                        temp = 1
+                                    else:
+                                        self.log(f"{name}加入{group_id}失败，班位已满(60s)", group_name)
+                                        continue
+                                self.bcz.sendPoster(group_id, grade, user_token, poster)
+                                self.log(f"💖 \033[1;37m{grade}{name}发送海报成功\033[0m", group_name)
+                                random_poster_session = random.randint(1, 4)
+                                time.sleep(1)
+                                if temp == 1:
+                                    self.bcz.quitGroup(share_key, user_token)
+                                    update_tidal_token_class_list(user)
+                                    self.log(f"退出{group_id}成功", group_name)
+                            else:
+                                self.log(f"{min_index} <= {poster_session + random_poster_session}，不使用海报令牌{user['grade']}{user['name']}(60s)", group_name)
                         self.log_dispatch(group_name, True)
 
                 if delay > 25:# 加入潮汐令牌
@@ -953,13 +977,15 @@ class Filter:
                             if len(join_groups_list) < 5 and group_id not in join_groups_list :
                                 # 还有至少2个空位 并且 该令牌没加入该班级，则加入
                                 if self.bcz.joinGroup(share_key, user['access_token']):
-                                    self.log(f"加入潮汐令牌{user['grade']}{user['name']}成功", group_name)
+                                    self.log(f"🌟 \033[1;33m加入潮汐令牌{user['grade']}{user['name']}成功\033[0m", group_name)
                                     checked = 1
                                     update_tidal_token_class_list(user)
                                     break
                                 else:
                                     self.log(f"加入潮汐令牌{user['grade']}{user['name']}失败(60s)", group_name)
                                     update_tidal_token_class_list(user)
+                                    checked = 1
+                                    break
                     if checked == 0:
                         for user in self.tidal_token:
                             if user.get('join_groups', None) is None:
@@ -969,42 +995,56 @@ class Filter:
                                 time.sleep(1)
                                 if len(join_groups_list) < 5 and group_id not in join_groups_list :
                                     if self.bcz.joinGroup(share_key, user['access_token']):
-                                        self.log(f"加入潮汐令牌{user['grade']}{user['name']}成功", group_name)
-                                        checked = 1
+                                        self.log(f"🌟 \033[1;33m加入潮汐令牌{user['grade']}{user['name']}成功\033[0m", group_name)
                                         update_tidal_token_class_list(user)
-                                        break
                                     else:
                                         self.log(f"加入潮汐令牌{user['grade']}{user['name']}失败(60s)", group_name)
                                         update_tidal_token_class_list(user)
+                                else:
+                                    self.log(f"获取到潮汐令牌{user['grade']}{user['name']}班级列表", group_name)
+                                checked = 1
+                                break
                         if checked == 0:
                             self.log(f"delay = {delay}s, 没有可用的tidal_token了(60s)", group_name)
-                            self.log_dispatch(group_name, True)
+                    self.log_dispatch(group_name, True)
 
-                elif delay < 5: # 移除潮汐令牌
+                elif delay < 7.5 or group_count_limit - member_cnt < 4: # 移除潮汐令牌
                     checked = 0
                     for user in self.tidal_token:
-                        if user.get('join_groups', None) is not None:
+                        if user.get('join_groups', None) is None:
+                            update_tidal_token_class_list(user)
+                            checked = 1
+                            self.log(f"获取{user['grade']}{user['name']}班级列表", group_name)
+                            break
+                        try:
+                            # print(user['join_groups'], group_id)
+                            # time.sleep(10)
+                            index = user['join_groups'].index(group_id)
+                        except ValueError:
+                            continue
+                        logger.info(f'找到{user["name"]}加入了{user["join_groups_days"][index]}天')
+                        if user['join_groups_days'][index] < 3:
+                            # 防止退出加入时间过长的班级
+                            self.bcz.quitGroup(share_key, user['access_token'])
                             try:
-                                index = user['join_groups'].index(group_id)
-                            except ValueError:
-                                continue
-                            if user['join_groups_days'][index] < 3:
-                                # 防止退出加入时间过长的班级
-                                self.bcz.quitGroup(share_key, user['access_token'])
-                                self.log(f"delay = {delay}s, 移除tidal_token{user['grade']}{user['name']}，加入时间{user['join_groups_days'][index]}天(60s)", group_name)
-                                self.log_dispatch(group_name, True)
-                                checked = 1
-                                update_tidal_token_class_list(user)
-                                break
+                                self.log(f"🌟 \033[1;35m退出delay = {delay}s, 移除tidal_token{user['grade']}{user['name']}，加入时间{user['join_groups_days'][index]}天\033[0m(60s)", group_name)
+                            except:
+                                self.log(user, group_name)
+                            checked = 1
+                            update_tidal_token_class_list(user)
+                            break
 
                     if checked == 0:
                         self.log(f"delay = {delay}s, 移除tidal_token完毕(60s)", group_name)
-                        self.log_dispatch(group_name, True)
+                    self.log_dispatch(group_name, True)
                     
 
                     
                 # 将总人数标黄
-                self.log(f"第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）<br>下次检测延迟{delay}s({delay}s)", group_name)
+                self.log(f"第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）({delay}s)", group_name)
+                self.log_dispatch(group_name, True)
+                self.log(f"下次检测延迟{delay}s({delay}s)", group_name)
+                self.log_dispatch(group_name)
 
                 self.log_dispatch(group_name, True)
                 if total_accepted_count - total_quit_count > 197:
@@ -1029,14 +1069,14 @@ class Filter:
                 #     # 创建线程调用filter.stop()
                 #     threading.Thread(target=self.stop, args=()).start()
                 
-        self.log(f'{strategy_dict["name"]}筛选结束！', group_name)
+        self.log(f'❄️ \033[1;36m{strategy_dict["name"]}筛选结束！\033[0m', group_name)
         print(strategy_index_list)
         if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
-            self.log(f'进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选', group_name)
+            self.log(f'❄️ \033[1;36m进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选 \033[0m', group_name)
             self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id))
             self.activate_groups[share_key]['tids'].start()
         else:
-            self.log('所有筛选结束！', group_name)
+            self.log('❄️ \033[1;36m 所有筛选结束！\033[0m', group_name)
             threading.Thread(target=self.stop, args=(share_key,)).start()
         self.log('(99998s)', group_name)
         self.log_dispatch(group_name, True)
@@ -1049,6 +1089,41 @@ class Filter:
         self.stop(share_key) # 防止重复运行
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
+
+
+        local_sync_dict = []
+        quantity = 0
+        group_name = self.sqlite.queryGroupName(group_id)
+        logger.info(f'正在获取小班[{group_name}({group_id})]的历史打卡数据')
+        daka_dict = self.bcz.getGroupDakaHistory(share_key)
+        # 查询最近一个月，本班是否有未记录的打卡数据
+        sdate = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+        member_list = self.sqlite.queryMemberTable(
+            {
+                'group_id': group_id,
+                'sdate': sdate,
+            },
+            header = False,
+        )['data']
+        absence_dict = {line[0]:line[4] for line in member_list if line[3] == ''}
+        date_dict = (line[4] for line in member_list)
+        today = datetime.datetime.now()
+        for i in range(30):
+            day_str = (today - datetime.timedelta(days=i)).strftime('%Y-%m-%d')
+            if day_str not in date_dict:
+                local_sync_dict.append(day_str)
+                quantity += 1
+        if absence_dict:
+            for id, daka_date in absence_dict.items():
+                if id in daka_dict and daka_date in daka_dict[id]:
+                    if daka_date not in local_sync_dict:
+                        local_sync_dict.append(daka_date)
+                    quantity += 1
+            logger.info(f'检测到{quantity}条丢失记录，日期{local_sync_dict}')
+            if len(local_sync_dict) > 0:
+                with self.lock:
+                    db_sync(self.sqlite.db_path, group_name, local_sync_dict)
+
 
         self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session))
         self.activate_groups[share_key]['tids'].start()
@@ -1128,20 +1203,20 @@ class Monitor:
                 if item['enable']:
                     crontab = item['crontab']
                     strategy_list = item['strategy_list']
-                    logger.info(f'激活定时任务: {name}.{group_id}@{crontab}\n{strategy_list}')
-                    Schedule(crontab, self.filter.start, auth_token, strategy_list, share_key, group_id, poster=poster, poster_session=poster_session)
+                    # logger.info(f'激活定时任务: {name}.{group_id}@{crontab}')
+                    Schedule(f'{crontab} {name}', self.filter.start, auth_token, strategy_list, share_key, group_id, poster=poster, poster_session=poster_session)
 
     def deactivate(self, current_share_key = None) -> None:
         '''停用定时任务'''
         if current_share_key is not None:
             self.filter.stop(current_share_key)
-            logger.info(f'停用定时任务: {current_share_key}')
+            logger.info(f'立即停用定时任务: {current_share_key}')
         else:
             for group_id, item in self.json_data.items():
                 # 不检查是否启用，用于阻止设置错位的启动
                 share_key = self.sqlite.queryGroupShareKey(group_id)
                 self.filter.stop(share_key)
-                logger.info(f'停用定时任务: {group_id} {share_key}')
+                logger.info(f'立即停用定时任务: {group_id} {share_key}')
 
     def get(self, group_id: str = None) -> list | dict | str | int | bool:
         '''获取指定配置'''

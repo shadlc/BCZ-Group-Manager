@@ -157,7 +157,7 @@ function $newCard(msg) {
             // 如果delay不是数字，则设置为msg*60
 
             if (isNaN(delay)) {
-                delay = msg.length * 120;
+                delay = msg.length * 600;
             }
             if (delay == 99999000) {
                 // 错误代码

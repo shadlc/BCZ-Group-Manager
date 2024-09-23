@@ -18,7 +18,7 @@ from src.filter import Filter, Monitor
 
 # if '--debug' in sys.argv or (hasattr(sys, 'gettrace') and sys.gettrace() is not None):
 if '--debug' in sys.argv:
-    level = logging.DEBUG
+    level = logging.INFO
 else:
     level = logging.INFO
 
@@ -202,6 +202,7 @@ def recheck_strategy_verdict():
     share_key = sqlite.queryGroupShareKey(str(group_id))
     member_dict_temp = bcz.getGroupInfo(share_key, buffered_time=30).get('members')
     rank_dict = bcz.getGroupDakaHistory(share_key, parsed=True, buffered_time=30)
+    personal_dict_temp = {}
     # logger.debug(f'总{member_dict_temp}')
     for member_dict in member_dict_temp:
         # logger.debug(f'查询成员{member_dict}')
@@ -209,19 +210,20 @@ def recheck_strategy_verdict():
             personal_dict_temp = member_dict
             personal_dict_temp['group_nickname'] = rank_dict['group_nickname'][unique_id]
             break
-    if not personal_dict_temp:
+    if personal_dict_temp == {}:
         return restful(404, '未查询到该成员信息Σ(っ °Д °;)っ')
     
     result_code = 0
 
     reason_dict = {}
     operation = ''
+    late_daka_time = sqlite.queryGroupLateDakaTime(group_id)
     for index, sub_strat_dict in enumerate(strategy_dict["subItems"]):                
         result = filter.check(
             personal_dict_temp,
                 rank_dict['this_week'].get(unique_id, None),
                     rank_dict['last_week'].get(unique_id, None),
-                        sub_strat_dict, '全局', conn)
+                        sub_strat_dict, '全局', late_daka_time, conn)
         logger.debug(f'sub_strat_dict={sub_strat_dict} result={result}')
         log_condition = int(sub_strat_dict['logCondition'])
         sub_strat_name = sub_strat_dict['name']
@@ -236,8 +238,12 @@ def recheck_strategy_verdict():
                 operation += f'符合{sub_strat_name}<br>'
                 filter.log(f'符合{sub_strat_name}', '全局')
             verdict = index
-            sqlite.saveStrategyVerdict({strategy_id: {unique_id: (index, operation, reason_dict)}}, strategy.get(), conn)
             result_code = 1 if sub_strat_dict['operation'] == 'accept' else 2
+            white_list =  sqlite.queryWhitelist(group_id)
+            pass_key_today = int(config.pass_key)+int(time.strftime("%m%d"))*10000
+            if unique_id in white_list or str(unique_id * pass_key_today)[:4] in personal_dict_temp['group_nickname']:
+                result_code = -1
+            sqlite.saveStrategyVerdict({strategy_id: {unique_id: (index, f"{operation}{result_code}", reason_dict)}}, strategy.get(), conn)
             break
         else:
             if log_condition == 2 or log_condition == 0: 
@@ -589,6 +595,7 @@ def sse_message() -> Response:
 #         return restful(500, f'删除黑名单失败：{e}')
 
 
+from src.sync import db_sync
 if __name__ == '__main__':
     logging.info('BCZ-Group-Manager 启动中...')
     if config.daily_record:

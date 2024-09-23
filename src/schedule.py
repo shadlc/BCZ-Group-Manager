@@ -10,7 +10,7 @@ class Schedule:
         '''计划调用类'''
         self.crontab_expr = crontab
         self.exec = func
-        if len(self.crontab_expr.split()) != 5:
+        if len(self.crontab_expr.split()) < 5: # 允许加无效字段，方便打个小班名
             logger.warning('未正确设置schedule，故未启动计划')
             return
         self.cron = self.parse_crontab(self.crontab_expr)
@@ -20,15 +20,20 @@ class Schedule:
             kwargs=kwargs,
             daemon=True,
         )
-        logger.info(f'启动计划 [{self.crontab_expr}]')
+        logger.info(f'等待启动计划 [{self.crontab_expr}]')
         self.thread.setName(f'Schedule: {crontab}')
         self.thread.start()
 
     def run(self, *args, **kwargs) -> None:
         '''执行函数'''
-        # while time.localtime().tm_sec != 0:
-        #     time.sleep(1)
-        # raise ValueError(f'\033[31m计划任务{self.crontab_expr}未启动\033[0m')
+        now = time.localtime()
+        if not (now.tm_min in self.cron[0] and
+                now.tm_hour in self.cron[1] and
+                now.tm_mday in self.cron[2] and
+                now.tm_mon in self.cron[3] and # 如果已经在计划时间段，则直接开始
+                now.tm_wday in self.cron[4]):
+            while time.localtime().tm_sec != 0:
+                time.sleep(1)
         while True:
             try:
                 now = time.localtime()

@@ -177,7 +177,7 @@ class BCZ:
             if post['credit'] == 0 and post['count'] > 0: # 查询还有没有免费的海报
                 style = post['id']
                 break
-        for style in style_info:
+        for post in style_info:
             if post['count'] > 0:
                 style = post['id']
                 break
@@ -190,13 +190,13 @@ class BCZ:
         headers["Content-Type"] = "application/json"
         headers["Origin"] = "https://group.baicizhan.com"
         headers["Referer"] = "https://group.baicizhan.com/wanted_board/create"
-        json = {
+        payload = {
             "content": poster,
             "groupId": group_id,
             "style": style,
             "type": 1,
         }
-        response = requests.post(post_url, headers=headers, json=json, timeout=10)
+        response = requests.post(post_url, headers=headers, json=payload, timeout=10)
         data = response.json()
         if data.get("code",0) != 1:
             logger.info(f"发送海报失败，请检查{response.json()}")
@@ -357,7 +357,7 @@ class BCZ:
         '''获取【班内主页】信息group/information'''
         buffer_data = self.buffered_groups.get(share_key)
         buffer_time = buffer_data.get('data_time') if buffer_data else None
-        logger.info(f'groupInfo: 获取到缓存时间{buffer_time}')
+        # logger.info(f'groupInfo: 获取到缓存时间{buffer_time}')
         # 如果当前时间比self.data_time晚少于buffered_time秒，则直接返回缓存数据
         if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
             logger.info(f'使用缓存数据')
@@ -554,7 +554,7 @@ class BCZ:
             # 暂定只有分离的记录模式
             buffer_data = self.buffered_daka_history.get(share_key)
             buffer_time = buffer_data.get('data_time') if buffer_data else None
-            logger.info(f'dakaHistory: 获取到缓存时间{buffer_time}')
+            # logger.info(f'dakaHistory: 获取到缓存时间{buffer_time}')
             
             # 如果当前时间比self.data_time晚少于buffered_time秒，则直接返回缓存数据
             if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
@@ -634,11 +634,16 @@ def recordInfo(bcz: BCZ, sqlite: SQLite):
     sqlite.saveGroupInfo(groups)
     logger.info(f'每日记录已完成, 已记录{len(groups)}个小班, 共{member_count}条数据')
 
-def verifyInfo(bcz: BCZ, sqlite: SQLite):
+def verifyInfo(bcz: BCZ, sqlite: SQLite, group_info: dict = {}) -> dict:
     '''通过小班成员排行榜补全打卡信息'''
     makeup_list = []
+    local_sync_dict = {}
     quantity = 0
-    for group in sqlite.queryObserveGroupInfo():
+    if group_info != {}:
+        groups = [group_info]
+    else:
+        groups = sqlite.queryObserveGroupInfo()
+    for group in groups:
         if group['daily_record']:
             logger.info(f'正在获取小班[{group["name"]}({group["id"]})]的历史打卡数据')
             daka_dict = bcz.getGroupDakaHistory(group['share_key'])
@@ -663,9 +668,15 @@ def verifyInfo(bcz: BCZ, sqlite: SQLite):
                         'completed_time': '晚于记录时间',
                         'today_word_count': '?',
                     })
+                    date_to_sync = local_sync_dict.get(group['id'], None)
+                    if not date_to_sync:
+                        local_sync_dict[group['id']] = [id]
+                    elif daka_date not in date_to_sync:
+                        date_to_sync.append(id)
                     quantity += 1
     logger.info(f'本次检测并补齐历史打卡数据{quantity}条')
     sqlite.updateMemberInfo(makeup_list)
+    return local_sync_dict
 
 def refreshTempMemberTable(
         bcz: BCZ,

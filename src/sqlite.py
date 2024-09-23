@@ -237,12 +237,24 @@ class SQLite:
             return True
         return False
     
+    def queryGroupLateDakaTime(self, group_id: str) -> str:
+        '''查询小班晚打卡时间'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        result = cursor.execute(f'SELECT LATE_DAKA_TIME FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
+        logger.debug(f'查询小班{group_id}的晚打卡时间: {result}')
+        conn.close()
+        if result:
+            return f"{result[0]}:59"
+        return ''
+    
+    
     def queryGroupName(self, group_id: int) -> str:
         '''查询小班名称'''
         group_id = int(group_id)
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
-        result = cursor.execute(f'SELECT NAME FROM GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
+        result = cursor.execute(f'SELECT NAME FROM OBSERVED_GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
         logger.debug(f'查询小班{group_id}的名称: {result}')
         conn.close()
         if result:
@@ -750,11 +762,13 @@ class SQLite:
             if item is None:
                 result[unique_id] = '0'
                 continue
-            item = item[0][-1]
-            if item == '1' or item == '2' or item == '3':
-                result[unique_id] = item
-            else:
-                result[unique_id] = '0'
+            result[unique_id] = '0'
+            if item[0] != '':
+                item = item[0][-1]
+                if item == '1' or item == '2' or item == '3':
+                    result[unique_id] = item
+                
+        conn.close()
         return result
 
     def queryFilterLog(self, group_id: str, count_start: int, count_limit: int, conn: sqlite3.Connection) -> list:
@@ -916,7 +930,7 @@ class SQLite:
             expectancy *= rate # 11...11（Q个1）在100数位上发生的期望次数
             if expectancy <= length / 4:  # 如果期望大于length则代表有一个完整的length序列，我们要找到符合条件的length最大值
                 # 但这个/10，我的天文知识还不能解释。经过测试在join_days = 100..10000, x=0.01..0.99都很符合
-                logger.info( f'ComboExpectancy: {rate}% {join_days} {length} {expectancy}')
+                # logger.info( f'ComboExpectancy: {rate}% {join_days} {length} {expectancy}')
                 return length
         return join_days
 
@@ -993,13 +1007,21 @@ class SQLite:
 
     def getCompletedTime(self, unique_id: str, observed_days: int, conn: sqlite3.Connection) -> list:
         '''数据库获取指定成员最近n天的完成时间'''
-        # 原queryLongestInfo拆分出来的
+        # 返回{"2024-09-30": 06:52:25}
         cursor = conn.cursor()
         result = cursor.execute(
-            f'SELECT COMPLETED_TIME FROM MEMBERS WHERE USER_ID = ? AND DATA_TIME >= ? ORDER BY DATA_TIME DESC LIMIT ?',
-            [unique_id, (datetime.now() - timedelta(days=observed_days)).strftime('%Y-%m-%d'), observed_days]
+            f"SELECT TODAY_DATE, COMPLETED_TIME FROM MEMBERS WHERE USER_ID = ? AND TODAY_DATE >= ? AND TODAY_DATE < ? ORDER BY TODAY_DATE DESC",
+            (unique_id, (datetime.now() - timedelta(days=observed_days)).strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d'))
         ).fetchall()
-        return result
+        ans = {}
+        for line in result:
+            today_date = line[0]
+            completed_time = line[1]
+            if not ans.get(today_date):
+                ans[today_date] = completed_time
+            if ans[today_date] > completed_time:
+                ans[today_date] = completed_time
+        return ans
 
     def getMemberGroupHistory(self, unique_id: str, group_id: str, conn: sqlite3.Connection) -> list:
         '''获取指定成员在这个小班加入次数、总在班天数、总在班打卡次数、最长在班天数'''

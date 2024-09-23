@@ -806,10 +806,11 @@ img[src=""] {
   border-spacing: 0;
 }
 table.simple-table th {
-  border-bottom: solid 0.1rem var(--black);
+  border-bottom: solid 1px var(--black);
 }
 table.simple-table td {
   padding: 0 1rem;
+  border: solid 1px var(--black);
 }
 .table {
   position: relative;
