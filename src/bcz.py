@@ -3,6 +3,7 @@ import time
 import httpx
 import asyncio
 import logging
+import certifi
 import requests
 from datetime import timedelta, date, datetime
 
@@ -100,7 +101,7 @@ class BCZ:
 
     async def asyncFetch(self, url: str, method: str = 'GET', headers: dict = {}, payload = None) -> httpx.Response:
         '''异步网络请求'''
-        async with httpx.AsyncClient() as client:
+        async with httpx.AsyncClient(verify=certifi.where()) as client:
             if method.upper() == 'GET':
                 response = await client.get(url, headers=headers)
             elif method.upper() == 'POST':
@@ -125,6 +126,7 @@ class BCZ:
             logger.info(f"加入小班失败，请检查{response.json()}")
             return False
         logger.info(f"加入小班成功")
+        return True
 
     def quitGroup(self, share_key: str, access_token: str) -> bool:
         '''退出小班'''
@@ -137,12 +139,15 @@ class BCZ:
         logger.info(f"退出小班成功")
         return True
 
-    def sendPoster(self, share_key: str, group_id: str, grade: int, access_token: str, poster: str, poster_session: int) -> bool:
-        '''发送海报'''
-        
-        if self.poster_fetch_time[grade-1] + 60 < time.time():
+    def getPosterState(self, grade: int, access_token: str, poster: str) -> bool:
+        '''检查海报间隔是否足够'''
+        if poster not in self.poster_tracker:
+            self.poster_tracker.append(poster)
+
+        last_poster_fetch_time = self.poster_fetch_time.get(grade-1, 0)
+        if last_poster_fetch_time + 15 < time.time():
             get_url = 'https://group.baicizhan.com/group/get_recruitment_post_list?anchorId=0&direction=1'
-            self.poster_fetch_time = time.time()
+            self.poster_fetch_time[grade-1] = time.time()
             headers = self.getHeaders(access_token)
             response = requests.get(get_url, headers=headers, timeout=10)
             self.buffered_poster_list[grade-1] = response.json().get('data')['recruitmentPostVoList']
@@ -155,29 +160,31 @@ class BCZ:
                     min_index = min(min_index, i)
                     break
         
-        if min_index < poster_session:
-            logger.info(f"年级{grade}区的海报间隔{min_index}过短，继续等待")
-            return False
+        return min_index
         
+    def sendPoster(self, group_id: str, grade: int, access_token: str, poster: str) -> bool:
+        '''发送海报'''
+        if poster not in self.poster_tracker:
+            self.poster_tracker.append(poster)
         
         get_url = 'https://group.baicizhan.com/group/get_recruitment_style_info'
         headers = self.getHeaders(access_token)
         response = requests.get(get_url, headers=headers, timeout=10)
+        time.sleep(1)
         style_info = response.json().get('data')['list']
         style = -1
-        for style in style_info:
+        for post in style_info:
             if post['credit'] == 0 and post['count'] > 0: # 查询还有没有免费的海报
-                style = style['id']
+                style = post['id']
                 break
         for style in style_info:
             if post['count'] > 0:
-                style = style['id']
+                style = post['id']
                 break
         if style == -1:
             logger.info(f"没有可用的海报样式")
             return False
         
-
         post_url = 'https://group.baicizhan.com/group/publish_post'
         headers = self.getHeaders(access_token)
         headers["Content-Type"] = "application/json"
@@ -223,6 +230,7 @@ class BCZ:
         headers["Origin"] = "https://activity.baicizhan.com"
         headers["Referer"] = "https://activity.baicizhan.com"
         response = requests.post(url, headers = headers, json = json, timeout=10)
+        # print(f"测试！删除：{json}")
         if response.json().get("code",0) != 1:
             if response.json().get("code",0) == 999:
                 logger.info(f"删除的人已经不在小班中")

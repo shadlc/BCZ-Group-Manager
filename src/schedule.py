@@ -26,8 +26,9 @@ class Schedule:
 
     def run(self, *args, **kwargs) -> None:
         '''执行函数'''
-        while time.localtime().tm_sec != 0:
-            time.sleep(1)
+        # while time.localtime().tm_sec != 0:
+        #     time.sleep(1)
+        # raise ValueError(f'\033[31m计划任务{self.crontab_expr}未启动\033[0m')
         while True:
             try:
                 now = time.localtime()
@@ -36,7 +37,8 @@ class Schedule:
                         now.tm_mday in self.cron[2] and # 日期
                         now.tm_mon in self.cron[3] and # 月份
                         now.tm_wday in self.cron[4]): # 星期，0-6，0为星期一
-                    logger.info(f'执行计划[{self.crontab_expr}]')
+                    logger.info(f'\033[32m执行计划[{self.crontab_expr}]\033[0m')
+                    # raise ValueError(f'\033[31m计划任务{self.crontab_expr}未启动\033[0m')
                     threading.Thread(
                         target=self.exec,
                         args=args,
@@ -52,6 +54,7 @@ class Schedule:
                 time.sleep(60)
             except:
                 traceback.print_exc()
+                time.sleep(60)
 
     def parse_crontab(self, crontab_expr: str) -> list:
         '''解析crontab 45-49,59 23 * * *'''

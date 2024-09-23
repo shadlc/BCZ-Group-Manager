@@ -42,7 +42,7 @@ bcz = BCZ(config)
 xlsx = Xlsx(config)
 sqlite = SQLite(config)
 filter = Filter(strategy, bcz, sqlite, sse, config)
-monitor = Monitor(filter, sqlite)
+monitor = None
 processing = False
 logger = logging.getLogger(__name__)
 
@@ -354,7 +354,7 @@ def start_filter():
         if auth_token == '':
             return restful(404, '请设置班长AUTH_TOKEN')
 
-        filter.start(auth_token, share_key, group_id, strategy_id_list, scheduled_hour, scheduled_minute)
+        filter.start(auth_token, strategy_id_list, share_key, group_id, scheduled_hour, scheduled_minute)
         return restful(200, '筛选成功启动! ヾ(≧▽≦*)o')
     except Exception as e:
         return restful(500, f'筛选启动失败：{e}')
@@ -598,6 +598,10 @@ if __name__ == '__main__':
     
     app.register_blueprint(sse, url_prefix='/stream')
     if '--debug' in sys.argv:
+        import os
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+            monitor = Monitor(filter, sqlite)
         app.run(debug=True, host=config.host, port=config.port, request_handler=MyRequestHandler)
     else:
+        monitor = Monitor(filter, sqlite)
         app.run(config.host, config.port, request_handler=MyRequestHandler)

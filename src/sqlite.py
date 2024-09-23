@@ -237,8 +237,9 @@ class SQLite:
             return True
         return False
     
-    def queryGroupName(self, group_id: str) -> str:
+    def queryGroupName(self, group_id: int) -> str:
         '''查询小班名称'''
+        group_id = int(group_id)
         conn = self.connect(self.db_path)
         cursor = conn.cursor()
         result = cursor.execute(f'SELECT NAME FROM GROUPS WHERE GROUP_ID = ?', (group_id,)).fetchone()
