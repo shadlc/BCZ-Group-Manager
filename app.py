@@ -2,6 +2,7 @@ import sys
 import time
 import logging
 import datetime
+import traceback
 
 from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request, stream_with_context
 from werkzeug.serving import WSGIRequestHandler, _log
@@ -18,7 +19,7 @@ from src.filter import Filter, Monitor
 
 # if '--debug' in sys.argv or (hasattr(sys, 'gettrace') and sys.gettrace() is not None):
 if '--debug' in sys.argv:
-    level = logging.INFO
+    level = logging.INFO # DEBUG太多了，暂时不好处理
 else:
     level = logging.INFO
 
@@ -326,6 +327,7 @@ def query_filter_log():
         return restful(200, '', logs)
     except Exception as e:
         # logger.error(f'查询日志记录时发生错误: {e}')
+        traceback.print_exc()
         return restful(400, f'查询日志记录时发生错误(X_X): {e}')
 
 @app.route('/query_today_filter_log', methods=['POST'])
@@ -595,7 +597,6 @@ def sse_message() -> Response:
 #         return restful(500, f'删除黑名单失败：{e}')
 
 
-from src.sync import db_sync
 if __name__ == '__main__':
     logging.info('BCZ-Group-Manager 启动中...')
     if config.daily_record:
@@ -606,9 +607,10 @@ if __name__ == '__main__':
     app.register_blueprint(sse, url_prefix='/stream')
     if '--debug' in sys.argv:
         import os
-        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true':
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' and '--auto' in sys.argv:
             monitor = Monitor(filter, sqlite)
         app.run(debug=True, host=config.host, port=config.port, request_handler=MyRequestHandler)
     else:
-        monitor = Monitor(filter, sqlite)
+        if '--auto' in sys.argv:
+            monitor = Monitor(filter, sqlite)
         app.run(config.host, config.port, request_handler=MyRequestHandler)

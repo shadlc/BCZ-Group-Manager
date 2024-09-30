@@ -958,7 +958,7 @@ class SQLite:
             deskmate_days = 0
         else:
             deskmate_days = result[0]
-            print(deskmate_days)
+            # print(deskmate_days)
         # 比较数据库中的个人数据和传入的数据
         if user_info is not None:
             dependable_frame = user_info['dependable_frame']

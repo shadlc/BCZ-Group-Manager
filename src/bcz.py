@@ -5,6 +5,8 @@ import asyncio
 import logging
 import certifi
 import requests
+import threading
+import random
 from datetime import timedelta, date, datetime
 
 from src.config import Config
@@ -59,6 +61,9 @@ class BCZ:
         self.poster_tracker = [] # 记录已发送过的海报内容
         self.buffered_poster_list = {} # 记录grade1-grade5的海报列表
         self.poster_fetch_time = {} # 记录上次获取grade1-grade5的海报的时间
+        self.poster_thread_tids = None
+        self.poster_queue = [] # 记录需要发送的海报内容
+        self.random_session = random.randint(1, 5) # 海报随机间隔
 
     def getHeaders(self, token: str = '') -> dict:
         '''获取请求头'''
@@ -139,13 +144,11 @@ class BCZ:
         logger.info(f"退出小班成功")
         return True
 
-    def getPosterState(self, grade: int, access_token: str, poster: str) -> bool:
+    def getPosterState(self, grade: int, access_token: str, buffer : int = 15) -> bool:
         '''检查海报间隔是否足够'''
-        if poster not in self.poster_tracker:
-            self.poster_tracker.append(poster)
 
         last_poster_fetch_time = self.poster_fetch_time.get(grade-1, 0)
-        if last_poster_fetch_time + 15 < time.time():
+        if last_poster_fetch_time + buffer < time.time():
             get_url = 'https://group.baicizhan.com/group/get_recruitment_post_list?anchorId=0&direction=1'
             self.poster_fetch_time[grade-1] = time.time()
             headers = self.getHeaders(access_token)
@@ -161,12 +164,83 @@ class BCZ:
                     break
         
         return min_index
-        
+    
+    def sendPosterThread(self, poster_token: list) -> bool:
+        '''海报发送线程'''
+        time_delta = 30
+        target_grade = 1
+        total_grade = 5 # 一共1234
+        logger.info(f"\033[1;37m💖 海报发送线程启动\033[0m")
+        while len(self.poster_queue) > 0:
+            # poster_queue列表中包含字典，含有period, poster, group_id, group_name
+            user_token = None
+            for user in poster_token:
+                if user['grade'] == target_grade:
+                    user_token = user['access_token']
+                    break
+            if user_token is not None:
+                min_index = self.getPosterState(target_grade, user_token) # 只有第一个班级才会刷新海报列表
+                # 查找当前queue中period最小的
+                min_period = 1000000
+                target = None
+                for poster_dict in self.poster_queue:
+                    period_ = poster_dict['period']
+                    if period_ < min_index - self.random_session and period_ < min_period:
+                        min_period = period_
+                        target = poster_dict
+                if target is not None:
+                    group_id = target['group_id']
+                    group_name = target['group_name']
+                    period_ = target['period']
+                    poster = target['poster']
+                    if self.sendPoster(group_id, target_grade, user_token, poster):
+                        logger.info(f"\033[1;37m💖 海报{target_grade}区间隔{min_index}-{self.random_session}执行{group_name}({period_})成功\033[0m")
+                    else:
+                        logger.info(f"\033[1;37m⚠️ 海报{target_grade}区间隔{min_index}-{self.random_session}执行{group_name}({period_})失败\033[0m")
+                    self.random_session = random.randint(1, 5) # 随机间隔
+                else:
+                    logger.info(f"\033[1;37m海报{target_grade}区间隔{min_index}-{self.random_session}无可发送内容\033[0m")
+            else:
+                logger.info(f"\033[1;37m海报{target_grade}区无可用令牌\033[0m")
+            waiting_group_name = []
+            for poster_dict in self.poster_queue:
+                waiting_group_name.append(poster_dict['group_name'])
+            logger.info(f'等待队列：{waiting_group_name}')
+            target_grade = (target_grade + 1) % total_grade + 1
+            time.sleep(time_delta)
+        logger.info(f"\033[1;37m📝 海报发送线程结束\033[0m")
+        self.poster_thread_tids = None
+    
+    def joinPosterQueue(self, period: int, poster: str, group_id: str, group_name: str, poster_token: list) -> bool:
+        '''加入海报队列，poster_token由filter传入和管理'''
+        poster_dict = {
+            'period': period,
+            'poster': poster,
+            'group_id': group_id,
+            'group_name': group_name,
+        }
+        if poster_dict not in self.poster_queue:
+            self.poster_queue.append(poster_dict)
+            if self.poster_thread_tids is None:
+                self.poster_thread_tids = threading.Thread(target=self.sendPosterThread, args=(poster_token,))
+                self.poster_thread_tids.start()
+            return True
+        return False # 已在队列中
+
+    def quitPosterQueue(self, group_id: str) -> bool:
+        for poster_dict in self.poster_queue:
+            if poster_dict['group_id'] == group_id:
+                self.poster_queue.remove(poster_dict)
+                return True
+        return False # 不在队列中
+
+    def setPosterTracker(self, content: str) -> None:
+        '''记录已发送过的海报内容，每个filter一启动就会调用'''
+        if content not in self.poster_tracker:
+            self.poster_tracker.append(content)
+
     def sendPoster(self, group_id: str, grade: int, access_token: str, poster: str) -> bool:
         '''发送海报'''
-        if poster not in self.poster_tracker:
-            self.poster_tracker.append(poster)
-        
         get_url = 'https://group.baicizhan.com/group/get_recruitment_style_info'
         headers = self.getHeaders(access_token)
         response = requests.get(get_url, headers=headers, timeout=10)
@@ -308,6 +382,16 @@ class BCZ:
         if user_info.get('dependable_frame') is None:
             user_info['dependable_frame'] = 4
         return user_info
+    
+    def getUserLimit(self, access_token: str = ''):
+        '''获取【用户校牌】加入上限、授权上限、级组'''
+        headers = self.getHeaders(access_token)
+        response = requests.get('https://group.baicizhan.com/group/get_group_user_info', headers=headers) # 我的小班
+        data = response.json().get('data')
+        if not data:
+            return 0
+        return data["groupLimiteNumber"], data["groupAuthorizationLimiteNumber"], data['grade']
+
 
     def getUserGroupInfo(self, user_id: str = None, access_token: str = '') -> list[dict]:
         '''获取【我的小班】信息own_groups'''
