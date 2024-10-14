@@ -11,6 +11,7 @@ from datetime import timedelta, date, datetime
 
 from src.config import Config
 from src.sqlite import SQLite
+from src.get_headers import getHeaders
 
 logger = logging.getLogger(__name__)
 
@@ -58,6 +59,7 @@ class BCZ:
         self.hash_rmb = {}
         self.buffered_groups = {}
         self.buffered_daka_history = {}
+
         self.poster_tracker = [] # 记录已发送过的海报内容
         self.buffered_poster_list = {} # 记录grade1-grade5的海报列表
         self.poster_fetch_time = {} # 记录上次获取grade1-grade5的海报的时间
@@ -65,32 +67,38 @@ class BCZ:
         self.poster_queue = [] # 记录需要发送的海报内容
         self.random_session = random.randint(1, 5) # 海报随机间隔
 
-    def getHeaders(self, token: str = '') -> dict:
-        '''获取请求头'''
-        # TODO 实际上不同域名请求有细微差别，这里暂时只使用默认
-        if (not token):
-            token = self.config.main_token
+        self.tidal_tracker = [] # 记录可能使用tidal_token的群组share_key
+        self.tidal_token_list = {} # 记录tidal_token
+        self.tidal_thread_tids = None
+        self.tidal_token_queue = {} # 记录当前需要获取tidal_token的群组share_key
+        self.tidal_random_session = random.randint(1, 5) # tidal_token随机间隔
 
-        current_headers = self.default_headers['default_headers_dict']
+    # def getHeaders(self, token: str = '', note='') -> dict:
+    #     '''获取请求头'''
+    #     # TODO 实际上不同域名请求有细微差别，这里暂时只使用默认
+    #     print(f"{note}:")
+    #     if (not token):
+    #         token = self.config.main_token
 
-        if token not in self.hash_rmb:
-            # 使用哈希函数计算字符串的哈希值
-            hash_value = hash(token)
-            # 将哈希值转换为unsigned long long值，然后取反，再转换为16进制字符串
-            hex_string = format((~hash_value) & 0xFFFFFFFFFFFFFFFF, '016X')
-            self.hash_rmb[token] = {'hex_string': hex_string }
+    #     current_headers = self.default_headers['default_headers_dict']
 
-        current_cookie = self.default_cookie.copy()
-        current_cookie['device_id'] = f'{self.hash_rmb[token]["hex_string"]}'
-        current_cookie['access_token'] = token
-        current_cookie['client_time'] = str(int(time.time()))
-        current_headers['Cookie'] = ''
-        for key, value in current_cookie.items():
-            key = key.replace(";","%3B").replace("=","%3D")
-            value = value.replace(";","%3B").replace("=","%3D")
-            current_headers['Cookie'] += f'{key}={value};'
-        # 需要转为str
-        return current_headers
+    #     if token not in self.hash_rmb:
+    #         # 将哈希值转换为unsigned long long值，然后取反，再转换为16进制字符串
+    #         hex_string = format(hash(token), '016x')
+    #         self.hash_rmb[token] = {'hex_string': hex_string }
+
+    #     current_cookie = self.default_cookie.copy()
+    #     current_cookie['device_id'] = f'{self.hash_rmb[token]["hex_string"]}'
+    #     current_cookie['access_token'] = token
+    #     current_cookie['client_time'] = str(int(time.time()))
+    #     current_headers['Cookie'] = ''
+    #     for key, value in current_cookie.items():
+    #         key = key.replace(";","%3B").replace("=","%3D")
+    #         value = value.replace(";","%3B").replace("=","%3D")
+    #         current_headers['Cookie'] += f'{key}={value};'
+    #     # 需要转为str
+    #     print(current_headers['Cookie'])
+    #     return current_headers
 
 
     def fetch(self, url: str, method: str = 'GET', headers: dict = {}, payload = None) -> httpx.Response:
@@ -118,7 +126,7 @@ class BCZ:
     
     def joinGroup(self, share_key: str, access_token: str) -> bool:
         '''加入小班'''
-        headers = self.getHeaders(access_token)
+        headers = getHeaders(access_token)
         headers["Content-Type"] = "application/json"
         # headers["Origin"] = "https://group.baicizhan.com"
         # headers["Referer"] = "https://group.baicizhan.com"
@@ -135,7 +143,7 @@ class BCZ:
 
     def quitGroup(self, share_key: str, access_token: str) -> bool:
         '''退出小班'''
-        headers = self.getHeaders(access_token)
+        headers = getHeaders(access_token)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
         response_json = requests.post(f'https://group.baicizhan.com/group/quit?shareKey={share_key}', data='{}', headers=headers).json()
         if response_json.get("code",0) != 1:
@@ -151,7 +159,7 @@ class BCZ:
         if last_poster_fetch_time + buffer < time.time():
             get_url = 'https://group.baicizhan.com/group/get_recruitment_post_list?anchorId=0&direction=1'
             self.poster_fetch_time[grade-1] = time.time()
-            headers = self.getHeaders(access_token)
+            headers = getHeaders(access_token)
             response = requests.get(get_url, headers=headers, timeout=10)
             self.buffered_poster_list[grade-1] = response.json().get('data')['recruitmentPostVoList']
 
@@ -165,51 +173,84 @@ class BCZ:
         
         return min_index
     
+    def getPosterLog(self, group_id) -> dict:
+        '''获取海报发送日志'''
+        # 获取今天0点时间字符串
+        record = {}
+        today_0_time_str = datetime.now().strftime('%Y-%m-%d 00:00:00')
+        for grade in range(1, 6):
+            group_poster_cnt = 0
+            min_index = 1000000
+            i = 0
+            if self.buffered_poster_list.get(grade-1) is None:
+                record[grade] = {
+                    'today_total_poster_cnt': '未获取',
+                    'group_poster_cnt': 0,
+                    'min_index': 0,
+                }
+                continue
+            for i, poster in enumerate(self.buffered_poster_list[grade-1]):
+                if poster['createdAt'] < today_0_time_str:
+                    break
+                if poster['groupId'] == group_id:
+                    group_poster_cnt += 1
+                if min_index > i:
+                    min_index = i
+            record[grade] = {
+                'today_total_poster_cnt': i,
+                'group_poster_cnt': group_poster_cnt,
+                'min_index': min_index,
+            }
+        return record
+
     def sendPosterThread(self, poster_token: list) -> bool:
         '''海报发送线程'''
         time_delta = 30
         target_grade = 1
         total_grade = 5 # 一共1234
-        logger.info(f"\033[1;37m💖 海报发送线程启动\033[0m")
-        while len(self.poster_queue) > 0:
-            # poster_queue列表中包含字典，含有period, poster, group_id, group_name
-            user_token = None
-            for user in poster_token:
-                if user['grade'] == target_grade:
-                    user_token = user['access_token']
-                    break
-            if user_token is not None:
-                min_index = self.getPosterState(target_grade, user_token) # 只有第一个班级才会刷新海报列表
-                # 查找当前queue中period最小的
-                min_period = 1000000
-                target = None
-                for poster_dict in self.poster_queue:
-                    period_ = poster_dict['period']
-                    if period_ < min_index - self.random_session and period_ < min_period:
-                        min_period = period_
-                        target = poster_dict
-                if target is not None:
-                    group_id = target['group_id']
-                    group_name = target['group_name']
-                    period_ = target['period']
-                    poster = target['poster']
-                    if self.sendPoster(group_id, target_grade, user_token, poster):
-                        logger.info(f"\033[1;37m💖 海报{target_grade}区间隔{min_index}-{self.random_session}执行{group_name}({period_})成功\033[0m")
+        logger.info(f"\033[1;37m💖 海报发送线程启动\033[0m等待{time_delta}s")
+        time.sleep(time_delta) # 为了防止优先级低的任务先进入然后被抢占，这里等待一段时间
+        try:
+            while len(self.poster_queue) > 0:
+                # poster_queue列表中包含字典，含有period, poster, group_id
+                user_token = None
+                for user in poster_token:
+                    if user['grade'] == target_grade:
+                        user_token = user['access_token']
+                        break
+                if user_token is not None:
+                    min_index = self.getPosterState(target_grade, user_token) # 只有第一个班级才会刷新海报列表
+                    # 查找当前queue中period最小的
+                    min_period = 1000000
+                    target = None
+                    for poster_dict in self.poster_queue:
+                        period_ = poster_dict['period']
+                        if period_ < min_index - self.random_session and period_ < min_period:
+                            min_period = period_
+                            target = poster_dict
+                    if target is not None:
+                        group_id = target['group_id']
+                        group_name = target['group_name']
+                        period_ = target['period']
+                        poster = target['poster']
+                        if self.sendPoster(group_id, target_grade, user_token, poster):
+                            logger.info(f"\033[1;37m💖 海报{target_grade}区间隔{min_index}-{self.random_session}执行{group_name}({period_})成功\033[0m")
+                        else:
+                            logger.info(f"\033[1;37m⚠️ 海报{target_grade}区间隔{min_index}-{self.random_session}执行{group_name}({period_})失败\033[0m")
+                        self.random_session = random.randint(1, 5) # 随机间隔
                     else:
-                        logger.info(f"\033[1;37m⚠️ 海报{target_grade}区间隔{min_index}-{self.random_session}执行{group_name}({period_})失败\033[0m")
-                    self.random_session = random.randint(1, 5) # 随机间隔
+                        logger.info(f"\033[1;37m海报{target_grade}区间隔{min_index}-{self.random_session}无可发送内容\033[0m")
                 else:
-                    logger.info(f"\033[1;37m海报{target_grade}区间隔{min_index}-{self.random_session}无可发送内容\033[0m")
-            else:
-                logger.info(f"\033[1;37m海报{target_grade}区无可用令牌\033[0m")
-            waiting_group_name = []
-            for poster_dict in self.poster_queue:
-                waiting_group_name.append(poster_dict['group_name'])
-            logger.info(f'等待队列：{waiting_group_name}')
-            target_grade = (target_grade + 1) % total_grade + 1
-            time.sleep(time_delta)
-        logger.info(f"\033[1;37m📝 海报发送线程结束\033[0m")
-        self.poster_thread_tids = None
+                    logger.info(f"\033[1;37m海报{target_grade}区无可用令牌\033[0m")
+                waiting_group_name = []
+                for poster_dict in self.poster_queue:
+                    waiting_group_name.append(poster_dict['group_name'])
+                logger.info(f'等待队列：{waiting_group_name}')
+                target_grade = (target_grade + 1) % total_grade + 1
+                time.sleep(time_delta)
+        finally:
+            logger.info(f"\033[1;37m📝 海报发送线程结束\033[0m")
+            self.poster_thread_tids = None
     
     def joinPosterQueue(self, period: int, poster: str, group_id: str, group_name: str, poster_token: list) -> bool:
         '''加入海报队列，poster_token由filter传入和管理'''
@@ -242,7 +283,7 @@ class BCZ:
     def sendPoster(self, group_id: str, grade: int, access_token: str, poster: str) -> bool:
         '''发送海报'''
         get_url = 'https://group.baicizhan.com/group/get_recruitment_style_info'
-        headers = self.getHeaders(access_token)
+        headers = getHeaders(access_token)
         response = requests.get(get_url, headers=headers, timeout=10)
         time.sleep(1)
         style_info = response.json().get('data')['list']
@@ -260,7 +301,7 @@ class BCZ:
             return False
         
         post_url = 'https://group.baicizhan.com/group/publish_post'
-        headers = self.getHeaders(access_token)
+        headers = getHeaders(access_token)
         headers["Content-Type"] = "application/json"
         headers["Origin"] = "https://group.baicizhan.com"
         headers["Referer"] = "https://group.baicizhan.com/wanted_board/create"
@@ -281,13 +322,158 @@ class BCZ:
         else:
             logger.info('▲ 海报存在问题，请检查')
             return False
+        
+    def tidalTokenThread(self, tidal_token: list) -> None:
+        # return
+        # print(self.tidal_thread_tids)
+        # if self.tidal_thread_tids is not None:
+        #     return
+        def update_tidal_token_class_list(user):
+            # 更新tidal_token_class_list
+            # print(f'请求token:{user["access_token"]}')
+            j, a, g = self.getUserLimit(user['access_token'])
+            user_groups_info = self.getUserGroupInfo('0', user['access_token']) # uniqueId填0时获取自身
+            user['join_groups'] = []
+            user['join_groups_share_keys'] = []
+            user['join_groups_days'] = []
+            user['join_groups_names'] = []
+            user['current_tidal_group_count'] = 0
+            user['join_limit'], user['auth_limit'], user['grade'] = j, a, g
+            for info in user_groups_info:
+                user['join_groups'].append(str(info['id']))
+                user['join_groups_share_keys'].append(info['share_key'])
+                user['join_groups_days'].append(info['join_days'])
+                user['join_groups_names'].append(info['name'])
+                if str(info['id']) in self.tidal_tracker and info['join_days'] < 3:
+                    user['current_tidal_group_count'] = user.get('current_tidal_group_count', 0) + 1
+        
+        time_delta = 5
+        current_share_key = ''
+        current_group_id = ''
+        current_group_name = ''
+        all_tidal_token_cleared = False
+        try:
+
+            while len(self.tidal_token_queue) > 0 or not all_tidal_token_cleared:
+                all_tidal_token_cleared = True
+                min_tidal_index = 1000000 # 加入潮汐令牌的优先级
+                for _, group in self.tidal_token_queue.items():
+                    if group['tidal_index'] < min_tidal_index:
+                        min_tidal_index = group['tidal_index']
+                        current_share_key = group['share_key']
+                        current_group_name = group['group_name']
+                        current_group_id = group['group_id']
+                
+                logger.info(f"🌊 优先级最高的潮汐组[{current_share_key},{current_group_id}]{current_group_name}({min_tidal_index})")
+
+                for user in tidal_token:
+                    user_name = user['name']
+                    user_grade = user['grade']
+
+
+                    logger.info(f"开始检查潮汐令牌[{user_name}]")
+                    if user.get('join_groups', None) is None:
+                        update_tidal_token_class_list(user)
+                        logger.info(f"🥰 获取了{user_grade}{user_name}班级列表")
+                        all_tidal_token_cleared = False 
+                        break
+
+                    groups = user['join_groups']
+                    join_limit = user['join_limit'] # 默认3
+                    tidal_group_limit = user.get('tidal_group_limit', 6) # 默认6
+                    current_tidal_group_count = user['current_tidal_group_count']
+                    if current_tidal_group_count > 0:
+                        all_tidal_token_cleared = False # 有潮汐小班，不清空队列
+                    
+                    # 先检查是否有加入并且已经不需要的潮汐小班
+                    checked = 0
+                    user_share_key = user['join_groups_share_keys']
+                    user_join_days = user['join_groups_days']
+                    user_group_name = user['join_groups_names']
+                    for i, group_id in enumerate(groups):
+                        share_key = user_share_key[i]
+                        join_days = user_join_days[i]
+                        group_name = user_group_name[i]
+                        print(group_name, group_id, type(group_id))
+                        print(group_id in self.tidal_tracker, self.tidal_token_queue)
+                        print(self.tidal_tracker)
+
+                        if group_id not in self.tidal_tracker or join_days >= 3:
+                            logger.info(f"找到{user_name}加入了{group_name}({group_id}) {join_days}天，不符合潮汐组，跳过")
+                            continue # 不是潮汐小班 或 加入时间超过3天(不是潮汐令牌)
+                        if group_id in self.tidal_tracker and self.tidal_token_queue.get(group_id, None) is None:
+                            update_tidal_token_class_list(user)
+                            if group_id in self.tidal_tracker and self.tidal_token_queue.get(group_id, None) is None:
+                                logger.info(f'找到{user_name}加入了{group_name}({group_id}) {join_days}天，退出')
+                                if self.quitGroup(share_key, user['access_token']):
+                                    logger.info(f"[{group_name}]🌊 \033[1;35m移除tidal_token{user_grade}{user_name}，加入时间{join_days}(<3)天，还剩{user['current_tidal_group_count'] - 1}个\033[0m(60s)")
+                                else:
+                                    logger.warning(f"[{group_name}]退出潮汐令牌{user_grade}{user_name}失败(60s)")
+                                checked = 1
+                                break # 保证每个账号每一轮只请求一次
+
+                    if checked == 0:
+                        logger.info(f"[{user_name}]没有加入或移除tidal_groups完毕")
+                    else:
+                        continue
+
+                    # 从现有的找，如果没有，找个新的
+                    if current_share_key == '':
+                        logger.info(f"潮汐队列为空")
+                        continue
+                    if len(groups) < join_limit and current_group_id not in groups and current_tidal_group_count < tidal_group_limit:
+                        # 还有至少2个空位 并且 该令牌没加入该班级 并且 还没达到自定义限制，则加入
+                        if self.joinGroup(current_share_key, user['access_token']):
+                            logger.info(f"[{current_group_name}]🌊 \033[1;33m加入潮汐令牌{user_grade}{user_name}成功(现{len(groups) + 1}/{join_limit} 潮汐{current_tidal_group_count + 1}/{tidal_group_limit})\033[0m")
+                        else:
+                            logger.warning(f"[{current_group_name}]加入潮汐令牌{user_grade}{user_name}失败(60s)")
+                        update_tidal_token_class_list(user)
+                        break
+                time.sleep(time_delta)
+        finally:
+            logger.info(f"🧭 潮汐令牌队列为空，退出")
+            self.tidal_thread_tids = None
+                    
+    def joinTidalToken(self, share_key: str, group_name: str, tidal_index: int, group_id: str, tidal_token: list) -> bool:
+        '''加入潮汐令牌'''
+        group_id = str(group_id)
+        if self.tidal_thread_tids is None:
+            self.tidal_thread_tids = threading.Thread(target=self.tidalTokenThread, args=(tidal_token,))
+            self.tidal_thread_tids.start()
+        if group_id not in self.tidal_token_queue:
+            self.tidal_token_queue[group_id] = {'share_key': share_key, 'group_name': group_name, 'tidal_index': tidal_index, 'group_id': group_id}
+            return True
+        else:
+            return False # 已在队列中
+        
+
+    def quitTidalToken(self, group_id: str, tidal_token: list) -> bool:
+        '''退出潮汐令牌'''
+        group_id = str(group_id) # python实参可以改变形参的类型真的是很糟糕
+        if self.tidal_thread_tids is None:
+            self.tidal_thread_tids = threading.Thread(target=self.tidalTokenThread, args=(tidal_token,))
+            self.tidal_thread_tids.start()
+        if group_id in self.tidal_token_queue:
+            del self.tidal_token_queue[group_id]
+            return True
+        return False 
+        
+    def setTidalTokenTracker(self, group_id: str) -> None:
+        '''设置可能会使用tidal_token的群组'''
+        group_id = str(group_id)
+        if group_id not in self.tidal_tracker:
+            self.tidal_tracker.append(group_id)
+            return True
+        else:
+            return False
+
 
     # 移除成员
     def removeMembers(self, user_id: list, share_key: str, access_token: str) -> bool:
         
         url = f"{self.remove_members_url}?shareKey={share_key}"
         # 暂不确定url格式，稍后测试
-        headers = self.getHeaders(access_token)
+        headers = getHeaders(access_token)
         headers["Access-Control-Request-Method"] = "POST"
         headers["Access-Control-Request-Headers"] = "content-type"
         headers["Origin"] = "https://activity.baicizhan.com"
@@ -299,15 +485,20 @@ class BCZ:
             "shareKey": share_key,
         }
 
-        headers = self.getHeaders(access_token)
+        headers = getHeaders(access_token)
         headers["Content-Type"] = "application/json"
         headers["Origin"] = "https://activity.baicizhan.com"
         headers["Referer"] = "https://activity.baicizhan.com"
         response = requests.post(url, headers = headers, json = json, timeout=10)
         # print(f"测试！删除：{json}")
         if response.json().get("code",0) != 1:
-            if response.json().get("code",0) == 999:
+            msg = response.json().get("message","")
+            if "不在小班中" in msg:
                 logger.info(f"删除的人已经不在小班中")
+                return False
+            elif "没有权限" == msg:
+                logger.info(f"\033[1;31m{share_key}.{access_token}没有权限\033[0m删除，请检查是否使用了magic_proxy忘记关闭。暂停运行30s")
+                time.sleep(30)
                 return False
             logger.info(f"remove{json}出现异常，请检查")
             return False
@@ -334,7 +525,7 @@ class BCZ:
             'uid': None,
             'name': None,
         }
-        headers = self.getHeaders(token)
+        headers = getHeaders(token)
         response = requests.get(self.own_info_url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'使用token获取用户信息失败!\n{response.text}')
@@ -353,7 +544,7 @@ class BCZ:
         if not user_id:
             return
         url = f'{self.user_deskmate_url}?uniqueId={user_id}'
-        headers = self.getHeaders()
+        headers = getHeaders(self.config.main_token)
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取同桌失败! 用户不存在或主授权令牌无效'
@@ -385,7 +576,9 @@ class BCZ:
     
     def getUserLimit(self, access_token: str = ''):
         '''获取【用户校牌】加入上限、授权上限、级组'''
-        headers = self.getHeaders(access_token)
+        if access_token == '':
+            access_token = self.config.main_token
+        headers = getHeaders(access_token)
         response = requests.get('https://group.baicizhan.com/group/get_group_user_info', headers=headers) # 我的小班
         data = response.json().get('data')
         if not data:
@@ -397,8 +590,10 @@ class BCZ:
         '''获取【我的小班】信息own_groups'''
         if not user_id:
             return {}
+        if access_token == '':
+            access_token = self.config.main_token
         url = f'{self.group_list_url}?uniqueId={user_id}'
-        headers = self.getHeaders(access_token)
+        headers = getHeaders(access_token)
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
@@ -439,6 +634,8 @@ class BCZ:
 
     def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 1) -> dict:
         '''获取【班内主页】信息group/information'''
+        if auth_token == '':
+            auth_token = self.config.main_token
         buffer_data = self.buffered_groups.get(share_key)
         buffer_time = buffer_data.get('data_time') if buffer_data else None
         # logger.info(f'groupInfo: 获取到缓存时间{buffer_time}')
@@ -449,7 +646,7 @@ class BCZ:
         
         
         url = f'{self.group_detail_url}?shareKey={share_key}'
-        headers = self.getHeaders()
+        headers = getHeaders(self.config.main_token)
         main_response = requests.get(url, headers=headers, timeout=10)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
@@ -462,7 +659,7 @@ class BCZ:
         main_data = main_response.json()['data']
         auth_data = {}
         if auth_token:
-            headers = self.getHeaders(auth_token)
+            headers = getHeaders(auth_token)
             auth_response = requests.get(url, headers=headers, timeout=10)
             if auth_response.status_code != 200 or main_response.json().get('code') != 1:
                 msg = f'使用内部授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或内部授权令牌无效'
@@ -483,7 +680,7 @@ class BCZ:
                     'share_key': group["share_key"],
                     'auth_token': group['auth_token'],
                 })
-            main_headers = self.getHeaders()
+            main_headers = getHeaders(self.config.main_token)
             main_future = asyncio.gather(*[
                 self.asyncFetch(f'{self.group_detail_url}?shareKey={i["share_key"]}', headers=main_headers)
                 for i in group_fetch_list
@@ -493,7 +690,7 @@ class BCZ:
             if with_nickname:
                 # 利用班内排行榜即可获取小班昵称，因此注释该段
                 # auth_future = asyncio.gather(*[
-                #     self.asyncFetch(i['url'], headers=self.getHeaders(i['auth_token']))
+                #     self.asyncFetch(i['url'], headers=getHeaders(i['auth_token']))
                 #     for i in group_fetch_list if i['auth_token']
                 # ] )
                 # auth_response_list: list[httpx.Response] = await auth_future
@@ -646,7 +843,7 @@ class BCZ:
                 return self.buffered_daka_history.get(share_key)
 
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
-        headers = self.getHeaders()
+        headers = getHeaders(self.config.main_token)
         week_response = requests.get(f'{url}&week=1', headers=headers, timeout=10)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班成员历史打卡信息失败! 小班不存在或主授权令牌无效'

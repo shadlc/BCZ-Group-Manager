@@ -307,9 +307,10 @@
                 <div class="btn" onclick="queryFilterLog('+')">&gt;</div>
                 <div class="btn" onclick="queryFilterLog('-1')">&gt;&gt;</div>
               </div>
+              <!-- 设置默认值为50条/页 -->
               <select id="filter-page-count">
                 <option value="20">20条/页</option>
-                <option value="50">50条/页</option>
+                <option value="50" selected>50条/页</option>
                 <option value="100">100条/页</option>
                 <option value="200">200条/页</option>
                 <option value="500">500条/页</option>
@@ -438,6 +439,7 @@
   <script src="lib/notice_card.js"></script>
   <!-- <script src="lib/notice_card_without_jquery.js"></script> -->
   <script src="lib/strategy.js"></script>
+  <script src="lib/monitor.js"></script>
   <script src="lib/tool.js"></script>
   <script>
     var group_loaded = false;

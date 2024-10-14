@@ -283,7 +283,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
             </div>
             <div class="tag">记录：<select class="logCondition" style="height: 2rem">
                     <option value=-1>无</option>
-                    <option value=0>子条目</option>
+                    <option value=0 selected>子条目</option>
                     <option value=1>通过条件</option>
                     <option value=2>不通过条件</option>
                 </select>
@@ -316,7 +316,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                             <option value="drop_this_week">本周漏卡天数</option>
                             <option value="duration_days">加入天数</option>
                             <option value="completed_times">完成天数</option>
-                            <option value="wanka_index">上周晚卡天数</option>
+                            <option value="wanka_index">上周晚卡指数hh:mm:ss</option>
                             <!-- <option value="late_this_week">本周晚卡天数</option> -->
                         </select>
                     </div>
@@ -331,7 +331,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                         </select>
                     </div>
                     <div class="tag value">
-                        <input id="conditionValue" type="number" class="conditionValue">
+                        <input id="conditionValue" type="text" class="conditionValue">
                     </div>
                     <div class="tag actions">
                         <div class="btn" onclick="deleteCondition(this)">删除</div>
@@ -344,7 +344,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
             ConditionTag.querySelector('.conditionName').value = Condition.name;
             // 添加onchange
             ConditionTag.querySelector('.conditionName').onchange = function () {
-                if (this.value == 'group_nickname_contain'){
+                if (this.value == 'group_nickname_contain' || this.value == 'wanka_index'){
                     // 将输入框改成文本框
                     ConditionTag.querySelector('#conditionValue').type = 'text'
                     // 隐藏符号
@@ -468,7 +468,7 @@ function addCondition(subItemName) {
                     <option value="drop_this_week">本周漏卡天数</option>
                     <option value="duration_days">加入天数</option>
                     <option value="completed_times">完成天数</option>
-                    <option value="wanka_index">上周晚卡天数</option>
+                    <option value="wanka_index">上周晚卡指数hh:mm:ss</option>
                     <!-- <option value="late_this_week">本周晚卡天数</option> -->
                 </select>
             </div>
@@ -483,7 +483,7 @@ function addCondition(subItemName) {
                 </select>
             </div>
             <div class="tag value">
-                <input id="conditionValue" type="number" class="conditionValue">
+                <input id="conditionValue" type="text" class="conditionValue">
             </div>
             <div class="tag actions">
                 <div class="btn" onclick="deleteCondition(this)">删除</div>
@@ -496,7 +496,7 @@ function addCondition(subItemName) {
     ConditionTag.querySelector('.conditionName').value = 'deskmate_days';
     // 添加onchange
     ConditionTag.querySelector('.conditionName').onchange = function () {
-        if (this.value == 'group_nickname_contain'){
+        if (this.value == 'group_nickname_contain' || this.value == 'wanka_index'){
             // 将输入框改成文本框
             ConditionTag.querySelector('#conditionValue').type = 'text'
             // 隐藏符号

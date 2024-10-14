@@ -8,6 +8,7 @@ logger = logging.getLogger(__name__)
 class Schedule:
     def __init__(self, crontab: str, func: callable, *args, **kwargs) -> None:
         '''计划调用类'''
+        self.status = 0 # 0:准备中，1:等待，2:运行中，3:同一时段已运行，4:错误
         self.crontab_expr = crontab
         self.exec = func
         if len(self.crontab_expr.split()) < 5: # 允许加无效字段，方便打个小班名
@@ -42,6 +43,7 @@ class Schedule:
                         now.tm_mday in self.cron[2] and # 日期
                         now.tm_mon in self.cron[3] and # 月份
                         now.tm_wday in self.cron[4]): # 星期，0-6，0为星期一
+                    self.status = 2
                     logger.info(f'\033[32m执行计划[{self.crontab_expr}]\033[0m')
                     # raise ValueError(f'\033[31m计划任务{self.crontab_expr}未启动\033[0m')
                     threading.Thread(
@@ -50,17 +52,20 @@ class Schedule:
                         kwargs=kwargs,
                         daemon=True, # 计划任务线程不阻塞主线程
                     ).start()
+                    self.status = 3
                     while (now.tm_min in self.cron[0] and
                         now.tm_hour in self.cron[1] and
                         now.tm_mday in self.cron[2] and
                         now.tm_mon in self.cron[3] and
                         now.tm_wday in self.cron[4]):
                         time.sleep(60) # 同一个时间段，只执行一次
+                self.status = 1
                 time.sleep(60)
             except:
                 traceback.print_exc()
+                self.status = 4
                 time.sleep(60)
-
+    
     def parse_crontab(self, crontab_expr: str) -> list:
         '''解析crontab 45-49,59 23 * * *'''
         fields = crontab_expr.split(' ')
@@ -69,6 +74,8 @@ class Schedule:
         day_of_month = self.parse_field(fields[2], 1, 31)
         month = self.parse_field(fields[3], 1, 12)
         day_of_week = self.parse_field(fields[4], 0, 6)
+        if len(fields) > 5:
+            self.name = fields[5]
         return (minute, hour, day_of_month, month, day_of_week)
 
     def parse_field(self, field: str, min_value: int, max_value: int):

@@ -156,7 +156,24 @@ def observe_group():
             return restful(400, '调用方法异常Σ(っ °Д °;)っ')
         return restful(200, msg)
 
+@app.route('/monitor_status', methods=['GET'])
+def monitor_status():
+    # 返回若干个监控状态
+    with open("temp.json", 'r') as f:
+        status = json.load(f)
+    return restful(200, '', status)
 
+    if not monitor:
+        status['schedule'] = None
+    else:
+        status['schedule'] = {}
+        for name, schedule in monitor.schedule_list.items():
+            status['schedule'][name] = schedule.status
+        status['monitor'] = monitor.get()
+    status['filter'] = filter.logger_field
+    return restful(200, '', status)
+    
+        
 @app.route('/query_strategy_verdict_details', methods=['POST'])
 def query_strategy_verdict_details():
     '''获取策略审核详情'''

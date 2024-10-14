@@ -45,9 +45,11 @@ class Filter:
         
         self.clients_message = {}
         self.logger_message = {}
+        self.logger_field = {} # 相当于logger_message，但独立出来的字段
 
         self.tidal_token = {}
         self.poster_token = {}
+        
 
         try:
             with open("tidal_token.json", "r", encoding="utf-8") as f:
@@ -131,7 +133,11 @@ class Filter:
         try:
             value = int(condition['value'])
         except:
-            value = float(condition['value'])
+            try:
+                value = float(condition['value'])
+            except:
+                value = condition['value']
+
         operator = condition['operator']
         # 如果value和member_value类型不同
         if type(value)!= type(member_value):
@@ -267,10 +273,32 @@ class Filter:
 
         member_dict['wanka_index'] = 0
         daka_time_dict = self.sqlite.getCompletedTime(uniqueId, 7, conn)
-        for today_date, daka_time in daka_time_dict.items(): # 06:52:52这样的
-            # print(daka_time, late_daka_time)
-            if daka_time > late_daka_time:
-                member_dict['wanka_index'] += 1
+        if len(daka_time_dict) > 0:
+            def hh_mm_ss_to_seconds(hh_mm_ss):
+                h, m, s = map(int, hh_mm_ss.split(':'))
+                return h * 3600 + m * 60 + s
+            def seconds_to_hh_mm_ss(seconds: int):
+                m, s = divmod(seconds, 60)
+                h, m = divmod(m, 60)
+                return f"{h:02d}:{m:02d}:{s:02d}"
+            
+            average_daka_time = 0
+            standard_deviation = 0
+            daka_seconds = []
+            for today_date, daka_time in daka_time_dict.items():
+                if daka_time is not None and len(daka_time.split(':')) == 3:
+                    daka_seconds.append(hh_mm_ss_to_seconds(daka_time))
+                else:
+                    daka_seconds.append(86400) # 未打卡，默认24:00:00
+            for seconds in daka_seconds:
+                average_daka_time += seconds
+            average_daka_time = average_daka_time / len(daka_time_dict)
+            for seconds in daka_seconds:
+                standard_deviation += (seconds - average_daka_time) ** 2
+            standard_deviation = (standard_deviation / len(daka_time_dict)) ** 0.5
+            member_dict['wanka_index'] = seconds_to_hh_mm_ss(int(min(standard_deviation + average_daka_time, 86400)))
+        else:
+            member_dict['wanka_index'] = '00:00:00'
         
         for name in ['drop_last_week', 'drop_this_week', 'wanka_index']:
             try:
@@ -415,6 +443,7 @@ class Filter:
     def debug(self, message: str) -> None:
         '''调试信息，仅后台'''
         logger.debug(message)
+        
 
     def log(self, message: str, group_name: str) -> None:
         '''记录日志，分发到所有连接的消息队列'''
@@ -480,7 +509,7 @@ class Filter:
             with self.clients_message_lock:
                 self.clients_message.pop(client_id, None)
 
-    def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 999999) -> None:
+    def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 999999, tidal_index: int = 999999) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
         
         # pyautogui.FAILSAFE = False # 关闭自动退出功能
@@ -492,22 +521,11 @@ class Filter:
         # 获取小组信息
         leader_id = member_dict_temp['leader_id']
         group_count_limit = member_dict_temp['count_limit']
-        group_name = member_dict_temp['name']# log要有group_name
+        self.logger_field['group_count_limit'] = group_count_limit
+        group_name = member_dict_temp['name'] # log要有group_name
         self.activate_groups[share_key]['name'] = group_name
-        random_poster_session = random.randint(1, 4)
-
-        # 记录日志文件
-        if self.activate_groups[share_key].get('log_file') is None:
-            now = datetime.datetime.now()
-            week_of_year = now.isocalendar()[1]
-            today_date = now.strftime('%Y%m%d')
-            file_name = f'./logs/{group_name}-{today_date}-第{week_of_year}周.log'
-            # 如果有，则追加
-            if os.path.exists(file_name):
-                self.activate_groups[share_key]['log_file'] = open(file_name, 'a', encoding='utf-8')
-            else:
-                self.activate_groups[share_key]['log_file'] = open(file_name, 'w', encoding='utf-8')
-
+        fail_cnt = 0
+        
         # 等待直到启动时间
         if scheduled_hour is not None and scheduled_minute is not None:
             now = datetime.datetime.now()
@@ -543,7 +561,9 @@ class Filter:
 
         strategy_dict = self.strategy_class.get(strategy_index)
         strategy_name = strategy_dict['name']
-        self.log_strategy_name(strategy_name, group_name)
+        self.logger_field[group_name] = {}
+        self.logger_field[group_name]['strategy_name'] = strategy_name
+        self.logger_field[group_name]['strategy_left'] = f'{len(strategy_index_list)}'
         
         if strategy_dict is None:
             self.log(f"策略{strategy_index}不存在", group_name)
@@ -569,7 +589,7 @@ class Filter:
 
         
 
-        self.log(f'准备中...小组id = {group_id};班长id = {leader_id}', group_name)
+        self.log(f'准备中...小组id = {group_id};班长id = {leader_id}, tidal_index = {tidal_index}', group_name)
         self.log_dispatch(group_name, True)
 
         
@@ -587,25 +607,21 @@ class Filter:
         total_quit_count = 0 # 已经接受但退出的成员数
         total_removed_count = 0
         total_accepted_count = 1 # 包括班长
-        time.sleep(3)
-        # for member_dict in member_dict_temp["members"]:
-        #     uniqueId = member_dict['id']
-        #     member_list.append(uniqueId) # 记录当前成员列表
-
+        time.sleep(random.randint(0, 6))
+        
+        pass_key_today = int(pass_key)+int(time.strftime("%m%d"))*10000
+        self.log(f"pass_key:{pass_key_today} 使用方法：昵称后加(uniqueId*pass_key)的前四位", group_name)
+        self.log_dispatch(group_name, True)
         
         
         check_count = 0 # 检查次数，标志成员更新状态
         
         while self.activate_groups[share_key]['stop'] == False:
             try:
-                # raise ValueError('test')
                 # 每次循环都重新加载白名单
                 white_list = self.sqlite.queryWhitelist(group_id)
+                current_white_list = 0
                 late_daka_time = self.sqlite.queryGroupLateDakaTime(group_id)
-
-                # pyautogui.press('capslock') 
-                pass_key_today = int(pass_key)+int(time.strftime("%m%d"))*10000
-                
 
                 # 线程上传空间，操作commit后放入共享空间然后清空
                 member_dict_tosave = []
@@ -640,7 +656,11 @@ class Filter:
                 accept_list = []
                 quit_list = []
                 important_remove_list = [] # 重要踢出列表，不打卡的
-                # pyautogui.press('capslock') 
+                
+                # 在获取信息后先同步前端
+                self.logger_field[group_name]['check_count'] = check_count+1
+                self.logger_field[group_name]['member_count'] = member_cnt
+
                 for i, personal_dict_temp in enumerate(member_dict_temp["members"]):
                     if personal_dict_temp['completed_time_stamp'] > 0:
                         current_daka_count += 1
@@ -668,7 +688,7 @@ class Filter:
                     if uniqueId not in member_list:
                         
                         # 如果当前时间戳 - 完成时间戳 < 180s，不处理，因为可能还没完成打卡
-                        if (int(time.time()) - personal_dict_temp['completed_time_stamp']) < 60:
+                        if (int(time.time()) - personal_dict_temp['completed_time_stamp']) < 60 and group_count_limit - member_cnt > 2:# 如果人快满了，则不等这些乌龟了
                             self.log(f'{personal_dict_temp["group_nickname"]}({personal_dict_temp["nickname"]})[{uniqueId}]', group_name)
                             self.log(f"DELTA:{(int(time.time()) - personal_dict_temp['completed_time_stamp'])}< 60，不处理(6s)", group_name)   
                             self.log_dispatch(group_name)
@@ -721,6 +741,7 @@ class Filter:
                                     if result_code == 2:
                                         if str(uniqueId) in white_list or str(uniqueId * pass_key_today)[:4] in personal_dict_temp['group_nickname']:
                                             result_code = -1
+                                            current_white_list += 1
                                         elif "不打卡" in sub_strat_name:
                                             result_code = 3 # 踢出优先级最高
                                     verdict_dict_tosave[uniqueId] = (index, f'{operation}{result_code}', reason)
@@ -749,10 +770,12 @@ class Filter:
                             # print('!!', uniqueId, pass_key_today)
                             if str(uniqueId * pass_key_today)[:4] in personal_dict_temp['group_nickname']:
                                 self.log(f"【〇】远程添加白名单，不操作", group_name)
+                                accepted_count += 1
                                 self.log_dispatch(group_name, True)
                                 continue
                             elif str(uniqueId) in white_list:
                                 self.log(f"【〇】白名单，不操作", group_name)
+                                accepted_count += 1
                                 self.log_dispatch(group_name, True)
                                 continue
                             else:
@@ -853,8 +876,15 @@ class Filter:
                     if self.bcz.removeMembers(remove_list, share_key, authorized_token):
                     # if True:
                         self.log(f"普通踢出成功", group_name)
+                        fail_cnt = 0
                     else:
                         self.log(f"普通踢出失败(20s)", group_name)
+                        fail_cnt += 1
+                        if fail_cnt > 5:
+                            self.log(f"\033[31m踢人失败次数过多，请检查。暂停运行30s\033[0m(30s)", group_name)
+                            self.log_dispatch(group_name)
+                            time.sleep(30)
+                            fail_cnt = 0
                 self.log_dispatch(group_name, True)
 
                 # 成员列表更新
@@ -901,7 +931,7 @@ class Filter:
                     self.filter_log_dict.append({
                         'group_id':group_id,
                         'date_time':datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'member_count':member_dict_temp['member_count'],
+                        'member_count':member_cnt,
                         'accepted_count': total_accepted_count - total_quit_count,
                         'accept_list': accept_list,
                         'remove_list': remove_list_uniqueId,
@@ -918,25 +948,6 @@ class Filter:
                 # 例如最少是196，则198或以上时延迟减少，否则增加
                 if check_count > 1:
                     delay = min(max(delay - delay_delta * (newbies_count - 1), 3.5), 57.5) # 筛选暂停，延迟增加
-                def sub_current_tidal_group_count(user, delta):# 写个-1就是加了
-                    current_tidal_group_count = user.get('current_tidal_group_count', 0)
-                    current_tidal_group_count = max(0, current_tidal_group_count - delta)# 有可能是中途启动，之前的没退干净
-                    user['current_tidal_group_count'] = current_tidal_group_count
-
-                def update_tidal_token_class_list(user, with_lock=True):
-                    # 更新tidal_token_class_list
-                    j, a, g = self.bcz.getUserLimit(user['access_token'])
-                    user_groups_info = self.bcz.getUserGroupInfo('0', user['access_token']) # uniqueId填0时获取自身
-                    if with_lock:
-                        self.lock.acquire()
-                    user['join_groups'] = []
-                    user['join_groups_days'] = []
-                    user['join_limit'], user['auth_limit'], user['grade'] = j, a, g
-                    for info in user_groups_info:
-                        user['join_groups'].append(info['id'])
-                        user['join_groups_days'].append(info['join_days'])
-                    if with_lock:
-                        self.lock.release()
 
                 if delay > 20 and poster != '': # 使用海报令牌
                     if self.bcz.joinPosterQueue(poster_session, poster, group_id, group_name, self.poster_token):
@@ -949,83 +960,35 @@ class Filter:
                         self.log_dispatch(group_name, True)
 
                 if delay > 25:# 加入潮汐令牌
-                    def useTidalToken(user, update=False):
-                        join_groups_list = user.get('join_groups', None)
-                        join_limit = user.get('join_limit', 3)
-                        tidal_group_limit = user.get('tidal_group_limit', 6)
-                        current_tidal_group_count = user.get('current_tidal_group_count', 0)
-                        if update and join_groups_list is None:
-                            update_tidal_token_class_list(user)
-                            join_groups_list = user['join_groups']
-                        if join_groups_list is not None:
-                            if len(join_groups_list) < join_limit and group_id not in join_groups_list and current_tidal_group_count < tidal_group_limit:
-                                # 还有至少2个空位 并且 该令牌没加入该班级 并且 还没达到自定义限制，则加入
-                                if self.bcz.joinGroup(share_key, user['access_token']):
-                                    self.log(f"🌟 \033[1;33m加入潮汐令牌{user['grade']}{user['name']}成功(现{len(join_groups_list) + 1}/{join_limit} 潮汐{current_tidal_group_count + 1}/{tidal_group_limit})\033[0m", group_name)
-                                    update_tidal_token_class_list(user)
-                                    user['current_tidal_group_count'] = current_tidal_group_count + 1
-                                else:
-                                    self.log(f"加入潮汐令牌{user['grade']}{user['name']}失败(60s)", group_name)
-                                    update_tidal_token_class_list(user)
-                                return 1
-                        return 0
-                    # 从现有的找，如果没有，找个新的
-                    checked = 0
-                    for user in self.tidal_token:
-                        checked = useTidalToken(user, update=False)
-                        if checked:
-                            break
-                    if checked == 0:
-                        for user in self.tidal_token:
-                            checked = useTidalToken(user, update=True)
-                            if checked:
-                                break
-                        if checked == 0:
-                            self.log(f"delay = {delay}s 人数{member_cnt}/{group_count_limit}, 没有可用的tidal_token了(60s)", group_name)
-                    self.log_dispatch(group_name, True)
+                    if self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, self.tidal_token):
+                        self.log(f"🌊 开始加入潮汐令牌", group_name)
+                        self.log_dispatch(group_name, True)
                 
-                elif delay < 7.5 or group_count_limit - member_cnt < 4: # 移除潮汐令牌
-                    checked = 0
+                elif delay < 7.5 or group_count_limit - member_cnt < 3: # 移除潮汐令牌
+                    if self.bcz.quitTidalToken(group_id, self.tidal_token):
+                        self.log(f"🌊 停止潮汐令牌", group_name)
+                        self.log_dispatch(group_name, True)
+
+                # 先同步前端
+                if len(self.clients_message) > 1:
+                    self.logger_field[group_name]['client_count'] = len(self.clients_message)
+                    self.logger_field[group_name]['total_newbies_count'] = total_newbies_count
+                    self.logger_field[group_name]['total_removed_count'] = total_removed_count
+                    self.logger_field[group_name]['total_accepted_count'] = total_accepted_count
+                    self.logger_field[group_name]['old_members_count'] = old_members_count
+                    self.logger_field[group_name]['current_daka_count'] = current_daka_count
+                    self.logger_field[group_name]['delay'] = delay
+                    used_tidal_token = []
                     for user in self.tidal_token:
-                        if user.get('join_groups', None) is None:
-                            update_tidal_token_class_list(user)
-                            checked = 1
-                            self.log(f"获取{user['grade']}{user['name']}班级列表", group_name)
-                            break
-                        try:
-                            index = user['join_groups'].index(group_id)
-                            if int(user['join_groups_days'][index]) >= 3:
-                                logger.info(f'找到{user["name"]}加入了{user["join_groups_days"][index]}天，跳过')
-                                continue
-                        except ValueError:
-                            continue
-                        update_tidal_token_class_list(user) # 有可能加入后已经踢出，所以更新一下确认
-                        try:
-                            index = user['join_groups'].index(group_id)
-                        except ValueError:
-                            sub_current_tidal_group_count(user, 1)
-                            continue
-                        
-                        
-                        logger.info(f'找到{user["name"]}加入了{user["join_groups_days"][index]}天，退出')
-                        if int(user['join_groups_days'][index]) < 3:
-                            # 防止退出加入时间过长的班级
-                            self.bcz.quitGroup(share_key, user['access_token'])
-                            sub_current_tidal_group_count(user, 1)
-                            try:
-                                self.log(f"🌟 \033[1;35m退出delay = {delay}s 人数{member_cnt}/{group_count_limit}, 移除tidal_token{user['grade']}{user['name']}，加入时间{user['join_groups_days'][index]}(<3:{user['join_groups_days'][index] < 3})天，还剩{current_tidal_group_count}个\033[0m(60s)", group_name)
-                            except:
-                                self.log(user, group_name)
-                            checked = 1
-                            update_tidal_token_class_list(user)
-                            break
+                        if user.get('join_groups', None) is not None and group_id in user['join_groups']:
+                            current_join = len(user['join_groups'])
+                            join_limit = user.get('join_limit', '.')
+                            tidal_group_limit = user.get('tidal_group_limit', '.')
+                            current_tidal_group_count = user.get('current_tidal_group_count', '.')
+                            used_tidal_token.append(f'{user["grade"]}{user["name"]}({current_join}/{join_limit} 潮汐{current_tidal_group_count}/{tidal_group_limit})')
+                    self.logger_field[group_name]['used_tidal_token'] = used_tidal_token
+                    self.logger_field[group_name]['poster_count'] = self.bcz.getPosterLog(group_id)
 
-                    if checked == 0:
-                        self.log(f"delay = {delay}s 人数{member_cnt}/{group_count_limit}, 移除tidal_token完毕(60s)", group_name)
-                    self.log_dispatch(group_name, True)
-                    
-
-                    
                 # 将总人数标黄
                 self.log(f" [{strategy_name}] 第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）({delay}s)", group_name)
                 self.log_dispatch(group_name, True)
@@ -1037,7 +1000,7 @@ class Filter:
                     self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
                     self.log_dispatch(group_name, True)
                     break
-                time.sleep(delay)
+                time.sleep(delay + random.randint(-10, 10) / 10) # 随机延迟，避免多个线程同时执行
         
             except Exception as e:
                 # if len(self.clients_message) == 0:
@@ -1059,7 +1022,7 @@ class Filter:
         print(strategy_index_list)
         if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
             self.log(f'❄️ \033[1;36m进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选 \033[0m', group_name)
-            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id))
+            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
             self.activate_groups[share_key]['tids'].start()
         else:
             self.log('❄️ \033[1;32m 所有筛选结束！\033[0m', group_name)
@@ -1069,11 +1032,12 @@ class Filter:
 
 
 
-    def start(self, authorized_token: str, strategy_index_list: list[str], share_key: str = "", group_id: str = "", scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 12) -> None:
+    def start(self, authorized_token: str, strategy_index_list: list[str], share_key: str = "", group_id: str = "", scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 12, tidal_index: int = 10) -> None:
         # 时间含义：24h，到当天的scheduled_hour:scheduled_minute时，开始筛选
         # print("\033[1;32m启动监控\033[0m")
         self.stop(share_key) # 防止重复运行
         self.bcz.setPosterTracker(poster)
+        self.bcz.setTidalTokenTracker(group_id)
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
         # if share_key != "2vodwy4c38bjt15n" :
@@ -1119,7 +1083,7 @@ class Filter:
                     db_sync(self.sqlite.db_path, group_name, local_sync_dict)
 
 
-        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session))
+        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
         self.activate_groups[share_key]['tids'].start()
 
         time.sleep(1) # 前端技术性延迟
@@ -1164,6 +1128,7 @@ class Monitor:
             json.dump(self.default_dict, open(self.file_path, mode='w', encoding='utf-8'), ensure_ascii=False, indent=2)
             self.json_data = self.default_dict
             logger.info('初次启动，已在当前执行目录生成monitor.json文件')
+        self.schedule_list = {}
         self.activate()
     
     def __del__(self) -> None:
@@ -1183,6 +1148,7 @@ class Monitor:
         for group_id, group in items.items():
             poster = group.get('poster', '')
             poster_session = group.get('poster_session', 12)
+            tidal_index = group.get('tidal_index', 12)
             share_key = self.sqlite.queryGroupShareKey(group_id)
             if share_key == '':
                 raise Exception('请先添加该小班 到观察列表')
@@ -1198,7 +1164,7 @@ class Monitor:
                     crontab = item['crontab']
                     strategy_list = item['strategy_list']
                     # logger.info(f'激活定时任务: {name}.{group_id}@{crontab}')
-                    Schedule(f'{crontab} {name}', self.filter.start, auth_token, strategy_list, share_key, group_id, poster=poster, poster_session=poster_session)
+                    self.schedule_list[name] = Schedule(f'{crontab} {name}', self.filter.start, auth_token, strategy_list, share_key, group_id, poster=poster, poster_session=poster_session, tidal_index=tidal_index)    
 
     def deactivate(self, current_share_key = None) -> None:
         '''停用定时任务'''
