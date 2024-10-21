@@ -119,6 +119,7 @@ class SQLite:
             '''CREATE TABLE IF NOT EXISTS FILTER_LOG (                   -- 筛选日志表
                 GROUP_ID TEXT,                       -- 小班ID
                 DATETIME TEXT,                       -- 操作日期时间
+                STRATEGY_NAME TEXT,                  -- 策略名称
                 MEMBER_COUNT INTEGER,                -- 本轮小班成员数
                 ACCEPTED_COUNT INTEGER,                -- 在班的接受的人数
                 ACCEPT_LIST TEXT,                    -- 本轮接受列表<br>
@@ -730,12 +731,22 @@ class SQLite:
         '''保存筛选日志'''
         cursor = conn.cursor()
         for filter_log in filter_log_list:
-            if len(filter_log['accept_list']) + len(filter_log['remove_list']) + len(filter_log['quit_list']) == 0:
-                continue
+            # if len(filter_log['accept_list']) + len(filter_log['remove_list']) + len(filter_log['quit_list']) == 0:
+            #     continue
+            # 去掉原字串中的(57.5s)
+            name_without_delay = filter_log['strategy_name'][:-7]
+            today_date_0 = datetime.now().strftime('%Y-%m-%d 00:00:00 %U周%w')
+            last_date = cursor.execute(
+                'SELECT DATETIME FROM FILTER_LOG WHERE GROUP_ID = ? AND STRATEGY_NAME LIKE ?',
+                (filter_log['group_id'], f'{name_without_delay}%') # %要写在参数，否则会incomplete input错误
+            ).fetchone()
+            if last_date is not None and last_date[0] >= today_date_0 and len(filter_log['accept_list']) + len(filter_log['remove_list']) + len(filter_log['quit_list']) == 0:
+                continue # 今天已经记录过了
             cursor.execute(
-                f'INSERT INTO FILTER_LOG (GROUP_ID, DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?)',
+                f'INSERT INTO FILTER_LOG (GROUP_ID, STRATEGY_NAME, DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?,?)',
                 (
                     filter_log['group_id'],
+                    filter_log['strategy_name'],
                     filter_log['date_time'],
                     filter_log['member_count'],
                     filter_log['accepted_count'],
@@ -777,7 +788,7 @@ class SQLite:
         result = {}
         # 找group_id按照时间排序从count_start开始的count_limit条记录
         result['data'] = cursor.execute(
-            f'SELECT DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
+            f'SELECT DATETIME, STRATEGY_NAME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
             (group_id, count_limit, count_start)
         ).fetchall()
         count = cursor.execute(

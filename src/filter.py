@@ -523,6 +523,7 @@ class Filter:
         group_count_limit = member_dict_temp['count_limit']
         self.logger_field['group_count_limit'] = group_count_limit
         group_name = member_dict_temp['name'] # log要有group_name
+        group_rank = member_dict_temp['rank']
         self.activate_groups[share_key]['name'] = group_name
         fail_cnt = 0
         
@@ -920,26 +921,6 @@ class Filter:
                 
 
 
-                # 【保存数据】到共享空间
-                
-                with self.lock:
-                    self.member_dict.extend(member_dict_tosave)
-                    self.personal_dict.extend(personal_dict_tosave) 
-                    if (self.verdict_dict.get(strategy_index, None) == None):
-                        self.verdict_dict[strategy_index] = {}
-                    self.verdict_dict[strategy_index].update(verdict_dict_tosave)
-                    self.filter_log_dict.append({
-                        'group_id':group_id,
-                        'date_time':datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        'member_count':member_cnt,
-                        'accepted_count': total_accepted_count - total_quit_count,
-                        'accept_list': accept_list,
-                        'remove_list': remove_list_uniqueId,
-                        'quit_list': quit_list
-                    })
-                    if self.autosave_is_running == False:
-                        self.autosave_is_running = True
-                        threading.Thread(target=self.autosave).start()
                     
                 conn.commit() 
                 conn.close() # 关闭数据库连接
@@ -949,7 +930,7 @@ class Filter:
                 if check_count > 1:
                     delay = min(max(delay - delay_delta * (newbies_count - 1), 3.5), 57.5) # 筛选暂停，延迟增加
 
-                if delay > 20 and poster != '': # 使用海报令牌
+                if delay >= 20 and poster != '': # 使用海报令牌
                     if self.bcz.joinPosterQueue(poster_session, poster, group_id, group_name, self.poster_token):
                         self.log(f"🌟 开始预约海报令牌", group_name)
                         self.log_dispatch(group_name, True)
@@ -970,24 +951,63 @@ class Filter:
                         self.log_dispatch(group_name, True)
 
                 # 先同步前端
-                if len(self.clients_message) > 1:
-                    self.logger_field[group_name]['client_count'] = len(self.clients_message)
-                    self.logger_field[group_name]['total_newbies_count'] = total_newbies_count
-                    self.logger_field[group_name]['total_removed_count'] = total_removed_count
-                    self.logger_field[group_name]['total_accepted_count'] = total_accepted_count
-                    self.logger_field[group_name]['old_members_count'] = old_members_count
-                    self.logger_field[group_name]['current_daka_count'] = current_daka_count
-                    self.logger_field[group_name]['delay'] = delay
-                    used_tidal_token = []
-                    for user in self.tidal_token:
-                        if user.get('join_groups', None) is not None and group_id in user['join_groups']:
+                # print(self.bcz.getOwnPosterState(poster))
+                self.logger_field[group_name]['client_count'] = len(self.clients_message)
+                self.logger_field[group_name]['total_newbies_count'] = total_newbies_count
+                self.logger_field[group_name]['total_removed_count'] = total_removed_count
+                self.logger_field[group_name]['total_accepted_count'] = total_accepted_count
+                self.logger_field[group_name]['old_members_count'] = old_members_count
+                self.logger_field[group_name]['current_daka_count'] = current_daka_count
+                self.logger_field[group_name]['delay'] = delay
+                used_tidal_token = []
+                stay_tidal_token = []
+                for user in self.tidal_token:
+                    try:
+                        if user.get('join_groups', None) is not None:
+                            index = user['join_groups'].index(str(group_id))
+                            join_groups_days = user['join_groups_days'][index]
+                            if join_groups_days > 3:# 不是潮汐组
+                                stay_tidal_token.append(user)
+                                continue
                             current_join = len(user['join_groups'])
                             join_limit = user.get('join_limit', '.')
                             tidal_group_limit = user.get('tidal_group_limit', '.')
                             current_tidal_group_count = user.get('current_tidal_group_count', '.')
                             used_tidal_token.append(f'{user["grade"]}{user["name"]}({current_join}/{join_limit} 潮汐{current_tidal_group_count}/{tidal_group_limit})')
-                    self.logger_field[group_name]['used_tidal_token'] = used_tidal_token
-                    self.logger_field[group_name]['poster_count'] = self.bcz.getPosterLog(group_id)
+                    except ValueError:
+                        pass
+                    
+                self.logger_field[group_name]['used_tidal_token'] = used_tidal_token
+                self.logger_field[group_name]['poster_count'] = self.bcz.getPosterLog(group_id)
+
+                # 【保存数据】到共享空间
+                with self.lock:
+                    self.member_dict.extend(member_dict_tosave)
+                    self.personal_dict.extend(personal_dict_tosave) 
+                    if (self.verdict_dict.get(strategy_index, None) == None):
+                        self.verdict_dict[strategy_index] = {}
+                    function_str = strategy_name
+                    function_str += f'[{group_rank}段{self.bcz.getRank(group_id, authorized_token, group_rank)}]'
+                    function_str += '🌟'if self.bcz.inPosterQueue(group_id) else '🏵️'
+                    function_str += str(self.bcz.getOwnPosterState(poster))
+                    function_str += '🌊'if self.bcz.inTidalTokenQueue(group_id) else '🧭'
+                    function_str += f'{len(used_tidal_token)}+{len(stay_tidal_token)}'
+                    function_str += f'({delay}s)'.ljust(7)
+                    # print(function_str)
+                    self.verdict_dict[strategy_index].update(verdict_dict_tosave)
+                    self.filter_log_dict.append({
+                        'group_id':group_id,
+                        'strategy_name':function_str,
+                        'date_time':datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S %U周%w"),
+                        'member_count':member_cnt,
+                        'accepted_count': total_accepted_count - total_quit_count,
+                        'accept_list': accept_list,
+                        'remove_list': remove_list_uniqueId,
+                        'quit_list': quit_list
+                    })
+                    if self.autosave_is_running == False:
+                        self.autosave_is_running = True
+                        threading.Thread(target=self.autosave).start()
 
                 # 将总人数标黄
                 self.log(f" [{strategy_name}] 第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）({delay}s)", group_name)
@@ -1019,7 +1039,7 @@ class Filter:
                 #     threading.Thread(target=self.stop, args=()).start()
                 
         self.log(f'❄️ \033[1;36m{strategy_name}筛选结束！\033[0m', group_name)
-        print(strategy_index_list)
+        # print(strategy_index_list)
         if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
             self.log(f'❄️ \033[1;36m进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选 \033[0m', group_name)
             self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
@@ -1063,7 +1083,8 @@ class Filter:
         #     print(f'-#{date}#')
         # return
         today = datetime.datetime.now()
-        for i in range(30):
+        today_str = today.strftime('%Y-%m-%d')
+        for i in range(1, 30):
             day_str = (today - datetime.timedelta(days=i)).strftime('%Y-%m-%d')
             if day_str not in date_dict:
                 local_sync_dict.append(day_str)
@@ -1074,7 +1095,7 @@ class Filter:
         if absence_dict:
             for id, daka_date in absence_dict.items():
                 if id in daka_dict and daka_date in daka_dict[id]:
-                    if daka_date not in local_sync_dict:
+                    if daka_date not in local_sync_dict and daka_date < today_str:
                         local_sync_dict.append(daka_date)
                     quantity += 1
             logger.info(f'检测到{quantity}条丢失记录，日期{local_sync_dict}')

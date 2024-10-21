@@ -1,5 +1,7 @@
 
 function $newCard(msg) {
+    // console.log(msg);
+    return;
             // 获取msg有多少个<br>
             lines = msg.split('<br>')
             height = 30; // 计算高度

@@ -73,6 +73,9 @@ class BCZ:
         self.tidal_token_queue = {} # 记录当前需要获取tidal_token的群组share_key
         self.tidal_random_session = random.randint(1, 5) # tidal_token随机间隔
 
+        self.rank_buffer = {} # key=1-7，对应青铜到王者
+        self.rank_buffer_time = {} # key=1-7，对应青铜到王者
+
     # def getHeaders(self, token: str = '', note='') -> dict:
     #     '''获取请求头'''
     #     # TODO 实际上不同域名请求有细微差别，这里暂时只使用默认
@@ -151,6 +154,32 @@ class BCZ:
             return False
         logger.info(f"退出小班成功")
         return True
+
+    def getOwnPosterState(self, poster: str) -> bool:
+        '''检查自己的上一张海报的间距'''
+        min_index = {}
+        count = {}
+        min_other_index = {}
+        for grade in range(1, 6):
+            min_index[grade] = -1
+            min_other_index[grade] = -1
+            count[grade] = 0
+            if grade-1 not in self.buffered_poster_list:
+                continue
+            for i, post in enumerate(self.buffered_poster_list[grade-1]):
+                if post['content'] == poster:
+                    count[grade] += 1
+                    if min_index[grade] == -1:
+                        min_index[grade] = i
+                if min_other_index[grade] == -1 and post['content'] in self.poster_tracker:
+                    min_other_index[grade] = i
+                # if min_index[grade] != -1 and min_other_index[grade] != -1:
+                #     break
+        # 打包成min_index/min_other_index列表
+        result = []
+        for grade in range(1, 6):
+            result.append(f"{min_index[grade]}/{min_other_index[grade]}:{count[grade]}")
+        return result
 
     def getPosterState(self, grade: int, access_token: str, buffer : int = 15) -> bool:
         '''检查海报间隔是否足够'''
@@ -274,6 +303,13 @@ class BCZ:
                 self.poster_queue.remove(poster_dict)
                 return True
         return False # 不在队列中
+    
+    def inPosterQueue(self, group_id: str) -> bool:
+        for poster_dict in self.poster_queue:
+            if poster_dict['group_id'] == group_id:
+                return True
+        return False # 不在队列中
+
 
     def setPosterTracker(self, content: str) -> None:
         '''记录已发送过的海报内容，每个filter一启动就会调用'''
@@ -323,6 +359,19 @@ class BCZ:
             logger.info('▲ 海报存在问题，请检查')
             return False
         
+    def getRank(self, group_id: int, access_token: str, rank: int, buffer_time = 180) -> int:
+        # 获取小班排名
+        # https://group.baicizhan.com/group/get_group_rank?rank=7
+        group_id = int(group_id)
+        if self.rank_buffer_time.get(rank) is None or self.rank_buffer_time[rank] + buffer_time < time.time():
+            headers = getHeaders(access_token)
+            response = requests.get(f"https://group.baicizhan.com/group/get_group_rank?rank={rank}", headers=headers, timeout=10)
+            self.rank_buffer_time[rank] = time.time()
+            self.rank_buffer[rank] = response.json().get('data')['list']
+        for i, group in enumerate(self.rank_buffer[rank]):
+            if group['groupId'] == group_id:
+                return i
+
     def tidalTokenThread(self, tidal_token: list) -> None:
         # return
         # print(self.tidal_thread_tids)
@@ -347,7 +396,7 @@ class BCZ:
                 if str(info['id']) in self.tidal_tracker and info['join_days'] < 3:
                     user['current_tidal_group_count'] = user.get('current_tidal_group_count', 0) + 1
         
-        time_delta = 5
+        time_delta = 10
         current_share_key = ''
         current_group_id = ''
         current_group_name = ''
@@ -371,7 +420,7 @@ class BCZ:
                     user_grade = user['grade']
 
 
-                    logger.info(f"开始检查潮汐令牌[{user_name}]")
+                    # logger.info(f"开始检查潮汐令牌[{user_name}]")
                     if user.get('join_groups', None) is None:
                         update_tidal_token_class_list(user)
                         logger.info(f"🥰 获取了{user_grade}{user_name}班级列表")
@@ -394,32 +443,34 @@ class BCZ:
                         share_key = user_share_key[i]
                         join_days = user_join_days[i]
                         group_name = user_group_name[i]
-                        print(group_name, group_id, type(group_id))
-                        print(group_id in self.tidal_tracker, self.tidal_token_queue)
-                        print(self.tidal_tracker)
+                        # print(group_name, group_id, type(group_id))
+                        # print(group_id in self.tidal_tracker, self.tidal_token_queue)
+                        # print(self.tidal_tracker)
 
                         if group_id not in self.tidal_tracker or join_days >= 3:
-                            logger.info(f"找到{user_name}加入了{group_name}({group_id}) {join_days}天，不符合潮汐组，跳过")
+                            # logger.info(f"找到{user_name}加入了{group_name}({group_id}) {join_days}天，不符合潮汐组，跳过")
                             continue # 不是潮汐小班 或 加入时间超过3天(不是潮汐令牌)
                         if group_id in self.tidal_tracker and self.tidal_token_queue.get(group_id, None) is None:
                             update_tidal_token_class_list(user)
-                            if group_id in self.tidal_tracker and self.tidal_token_queue.get(group_id, None) is None:
-                                logger.info(f'找到{user_name}加入了{group_name}({group_id}) {join_days}天，退出')
-                                if self.quitGroup(share_key, user['access_token']):
-                                    logger.info(f"[{group_name}]🌊 \033[1;35m移除tidal_token{user_grade}{user_name}，加入时间{join_days}(<3)天，还剩{user['current_tidal_group_count'] - 1}个\033[0m(60s)")
-                                else:
-                                    logger.warning(f"[{group_name}]退出潮汐令牌{user_grade}{user_name}失败(60s)")
-                                checked = 1
-                                break # 保证每个账号每一轮只请求一次
+                            if group_id not in user['join_groups']:
+                                continue
+                            # logger.info(f'找到{user_name}加入了{group_name}({group_id}) {join_days}天，退出')
+                            if self.quitGroup(share_key, user['access_token']):
+                                logger.info(f"[{group_name}]🌊 \033[1;35m移除tidal_token{user_grade}{user_name}，加入时间{join_days}(<3)天，还剩{user['current_tidal_group_count'] - 1}个\033[0m(60s)")
+                            else:
+                                logger.warning(f"[{group_name}]退出潮汐令牌{user_grade}{user_name}失败(60s)")
+                            checked = 1
+                            break # 保证每个账号每一轮只请求一次
 
                     if checked == 0:
-                        logger.info(f"[{user_name}]没有加入或移除tidal_groups完毕")
+                        # logger.info(f"[{user_name}]没有加入或移除tidal_groups完毕")
+                        ...
                     else:
                         continue
 
                     # 从现有的找，如果没有，找个新的
                     if current_share_key == '':
-                        logger.info(f"潮汐队列为空")
+                        # logger.info(f"潮汐队列为空")
                         continue
                     if len(groups) < join_limit and current_group_id not in groups and current_tidal_group_count < tidal_group_limit:
                         # 还有至少2个空位 并且 该令牌没加入该班级 并且 还没达到自定义限制，则加入
@@ -456,7 +507,13 @@ class BCZ:
         if group_id in self.tidal_token_queue:
             del self.tidal_token_queue[group_id]
             return True
-        return False 
+        return False
+     
+    def inTidalTokenQueue(self, group_id: str) -> bool:
+        group_id = str(group_id)
+        if group_id in self.tidal_token_queue:
+            return True
+        return False
         
     def setTidalTokenTracker(self, group_id: str) -> None:
         '''设置可能会使用tidal_token的群组'''

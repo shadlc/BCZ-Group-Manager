@@ -548,7 +548,7 @@ let group_id = '';
           return;
         }
         let result = data.data;
-        result.data.unshift(['时间','人数','累计接受','接受名单','踢出名单','退出名单']);
+        result.data.unshift(['时间','策略名','人数','累计接受','接受名单','踢出名单','退出名单']);
       
         // 将result最前面加上分页信息
         
