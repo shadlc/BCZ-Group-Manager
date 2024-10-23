@@ -24,6 +24,7 @@ import os
 
 
 class Filter:
+    stop_vacancy_threshold = 1 # 停止条件，当筛选接受人数和最大人数之差 小于等于 此值时，停止筛选。剩下的余额需要人工筛选。
     def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, sse: flask_sse.sse, config: Config) -> None:
         # filter类全局仅一个，每个班级一个线程（当成局域网代理设备），但是strategy因为要前端更新，所以只储存Strategy类地址
         self.strategy_class = strategy_class
@@ -54,6 +55,7 @@ class Filter:
         try:
             with open("tidal_token.json", "r", encoding="utf-8") as f:
                 self.tidal_token = json.load(f)
+            self.tidal_token_list = (user['access_token'] for user in self.tidal_token)
         except:
             json.dump({}, open("tidal_token.json", "w", encoding="utf-8"))
             default = {"name":"", "token":"", "grade":"1/2/3/4/5"}
@@ -262,10 +264,13 @@ class Filter:
         if weekday_count == 0 : # 星期日
             weekday_count = 7
         last_week_total_days = min(7, max(0, member_dict['duration_days'] - weekday_count))
-        this_week_total_days = min(weekday_count, member_dict['duration_days']) # 计算本周在班总天数
+        this_week_total_days = min(weekday_count, member_dict['duration_days']) - 1 # 计算本周在班总天数，不含今天
         two_week_total_days = min(7 + weekday_count, member_dict['duration_days'])
         
-        this_week_daka_days = len(this_week_info) # TypeError: object of type 'NoneType' has no len()
+        today_str = time.strftime("%Y-%m-%d")
+        this_week_daka_days = len(this_week_info)
+        if today_str in this_week_info:
+            this_week_daka_days -= 1
         last_week_daka_days = len(last_week_info)
         
         member_dict['drop_last_week'] = last_week_total_days - last_week_daka_days # 计算两周内漏卡天数
@@ -520,9 +525,12 @@ class Filter:
         
         # 获取小组信息
         leader_id = member_dict_temp['leader_id']
-        group_count_limit = member_dict_temp['count_limit']
+        group_count_limit = member_dict_temp['count_limit']        
         self.logger_field['group_count_limit'] = group_count_limit
         group_name = member_dict_temp['name'] # log要有group_name
+        tidal_limit = group_count_limit - 6 # 潮汐保持人数限制
+        tidal_quit_limit = tidal_limit + 2 # 潮汐退出人数限制
+        self.log(f'本组潮汐水平{tidal_limit}，推荐冲榜类策略保持人数 小于 这个值，筛选类策略 大于 这个值', group_name)
         group_rank = member_dict_temp['rank']
         self.activate_groups[share_key]['name'] = group_name
         fail_cnt = 0
@@ -649,6 +657,7 @@ class Filter:
                 total_removed_count += removed_count
                 total_accepted_count += accepted_count
                 accepted_count = 0
+                pending_count = 0 # 等待处理的成员数
                 newbies_count = 0
                 removed_count = 0
                 old_members_count = 0
@@ -693,6 +702,7 @@ class Filter:
                             self.log(f'{personal_dict_temp["group_nickname"]}({personal_dict_temp["nickname"]})[{uniqueId}]', group_name)
                             self.log(f"DELTA:{(int(time.time()) - personal_dict_temp['completed_time_stamp'])}< 60，不处理(6s)", group_name)   
                             self.log_dispatch(group_name)
+                            pending_count += 1
                             continue
                         member_list.append(uniqueId)
                         newbies_count += 1 # 新增成员
@@ -928,9 +938,9 @@ class Filter:
                 # 根据加入人数多少，调整延迟
                 # 例如最少是196，则198或以上时延迟减少，否则增加
                 if check_count > 1:
-                    delay = min(max(delay - delay_delta * (newbies_count - 1), 3.5), 57.5) # 筛选暂停，延迟增加
+                    delay = min(max(delay - delay_delta * (newbies_count - 1), 0.5), 57.5) # 筛选暂停，延迟增加
 
-                if delay >= 20 and poster != '': # 使用海报令牌
+                if delay >= 20 and poster != '' and group_count_limit - member_cnt > 3: # 使用海报令牌
                     if self.bcz.joinPosterQueue(poster_session, poster, group_id, group_name, self.poster_token):
                         self.log(f"🌟 开始预约海报令牌", group_name)
                         self.log_dispatch(group_name, True)
@@ -940,18 +950,9 @@ class Filter:
                         self.log(f"🌟 停止发海报", group_name)
                         self.log_dispatch(group_name, True)
 
-                if delay > 25:# 加入潮汐令牌
-                    if self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, self.tidal_token):
-                        self.log(f"🌊 开始加入潮汐令牌", group_name)
-                        self.log_dispatch(group_name, True)
-                
-                elif delay < 7.5 or group_count_limit - member_cnt < 3: # 移除潮汐令牌
-                    if self.bcz.quitTidalToken(group_id, self.tidal_token):
-                        self.log(f"🌊 停止潮汐令牌", group_name)
-                        self.log_dispatch(group_name, True)
+                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, group_count_limit - member_cnt, self.tidal_token)
 
                 # 先同步前端
-                # print(self.bcz.getOwnPosterState(poster))
                 self.logger_field[group_name]['client_count'] = len(self.clients_message)
                 self.logger_field[group_name]['total_newbies_count'] = total_newbies_count
                 self.logger_field[group_name]['total_removed_count'] = total_removed_count
@@ -987,11 +988,22 @@ class Filter:
                     if (self.verdict_dict.get(strategy_index, None) == None):
                         self.verdict_dict[strategy_index] = {}
                     function_str = strategy_name
-                    function_str += f'[{group_rank}段{self.bcz.getRank(group_id, authorized_token, group_rank)}]'
-                    function_str += '🌟'if self.bcz.inPosterQueue(group_id) else '🏵️'
+                    function_str += f'.{len(kick_list)}待踢[{group_rank}段{self.bcz.getRank(group_id, authorized_token, group_rank)}]'
+                    function_str += '🏵️'if self.bcz.inPosterQueue(group_id) else '🧾'
                     function_str += str(self.bcz.getOwnPosterState(poster))
                     function_str += '🌊'if self.bcz.inTidalTokenQueue(group_id) else '🧭'
                     function_str += f'{len(used_tidal_token)}+{len(stay_tidal_token)}'
+                    
+                    # 处理异常跨越
+                    reboot = False
+                    if len(accept_list) + len(remove_list_uniqueId) + len(quit_list) + len(kick_list) + pending_count == 0 and total_accepted_count + accepted_count - total_quit_count < member_cnt:
+                        # 存在异常跨越，重启本策略
+                        self.log(f"\033[31m{strategy_dict['name']}异常跨越，重启本策略\033[0m(99999s)", group_name)
+                        self.log_dispatch(group_name, True)
+                        function_str += f'⚠️'
+                        reboot = True
+                        strategy_index_list.insert(0, strategy_index)
+
                     function_str += f'({delay}s)'.ljust(7)
                     # print(function_str)
                     self.verdict_dict[strategy_index].update(verdict_dict_tosave)
@@ -1000,6 +1012,7 @@ class Filter:
                         'strategy_name':function_str,
                         'date_time':datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S %U周%w"),
                         'member_count':member_cnt,
+                        'newbies_count': total_newbies_count,
                         'accepted_count': total_accepted_count - total_quit_count,
                         'accept_list': accept_list,
                         'remove_list': remove_list_uniqueId,
@@ -1008,6 +1021,9 @@ class Filter:
                     if self.autosave_is_running == False:
                         self.autosave_is_running = True
                         threading.Thread(target=self.autosave).start()
+                        
+                    if reboot:
+                        break
 
                 # 将总人数标黄
                 self.log(f" [{strategy_name}] 第{check_count}次结束<br>筛选{newbies_count}人次（共{total_newbies_count}人），已判断{old_members_count}人<br>接受{accepted_count}人（共\033[1;33m{total_accepted_count - total_quit_count}\033[0m人），踢出{removed_count}人（共{total_removed_count}人）({delay}s)", group_name)
@@ -1016,7 +1032,7 @@ class Filter:
                 self.log_dispatch(group_name)
 
                 self.log_dispatch(group_name, True)
-                if total_accepted_count - total_quit_count > 197:
+                if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold:
                     self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
                     self.log_dispatch(group_name, True)
                     break

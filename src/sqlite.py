@@ -121,6 +121,7 @@ class SQLite:
                 DATETIME TEXT,                       -- 操作日期时间
                 STRATEGY_NAME TEXT,                  -- 策略名称
                 MEMBER_COUNT INTEGER,                -- 本轮小班成员数
+                NEWBIES_COUNT INTEGER,                -- 总新招到的人数（包括已有老成员）
                 ACCEPTED_COUNT INTEGER,                -- 在班的接受的人数
                 ACCEPT_LIST TEXT,                    -- 本轮接受列表<br>
                 REMOVE_LIST TEXT,                    -- 本轮拒绝列表<br>
@@ -743,12 +744,13 @@ class SQLite:
             if last_date is not None and last_date[0] >= today_date_0 and len(filter_log['accept_list']) + len(filter_log['remove_list']) + len(filter_log['quit_list']) == 0:
                 continue # 今天已经记录过了
             cursor.execute(
-                f'INSERT INTO FILTER_LOG (GROUP_ID, STRATEGY_NAME, DATETIME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?,?)',
+                f'INSERT INTO FILTER_LOG (GROUP_ID, STRATEGY_NAME, DATETIME, MEMBER_COUNT, NEWBIES_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?,?,?)',
                 (
                     filter_log['group_id'],
                     filter_log['strategy_name'],
                     filter_log['date_time'],
                     filter_log['member_count'],
+                    filter_log['newbies_count'],
                     filter_log['accepted_count'],
                     json.dumps(filter_log['accept_list']),
                     json.dumps(filter_log['remove_list']),
@@ -788,7 +790,7 @@ class SQLite:
         result = {}
         # 找group_id按照时间排序从count_start开始的count_limit条记录
         result['data'] = cursor.execute(
-            f'SELECT DATETIME, STRATEGY_NAME, MEMBER_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
+            f'SELECT DATETIME, STRATEGY_NAME, MEMBER_COUNT, NEWBIES_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST FROM FILTER_LOG WHERE GROUP_ID = ? ORDER BY DATETIME DESC LIMIT ? OFFSET ?',
             (group_id, count_limit, count_start)
         ).fetchall()
         count = cursor.execute(

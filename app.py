@@ -365,7 +365,6 @@ def query_strategy():
 @app.route('/start_filter', methods=['POST'])
 def start_filter():
     '''开始筛选'''
-    slice_log()
     group_id = str(request.json.get('group_id'))
     strategy_id_list = request.json.get('strategy_id_list')
     scheduled_hour = request.json.get('scheduled_hour', None)
@@ -555,14 +554,16 @@ def combo():
 
 @app.route('/slice_log', methods=['GET'])
 def slice_log():    
-    '''去掉7天前的STRATEGY_VERDICT记录'''
+    '''去掉7天前的STRATEGY_VERDICT记录和90天前的FILTER_LOG记录'''
     conn = sqlite.connect()
     cursor = conn.cursor()
     seven_days_ago = (datetime.datetime.now() - datetime.timedelta(days=7)).strftime('%Y-%m-%d')
     cursor.execute('DELETE FROM STRATEGY_VERDICT WHERE DATE < ?', (seven_days_ago,))
+    ninty_days_ago = (datetime.datetime.now() - datetime.timedelta(days=90)).strftime('%Y-%m-%d 00:00:00 %U周%w')
+    cursor.execute('DELETE FROM FILTER_LOG WHERE DATETIME < ?', (ninty_days_ago,))
     conn.commit()
     conn.close()
-    return restful(200, '7天前的日志记录已清理!')
+    return restful(200, '7天前的判定和90天前的日志记录已清理!')
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     '''以RESTful的方式进行返回响应'''
@@ -628,6 +629,8 @@ if __name__ == '__main__':
             monitor = Monitor(filter, sqlite)
         app.run(debug=True, host=config.host, port=config.port, request_handler=MyRequestHandler)
     else:
+        if '--slice' in sys.argv:
+            slice_log()
         if '--auto' in sys.argv:
             monitor = Monitor(filter, sqlite)
         app.run(config.host, config.port, request_handler=MyRequestHandler)
