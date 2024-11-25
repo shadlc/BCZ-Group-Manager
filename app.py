@@ -553,7 +553,7 @@ def combo():
     return restful(200, '',  sqlite.ComboExpectancy(completed_times / join_days, join_days))
 
 @app.route('/slice_log', methods=['GET'])
-def slice_log():    
+def slice_log(in_app = True):    
     '''去掉7天前的STRATEGY_VERDICT记录和90天前的FILTER_LOG记录'''
     conn = sqlite.connect()
     cursor = conn.cursor()
@@ -563,6 +563,8 @@ def slice_log():
     cursor.execute('DELETE FROM FILTER_LOG WHERE DATETIME < ?', (ninty_days_ago,))
     conn.commit()
     conn.close()
+    if not in_app:
+        return '7天前的判定和90天前的日志记录已清理!'
     return restful(200, '7天前的判定和90天前的日志记录已清理!')
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
@@ -630,7 +632,7 @@ if __name__ == '__main__':
         app.run(debug=True, host=config.host, port=config.port, request_handler=MyRequestHandler)
     else:
         if '--slice' in sys.argv:
-            slice_log()
+            slice_log(in_app = False)
         if '--auto' in sys.argv:
             monitor = Monitor(filter, sqlite)
         app.run(config.host, config.port, request_handler=MyRequestHandler)

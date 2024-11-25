@@ -94,4 +94,7 @@ def db_sync(db_path, group_name, date_list: list):
 
 
 if __name__ == '__main__':
-    db_sync('data.db', '2048', ['2024-08-22'])
+    # 设置logging
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    db_sync('data.db', '2048', ['2024-10-31'])
+    

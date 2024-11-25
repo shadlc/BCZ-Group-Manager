@@ -353,7 +353,7 @@ class SQLite:
                 f'SELECT COMPLETED_TIME FROM {table_name} WHERE USER_ID = ? AND TODAY_DATE = ? ORDER BY COMPLETED_TIME ASC LIMIT 1',
                 (member['id'], member['today_date'])
             ).fetchone()
-            if recorded_time and recorded_time[0] != 0 and recorded_time[0] < member['completed_time']:
+            if recorded_time and recorded_time[0]!='' and recorded_time[0] != 0 and recorded_time[0] < member['completed_time']:
                 member['completed_time'] = recorded_time[0]
                 # 可能加入新的小班后，会产生更晚的时间，以早的为准
             cursor.execute(

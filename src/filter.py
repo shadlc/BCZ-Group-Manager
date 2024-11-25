@@ -417,28 +417,45 @@ class Filter:
     autosave_interval = 120
     
     def autosave(self) -> None:
-        '''每10s保存一次内存【3个数组】到数据库'''
+        '''每autosave秒保存一次内存【3个数组】到数据库'''
         self.autosave_is_running = True
         while(len(self.activate_groups) > 0):
-            time.sleep(self.autosave_interval)
-            
-            self.log('autosave now...','全局')
+            try:
+                time.sleep(self.autosave_interval)
+                
+                self.log('autosave now...','全局')
+                self.log_dispatch('全局')
+                conn = self.sqlite.connect()
+                with self.lock:
+                    # self.log('save member_dict:'+str(self.member_dict))
+                    self.sqlite.saveUserOwnGroupsInfo(self.member_dict, conn)
+                    self.member_dict = []
+                    # self.log('save verdict_dict:'+str(self.verdict_dict))
+                    self.sqlite.saveStrategyVerdict(self.verdict_dict, self.strategy_class.get(), conn = conn)
+                    self.verdict_dict = {}
+                    # self.log('save personal_dict:'+str(self.personal_dict))
+                    self.sqlite.savePersonalInfo(self.personal_dict, conn = conn)
+                    self.personal_dict = [] # 缓存个人信息，避免重复请求
+                    # self.log('save filter_log_dict:'+str(self.filter_log_dict))
+                    self.sqlite.saveFilterLog(self.filter_log_dict, conn)
+                    self.filter_log_dict = []
+                conn.close()
+            except Exception as e:
+                try:
+                    conn.close()
+                except:
+                    pass
+                self.log(f"autosave error: {e}", '全局')
+                print(self.filter_log_dict)
+                self.log_dispatch('全局')
+            current_group_list = []
+            for key, value in self.activate_groups.items():
+                if not value['stop']:
+                    current_group_list.append(value.get('name', '未知'))
+                else:
+                    self.activate_groups.pop(key, None)
+            self.log(f"当前运行小组：{current_group_list}", '全局')
             self.log_dispatch('全局')
-            conn = self.sqlite.connect()
-            with self.lock:
-                # self.log('save member_dict:'+str(self.member_dict))
-                self.sqlite.saveUserOwnGroupsInfo(self.member_dict, conn)
-                # self.log('save verdict_dict:'+str(self.verdict_dict))
-                self.sqlite.saveStrategyVerdict(self.verdict_dict, self.strategy_class.get(), conn = conn)
-                # self.log('save personal_dict:'+str(self.personal_dict))
-                self.sqlite.savePersonalInfo(self.personal_dict, conn = conn)
-                # self.log('save filter_log_dict:'+str(self.filter_log_dict))
-                self.sqlite.saveFilterLog(self.filter_log_dict, conn)
-                self.member_dict = []
-                self.verdict_dict = {}
-                self.personal_dict = [] # 缓存个人信息，避免重复请求
-                self.filter_log_dict = []
-            conn.close()
             self.log('autosave done', '全局')
             self.log_dispatch('全局')
         self.log('autosave stopped! ', '全局')
@@ -519,17 +536,30 @@ class Filter:
         
         # pyautogui.FAILSAFE = False # 关闭自动退出功能
         # print(strategy_index_list)
-        member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+        while True:
+            try:
+                member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+            except:
+                print("请检查网络连接")
+            finally:
+                if member_dict_temp is not None:
+                    break
         group_id = member_dict_temp['id']
         # 因为保存策略index要用到group_id，所以先获取
         
         # 获取小组信息
         leader_id = member_dict_temp['leader_id']
+        only_public_key_join = member_dict_temp['only_public_key_join']
+
         group_count_limit = member_dict_temp['count_limit']        
         self.logger_field['group_count_limit'] = group_count_limit
         group_name = member_dict_temp['name'] # log要有group_name
         tidal_limit = group_count_limit - 6 # 潮汐保持人数限制
         tidal_quit_limit = tidal_limit + 2 # 潮汐退出人数限制
+        if only_public_key_join == True:
+            self.log(f"本组仅允许邀请码加入，正在更改设置", group_name)
+            self.log_dispatch(group_name, True)
+            self.bcz.setGroupOnlyInviteCodeJoin(share_key, authorized_token)
         self.log(f'本组潮汐水平{tidal_limit}，推荐冲榜类策略保持人数 小于 这个值，筛选类策略 大于 这个值', group_name)
         group_rank = member_dict_temp['rank']
         self.activate_groups[share_key]['name'] = group_name
@@ -585,7 +615,7 @@ class Filter:
         self.my_rank_dict = {} # 排名榜
 
         delay = 5
-        delay_delta = 1.5 
+        delay_delta = 3
         
 
         kick_list = []
@@ -642,6 +672,10 @@ class Filter:
                 # 【开始筛选，获取信息】
                 # 点击成员管理页面
                 member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token) # 包含现有成员信息，结构：{基本信息,"members":{"uniqueId":...}}
+                only_public_key_join = member_dict_temp['only_public_key_join']
+                if only_public_key_join == True:
+                    self.log(f"\033[31m❗ 本组仅允许邀请码加入，请检查\033[0m", group_name)
+                    self.log_dispatch(group_name, True)
                 member_dict_temp["week_daka_info"] = self.bcz.getGroupDakaHistory(share_key, parsed=True) # 本周和上周打卡信息，结构：{12345678:["05-23","05-25",...],...}
                 self.log(f'开始第{check_count+1}次检测，预计({min(30, ((len(member_dict_temp["members"])-old_members_count))*2)}s)', group_name)
                 self.log_dispatch(group_name, True)
@@ -661,7 +695,9 @@ class Filter:
                 newbies_count = 0
                 removed_count = 0
                 old_members_count = 0
+                # in_strategy_verdict = 0
                 current_daka_count = 0
+                preserve_rank = False # 冲榜保护排名
                 member_cnt = member_dict_temp['member_count']
                 accept_list = []
                 quit_list = []
@@ -772,6 +808,10 @@ class Filter:
                             
                             reason[f"已判断为：{strategy_dict['subItems'][verdict]['name']}"] = strategy_dict['subItems'][verdict]['operation']
                             result_code = 1 if strategy_dict['subItems'][verdict]['operation'] == 'accept' else 2
+                            # 判断是否不打卡
+                            if result_code == 2 and "不打卡" in strategy_dict['subItems'][verdict]['name']:
+                                # 如果刚才不打卡，现在已打卡，会跳转前面的逻辑，此处不再处理
+                                result_code = 3
                         # 处理结果
                         if result_code == 1:
                             accepted_count += 1
@@ -794,7 +834,7 @@ class Filter:
                             # 加入候补踢出列表，按小到大顺序插入列表
                             inserted = 0
                             important = 0
-                            if result_code == 3:
+                            if result_code == 3 or personal_dict_temp['completed_time_stamp'] == 0:
                                 important = 1
                             for item_index, item in enumerate(kick_list):
                                 if item["verdict"] > verdict:
@@ -817,85 +857,120 @@ class Filter:
                         # 老成员，已经处理过
                         # self.log(f'[id:{uniqueId}]老成员')
                         old_members_count += 1
+                        # in_strategy_verdict += 1
                         member_check_count[uniqueId] = check_count
 
                 # 内核级bug：不完整的循环不应该记录，否则会有杂值
                 if self.activate_groups[share_key]['stop'] == True:
                     break
                 
-                        
+                # 检查排名是否正在更新
+                # 获取当前分钟，如果分钟个位数是0或1，则等待到个位数变成2的秒数
+                current_second = int(datetime.datetime.now().strftime("%S"))
+                current_minute_units = int(datetime.datetime.now().strftime("%M")) % 10
+                if current_minute_units == 9:
+                    current_minute_units = -1
+                if current_minute_units == 8:
+                    current_minute_units = -2
+                preserve_rank = False # 冲榜保护排名
+                # print(1)
+                if current_minute_units <= 2 and self.bcz.getRank(group_id, authorized_token, group_rank) < 50:
+                    # 获取到分钟尾数为2的秒数
+                    wait_second = 60 - current_second + (3 - current_minute_units) * 60 + random.randint(0, 5)
+                    if group_count_limit - current_daka_count < 10: # 推测为正在冲榜
+                        self.log(f"排名即将更新，暂不踢出普通踢出列表，等待({wait_second}s)", group_name) # 问题开始标记
+                        self.log_dispatch(group_name)
+                        preserve_rank = True
+                        # print(group_name)
                 # 【踢人】
                 # 序号小的先踢(执行)
                 # kick_list 候补踢出列表，remove_list 立刻踢出列表
                 minPeople_min = 200
                 remain_people_cnt = member_cnt
+                # print(group_name)
+
                 remove_list = []
                 remove_list_uniqueId = []
+                # print(group_name)
                 new_kick_list = []
                 has = 0
+                # print(group_name)
+                # 先找important_remove_list，再找remove_list
+                for index, this_verdict_dict in enumerate(reversed(kick_list)):
+                    # print(group_name)
+                    sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
+                    memberId = this_verdict_dict['memberId']
+                    uniqueId = this_verdict_dict['uniqueId']
+                    
+                    if this_verdict_dict["important"] == 1:
+                        if 190 < remain_people_cnt: # 重要踢出列表，只踢出不打卡的
+                            remain_people_cnt -= 1
+                            important_remove_list.append(memberId) # 加入重要踢出列表
+                            remove_list_uniqueId.append(uniqueId)
+                            try:
+                                member_list.remove(uniqueId) # 从成员列表中删除（真是一手好活）
+                            except ValueError:
+                                pass # 可能已经被踢出，更新不及时
+                            removed_count += 1
+                            if not has:
+                                has = 1
+                                self.log('本轮踢出：', group_name)
+                            self.log(f"[不打卡鸽]{this_verdict_dict['name']}[{uniqueId}]", group_name)  # 问题结束标记
+                        else:
+                            new_kick_list.append(this_verdict_dict) # 加入待踢出列表
+
                 for index, this_verdict_dict in enumerate(reversed(kick_list)):
                     sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
                     minPeople_min = min(minPeople_min, int(sub_strat_dict["minPeople"])) # 取最小的minPeople
-                    if int(sub_strat_dict["minPeople"]) < remain_people_cnt:
-                        # self.log(f'minpeople:{int(sub_strat_dict["minPeople"])}', group_name)
-                        remain_people_cnt -= 1
-                        memberId = this_verdict_dict['memberId']
-                        uniqueId = this_verdict_dict['uniqueId']
-                        if this_verdict_dict["important"] == 1:
-                            important_remove_list.append(memberId) # 加入重要踢出列表
-                        else:
+                    memberId = this_verdict_dict['memberId']
+                    uniqueId = this_verdict_dict['uniqueId']
+                    if this_verdict_dict["important"] == 0:
+                        if not preserve_rank and int(sub_strat_dict["minPeople"]) < remain_people_cnt: # 如果正在冲榜或人数不足，则不筛
+                            # self.log(f'minpeople:{int(sub_strat_dict["minPeople"])}', group_name)
+                            remain_people_cnt -= 1
                             remove_list.append(memberId) 
-                        remove_list_uniqueId.append(uniqueId)
-                        try:
-                            member_list.remove(uniqueId) # 从成员列表中删除（真是一手好活）
-                        except ValueError:
-                            pass # 可能已经被踢出，更新不及时
-                        removed_count += 1
-                        if not has:
-                            has = 1
-                            self.log('本轮踢出：', group_name)
-                        self.log(f"{this_verdict_dict['name']}[{this_verdict_dict['uniqueId']}]", group_name)
-                    else:
-                        memberId = this_verdict_dict['memberId']
-                        uniqueId = this_verdict_dict['uniqueId']
-                        new_kick_list.append(this_verdict_dict) # 加入待踢出列表
-                        # self.log(f'[uId{uniqueId}@{this_verdict_dict["name"]}]暂不踢出，剩余{remain_people_cnt}人，最少{minPeople_min}人')
+                            remove_list_uniqueId.append(uniqueId)
+                            try:
+                                member_list.remove(uniqueId) # 从成员列表中删除（真是一手好活）
+                            except ValueError:
+                                pass # 可能已经被踢出，更新不及时
+                            removed_count += 1
+                            if not has:
+                                has = 1
+                                self.log('本轮踢出：', group_name)
+                            self.log(f"{this_verdict_dict['name']}[{uniqueId}]", group_name)
+                        else:
+                            new_kick_list.append(this_verdict_dict) # 加入待踢出列表
                 kick_list = new_kick_list
                 if has:
                     self.log("(15s)", group_name)
                     self.log_dispatch(group_name, True)
 
                 # 踢人
-                if important_remove_list:
+                if len(important_remove_list) > 0:
                     if self.bcz.removeMembers(important_remove_list, share_key, authorized_token):
                         self.log(f"踢出不打卡优先列表成功", group_name)
                     else:
                         self.log(f"踢出不打卡优先列表失败(20s)", group_name)
                     self.log_dispatch(group_name, True)
-                if remove_list:
-                    # 获取当前分钟，如果分钟个位数是0或1，则等待到个位数变成2的秒数
-                    current_second = int(datetime.datetime.now().strftime("%S"))
-                    current_minute_units = int(datetime.datetime.now().strftime("%M")) % 10
-                    # if current_minute_units == 9: current_minute_units = -1
-                    if current_minute_units <= 2:
-                        # 获取到分钟尾数为2的秒数
-                        wait_second = 60 - current_second + (2 - current_minute_units) * 60 + random.randint(0, 15)
-                        if group_count_limit - current_daka_count < 5: # 推测为正在冲榜
-                            self.log(f"总接受{total_accepted_count - total_quit_count}人<br>普通踢出:即将更新，踢人前等待({wait_second}s)", group_name)
-                            self.log_dispatch(group_name)
-                            # time.sleep(wait_second)
-                    if self.bcz.removeMembers(remove_list, share_key, authorized_token):
-                    # if True:
-                        self.log(f"普通踢出成功", group_name)
-                        fail_cnt = 0
-                    else:
-                        self.log(f"普通踢出失败(20s)", group_name)
-                        fail_cnt += 1
-                        if fail_cnt > 5:
-                            self.log(f"\033[31m踢人失败次数过多，请检查。暂停运行30s\033[0m(30s)", group_name)
-                            self.log_dispatch(group_name)
-                            time.sleep(30)
+                    
+                if len(remove_list) > 0:
+                    if not preserve_rank:
+                        if self.bcz.removeMembers(remove_list, share_key, authorized_token):
+                        # if True:
+                            self.log(f"普通踢出成功", group_name)
                             fail_cnt = 0
+                        else:
+                            self.log(f"普通踢出失败(20s)", group_name)
+                            fail_cnt += 1
+                            if fail_cnt > 5:
+                                self.log(f"\033[31m踢人失败次数过多，请检查。暂停运行30s\033[0m(30s)", group_name)
+                                self.log_dispatch(group_name)
+                                time.sleep(30)
+                                fail_cnt = 0
+                    else:
+                        self.log(f"请检查[Invalid remove list]", group_name)
+                        Warning(f"请检查[Invalid remove list]，{remove_list}")
                 self.log_dispatch(group_name, True)
 
                 # 成员列表更新
@@ -945,12 +1020,12 @@ class Filter:
                         self.log(f"🌟 开始预约海报令牌", group_name)
                         self.log_dispatch(group_name, True)
                         # 如果False，则为已在队列中
-                elif delay < 20:
+                elif delay < 20 or group_count_limit - member_cnt <= 3: # 人数不足3人，则不使用海报令牌
                     if self.bcz.quitPosterQueue(group_id):
                         self.log(f"🌟 停止发海报", group_name)
                         self.log_dispatch(group_name, True)
 
-                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, group_count_limit - member_cnt, self.tidal_token)
+                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, group_count_limit - member_cnt, self.tidal_token, preserve_rank)
 
                 # 先同步前端
                 self.logger_field[group_name]['client_count'] = len(self.clients_message)
@@ -988,7 +1063,9 @@ class Filter:
                     if (self.verdict_dict.get(strategy_index, None) == None):
                         self.verdict_dict[strategy_index] = {}
                     function_str = strategy_name
-                    function_str += f'.{len(kick_list)}待踢[{group_rank}段{self.bcz.getRank(group_id, authorized_token, group_rank)}]'
+                    function_str += f'.{len(kick_list)}待踢[{current_daka_count}卡{group_rank}段{self.bcz.getRank(group_id, authorized_token, group_rank)}]'
+                    if preserve_rank:
+                        function_str += '🔝'
                     function_str += '🏵️'if self.bcz.inPosterQueue(group_id) else '🧾'
                     function_str += str(self.bcz.getOwnPosterState(poster))
                     function_str += '🌊'if self.bcz.inTidalTokenQueue(group_id) else '🧭'
@@ -996,9 +1073,14 @@ class Filter:
                     
                     # 处理异常跨越
                     reboot = False
-                    if len(accept_list) + len(remove_list_uniqueId) + len(quit_list) + len(kick_list) + pending_count == 0 and total_accepted_count + accepted_count - total_quit_count < member_cnt:
-                        # 存在异常跨越，重启本策略
+                    current_processed_count = accepted_count + len(remove_list_uniqueId) + len(kick_list) + pending_count + old_members_count # total_quit_count 是中途更新的
+                    # accept_list不包含之前strategy_verdict中保存的已处理成员，故换成accepted_count
+                    if (current_processed_count == 0 or preserve_rank) and total_accepted_count + current_processed_count - total_quit_count < member_cnt:
+                        # 条件：存在人数异常、且 当前已无法操作或排名即将更新
+                        # 重启本策略
                         self.log(f"\033[31m{strategy_dict['name']}异常跨越，重启本策略\033[0m(99999s)", group_name)
+                        print(accept_list, remove_list_uniqueId, quit_list, kick_list, pending_count, total_accepted_count, accepted_count, total_quit_count, member_cnt, group_count_limit, group_rank, group_name)
+                        print('%d + %d - %d < %d' % (total_accepted_count, current_processed_count, total_quit_count, member_cnt))
                         self.log_dispatch(group_name, True)
                         function_str += f'⚠️'
                         reboot = True
@@ -1032,11 +1114,12 @@ class Filter:
                 self.log_dispatch(group_name)
 
                 self.log_dispatch(group_name, True)
-                if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold:
+                if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold and not preserve_rank:
+                    # 当冲榜时，加入了潮汐号，不能算通过
                     self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
                     self.log_dispatch(group_name, True)
                     break
-                time.sleep(delay + random.randint(-10, 10) / 10) # 随机延迟，避免多个线程同时执行
+                time.sleep(max(0, delay + random.randint(-10, 10) / 10)) # 随机延迟，避免多个线程同时执行
         
             except Exception as e:
                 # if len(self.clients_message) == 0:
@@ -1055,6 +1138,9 @@ class Filter:
                 #     threading.Thread(target=self.stop, args=()).start()
                 
         self.log(f'❄️ \033[1;36m{strategy_name}筛选结束！\033[0m', group_name)
+        if self.bcz.quitPosterQueue(group_id):
+            self.log(f"🌟 停止发海报", group_name)
+            self.log_dispatch(group_name, True)
         # print(strategy_index_list)
         if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
             self.log(f'❄️ \033[1;36m进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选 \033[0m', group_name)
@@ -1062,6 +1148,7 @@ class Filter:
             self.activate_groups[share_key]['tids'].start()
         else:
             self.log('❄️ \033[1;32m 所有筛选结束！\033[0m', group_name)
+            self.bcz.quitTidalToken(group_id)
             threading.Thread(target=self.stop, args=(share_key,)).start()
         self.log('(99998s)', group_name)
         self.log_dispatch(group_name, True)
