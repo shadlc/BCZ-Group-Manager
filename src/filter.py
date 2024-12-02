@@ -449,11 +449,15 @@ class Filter:
                 print(self.filter_log_dict)
                 self.log_dispatch('全局')
             current_group_list = []
-            for key, value in self.activate_groups.items():
-                if not value['stop']:
-                    current_group_list.append(value.get('name', '未知'))
-                else:
-                    self.activate_groups.pop(key, None)
+            try:
+                for key, value in self.activate_groups.items():
+                    if not value['stop']:
+                        current_group_list.append(value.get('name', '未知'))
+                    else:
+                        self.activate_groups.pop(key, None)
+            except Exception as e:
+                self.log(f"activate_groups error: {e}", '全局') # 极少概率会出现：字典变化时迭代器失效
+                self.log_dispatch('全局')
             self.log(f"当前运行小组：{current_group_list}", '全局')
             self.log_dispatch('全局')
             self.log('autosave done', '全局')
