@@ -15,3 +15,4 @@ archives
 *.jpg
 *.log
 /src/automata
+*.exe

@@ -595,6 +595,10 @@ class Filter:
 
 
         # 筛选策略-链
+        if len(strategy_index_list) == 0:
+            self.log(f"空操作，退出", group_name) # 有可能是空操作用于终止上一个操作
+            self.log_dispatch(group_name, True)
+            return
         strategy_index = strategy_index_list[0]
         strategy_index_list.pop(0)
 
@@ -1077,8 +1081,10 @@ class Filter:
                     
                     # 处理异常跨越
                     reboot = False
-                    current_processed_count = accepted_count + len(remove_list_uniqueId) + len(kick_list) + pending_count + old_members_count # total_quit_count 是中途更新的
+                    current_processed_count = accepted_count + len(remove_list_uniqueId) + len(kick_list) + pending_count # total_quit_count 是中途更新的
                     # accept_list不包含之前strategy_verdict中保存的已处理成员，故换成accepted_count
+                    self.log(f"异常跨越检测：({current_processed_count} == 0 or {preserve_rank}) and {total_accepted_count + current_processed_count - total_quit_count} < {member_cnt}", group_name)
+                    self.log_dispatch(group_name)
                     if (current_processed_count == 0 or preserve_rank) and total_accepted_count + current_processed_count - total_quit_count < member_cnt:
                         # 条件：存在人数异常、且 当前已无法操作或排名即将更新
                         # 重启本策略
