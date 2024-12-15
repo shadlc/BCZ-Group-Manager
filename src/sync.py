@@ -63,8 +63,10 @@ def db_sync(db_path, group_name, date_list: list):
                 logger.error("\033[31mInvalid username or password.\033[0m")
                 index_n = 0
                 break
-            
-            record_list = response_json['data']
+            try:
+                record_list = response_json['data']
+            except KeyError: # no data
+                break
             current_page = response_json['page_num']
             page_max = response_json['page_max']
             for i, record in enumerate(record_list):

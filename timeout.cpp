@@ -1,22 +1,23 @@
+// encoding: GBK
+// 编译命令：g++/gcc timeout.cpp -o timeout.exe -m32 -lPowrProf
+// upx --best --overlay=strip timeout.exe
 #define _WIN32_WINNT 0x0600
-#include <iostream>
 #include <windows.h>
-#include <winnt.h> 
 #include <initguid.h>
 //initguid要在powrprof前定义 
 #include <powrprof.h>
+#include <stdio.h>
 
 #pragma comment(lib, "PowrProf.lib")
-using namespace std;
 
 void set_sleep_never(GUID GUID_BALANCED_POWER_POLICY) {
     SYSTEM_POWER_POLICY policy;
     ZeroMemory(&policy, sizeof(policy));
     if (PowerWriteACValueIndex(NULL, &GUID_BALANCED_POWER_POLICY, &GUID_SLEEP_SUBGROUP, &GUID_STANDBY_TIMEOUT, 0) == ERROR_SUCCESS &&
         PowerWriteDCValueIndex(NULL, &GUID_BALANCED_POWER_POLICY, &GUID_SLEEP_SUBGROUP, &GUID_STANDBY_TIMEOUT, 0) == ERROR_SUCCESS) {
-        std::cout << "睡眠时间已设置为永不。" << std::endl;
+        puts("睡眠时间已设置为永不。");
     } else {
-        std::cout << "设置睡眠时间失败。" << std::endl;
+        puts("设置睡眠时间失败。");
     }
 }
 
@@ -49,6 +50,7 @@ GUID GUID_HIGH_PERFORMANCE = { 0x8c5e7fda, 0xe8bf, 0x4a96, { 0x9a, 0x85, 0xa6, 0
 //节能计划 (Power Saver):
 //a1841308-3541-4fab-bc81-f71556f20b4a
 GUID GUID_POWER_SAVER = { 0xa1841308, 0x3541, 0x4fab, { 0xbc, 0x81, 0xf7, 0x15, 0x56, 0xf2, 0x0b, 0x4a } };
+
 void set_screen_timeout_never(GUID GUID_TARGET) {
     // 设置屏幕关闭时间为永不（AC 模式和 DC 模式分别设置）
     if (PowerWriteACValueIndex(
@@ -65,12 +67,12 @@ void set_screen_timeout_never(GUID GUID_TARGET) {
             0) == ERROR_SUCCESS) {
         // 将更改应用到系统
         if (PowerSetActiveScheme(NULL, &GUID_TARGET) == ERROR_SUCCESS) {
-            std::cout << "屏幕关闭时间已设置为永不。" << std::endl;
+            puts("屏幕关闭时间已设置为永不。");
         } else {
-            std::cout << "应用电源计划失败。" << std::endl;
+            puts("应用电源计划失败。");
         }
     } else {
-        std::cout << "设置屏幕关闭时间失败。" << std::endl;
+        puts("设置屏幕关闭时间失败。");
     }
 }
 
@@ -82,29 +84,94 @@ void set_lid_close_action() {
 
         // 设置接通电源模式的合盖操作
         if (RegSetValueExA(hKey, "LidCloseAction", 0, REG_DWORD, (BYTE*)&data_sleep, sizeof(data_sleep)) == ERROR_SUCCESS) {
-            std::cout << "合上笔记本盖子（接通电源模式）已设置为无。" << std::endl;
+            puts("合上笔记本盖子（接通电源模式）已设置为无。");
         } else {
-            std::cout << "设置合盖操作（接通电源模式）失败。" << std::endl;
+            puts("设置合盖操作（接通电源模式）失败。");
         }
 
         // 设置电池供电模式的合盖操作
         if (RegSetValueExA(hKey, "LidCloseAction_DC", 0, REG_DWORD, (BYTE*)&data_sleep, sizeof(data_sleep)) == ERROR_SUCCESS) {
-            std::cout << "合上笔记本盖子（电池供电模式）已设置为无。" << std::endl;
+            puts("合上笔记本盖子（电池供电模式）已设置为无。");
         } else {
-            std::cout << "设置合盖操作（电池供电模式）失败。" << std::endl;
+            puts("设置合盖操作（电池供电模式）失败。");
         }
 
         RegCloseKey(hKey);
     } else {
-        std::cout << "无法打开注册表。" << std::endl;
+        puts("无法打开注册表。");
     }
 }
-int main() {
-    set_sleep_never(GUID_POWER_SAVER);
-    set_sleep_never(GUID_BALANCED);
-    set_screen_timeout_never(GUID_POWER_SAVER);
-    set_screen_timeout_never(GUID_BALANCED);
-    set_lid_close_action();
-    return 0;
+
+// 下面是reverse模式下的设置函数
+void set_screen_timeout_3min(GUID GUID_TARGET) {
+    // 设置屏幕关闭时间为3分钟（AC 模式和 DC 模式分别设置）
+    DWORD timeout = 180; // 3分钟
+    if (PowerWriteACValueIndex(NULL, &GUID_TARGET, &GUID_VIDEO_SUBGROUP, &GUID_VIDEO_TIMEOUT, timeout) == ERROR_SUCCESS &&
+        PowerWriteDCValueIndex(NULL, &GUID_TARGET, &GUID_VIDEO_SUBGROUP, &GUID_VIDEO_TIMEOUT, timeout) == ERROR_SUCCESS) {
+        if (PowerSetActiveScheme(NULL, &GUID_TARGET) == ERROR_SUCCESS) {
+            puts("屏幕关闭时间已设置为3分钟。");
+        } else {
+            puts("应用电源计划失败。");
+        }
+    } else {
+        puts("设置屏幕关闭时间失败。");
+    }
 }
 
+void set_sleep_3min(GUID GUID_TARGET) {
+    DWORD timeout = 180; // 3分钟
+    if (PowerWriteACValueIndex(NULL, &GUID_TARGET, &GUID_SLEEP_SUBGROUP, &GUID_STANDBY_TIMEOUT, timeout) == ERROR_SUCCESS &&
+        PowerWriteDCValueIndex(NULL, &GUID_TARGET, &GUID_SLEEP_SUBGROUP, &GUID_STANDBY_TIMEOUT, timeout) == ERROR_SUCCESS) {
+        puts("睡眠时间已设置为3分钟。");
+    } else {
+        puts("设置睡眠时间失败。");
+    }
+}
+
+void set_lid_close_sleep() {
+    HKEY hKey;
+    LPCSTR path = "SYSTEM\\CurrentControlSet\\Control\\Power";
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, path, 0, KEY_WRITE, &hKey) == ERROR_SUCCESS) {
+        DWORD data_sleep = 0x00000002; // 设置为睡眠
+
+        // 设置接通电源模式的合盖操作
+        if (RegSetValueExA(hKey, "LidCloseAction", 0, REG_DWORD, (BYTE*)&data_sleep, sizeof(data_sleep)) == ERROR_SUCCESS) {
+            puts("合上笔记本盖子（接通电源模式）已设置为睡眠。");
+        } else {
+            puts("设置合盖操作（接通电源模式）失败。");
+        }
+
+        // 设置电池供电模式的合盖操作
+        if (RegSetValueExA(hKey, "LidCloseAction_DC", 0, REG_DWORD, (BYTE*)&data_sleep, sizeof(data_sleep)) == ERROR_SUCCESS) {
+            puts("合上笔记本盖子（电池供电模式）已设置为睡眠。");
+        } else {
+            puts("设置合盖操作（电池供电模式）失败。");
+        }
+
+        RegCloseKey(hKey);
+    } else {
+        puts("无法打开注册表。");
+    }
+}
+
+int main(int argc, char* argv[]) {
+    // 无参：阻止休眠；reverse：允许休眠；
+    if (argc == 2 && strcmp(argv[1], "reverse") == 0) {
+        puts("允许休眠中");
+        set_sleep_3min(GUID_POWER_SAVER);
+        set_sleep_3min(GUID_BALANCED);
+        set_screen_timeout_3min(GUID_POWER_SAVER);
+        set_screen_timeout_3min(GUID_BALANCED);
+        puts("将要更改注册表 使合上笔记本盖子自动进入睡眠模式");
+        set_lid_close_sleep();
+    } else {
+        puts("阻止休眠中 参数加reverse撤销更改");
+        set_sleep_never(GUID_POWER_SAVER);
+        set_sleep_never(GUID_BALANCED);
+        set_screen_timeout_never(GUID_POWER_SAVER);
+        set_screen_timeout_never(GUID_BALANCED);
+        puts("将要更改注册表 使合上笔记本盖子不睡眠");
+        set_lid_close_action();
+    }
+    return 0;
+}
