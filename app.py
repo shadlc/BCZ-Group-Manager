@@ -536,6 +536,30 @@ def delete_whitelist():
 
 
 # 以下几个是手动接口    
+@app.route('/errors', methods=['GET'])
+def get_errors():
+    '''获取错误日志列表'''
+    try:
+        if not os.path.exists('errors'):
+            os.mkdir('errors')
+        files = os.listdir('errors')
+        return restful(200, '', files)
+    except Exception as e:
+        return restful(500, f'获取错误日志列表时发生错误(X_X): {e}')
+
+@app.route('/error', methods=['GET'])
+def get_error():
+    '''获取错误日志内容'''
+    try:
+        file_name = request.args.get('file_name')
+        if not os.path.exists(f'errors/{file_name}'):
+            return restful(404, '未找到该日志文件Σ(っ °Д °;)っ')
+        with open(f'errors/{file_name}', 'r', encoding='utf-8') as f:
+            content = f.read()
+        return restful(200, '', content)
+    except Exception as e:
+        return restful(500, f'获取错误日志内容时发生错误(Use file_name=?)(X_X): {e}')
+    
 @app.route('/stop_all', methods=['GET'])
 def stop_all():
     '''紧急停止'''

@@ -27,14 +27,6 @@ class Schedule:
 
     def run(self, *args, **kwargs) -> None:
         '''执行函数'''
-        now = time.localtime()
-        if not (now.tm_min in self.cron[0] and
-                now.tm_hour in self.cron[1] and
-                now.tm_mday in self.cron[2] and
-                now.tm_mon in self.cron[3] and # 如果已经在计划时间段，则直接开始
-                now.tm_wday in self.cron[4]):
-            while time.localtime().tm_sec != 0:
-                time.sleep(1)
         while True:
             try:
                 now = time.localtime()
@@ -45,7 +37,6 @@ class Schedule:
                         now.tm_wday in self.cron[4]): # 星期，0-6，0为星期一
                     self.status = 2
                     logger.info(f'\033[32m执行计划[{self.crontab_expr}]\033[0m')
-                    # raise ValueError(f'\033[31m计划任务{self.crontab_expr}未启动\033[0m')
                     threading.Thread(
                         target=self.exec,
                         args=args,
@@ -58,9 +49,11 @@ class Schedule:
                         now.tm_mday in self.cron[2] and
                         now.tm_mon in self.cron[3] and
                         now.tm_wday in self.cron[4]):
-                        time.sleep(60) # 同一个时间段，只执行一次
+                        time.sleep(max(60-now.tm_sec, 1)) # 同一个时间段，只执行一次
+                        now = time.localtime() # 乐子bug: 不更新now，瞎等？
+
                 self.status = 1
-                time.sleep(60)
+                time.sleep(max(60-now.tm_sec, 1)) # 采用活动等待，尽量卡在0秒时检测状态
             except:
                 traceback.print_exc()
                 self.status = 4
