@@ -157,7 +157,7 @@ class SQLite:
             if path := os.path.dirname(db_path):
                 os.makedirs(path, exist_ok=True)
             conn = sqlite3.connect(db_path)
-            conn.set_trace_callback(lambda statement: logger.debug(f'在{db_path}执行SQLite指令: {statement}'))
+            conn.set_trace_callback(lambda statement: logger.debug(f'{db_path} -> {statement[:128]}'))
             return conn
         except sqlite3.Error:
             logger.error('数据库读取异常...无法正常运行，程序会在5秒后自动退出')

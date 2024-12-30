@@ -4,6 +4,7 @@ import threading
 import datetime
 from src.config import Config
 from src.config import Strategy
+from fastapi import Request
 from src.sync import db_sync
 import flask_sse
 import uuid
@@ -25,14 +26,13 @@ import os
 
 class Filter:
     stop_vacancy_threshold = 1 # 停止条件，当筛选接受人数和最大人数之差 小于等于 此值时，停止筛选。剩下的余额需要人工筛选。
-    def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, sse: flask_sse.sse, config: Config) -> None:
+    def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, config: Config) -> None:
         # filter类全局仅一个，每个班级一个线程（当成局域网代理设备），但是strategy因为要前端更新，所以只储存Strategy类地址
         self.strategy_class = strategy_class
         self.strategy_index = 0
         self.bcz = bcz
         self.config = config
         self.sqlite = sqlite
-        self.sse = sse
 
         self.lock = threading.Lock()
         self.clients_message_lock = threading.Lock()
@@ -519,7 +519,7 @@ class Filter:
         self.logger_message.pop(group_name, None)
         
         
-    def generator(self):
+    def generator(self, request: Request, DEBUG: bool):
         '''每个客户端分发一个，会自动创建消息队列，断开后回收'''
         client_id = str(uuid.uuid4())
         self.clients_message[client_id] = []
@@ -531,7 +531,14 @@ class Filter:
                     i += 1
                     yield f'data: {i}.{message}\n\n'
                 time.sleep(1)
+                if request.is_disconnected:
+                    if DEBUG:
+                        self.log(f"客户端{client_id}断开连接", '全局')
+                        self.log_dispatch('全局')
+                    break
         except GeneratorExit:
+            pass
+        finally:
             with self.clients_message_lock:
                 self.clients_message.pop(client_id, None)
 
@@ -548,6 +555,7 @@ class Filter:
             finally:
                 if member_dict_temp is not None:
                     break
+                time.sleep(10)
         group_id = member_dict_temp['id']
         # 因为保存策略index要用到group_id，所以先获取
         
@@ -578,26 +586,27 @@ class Filter:
             else:
                 self.log(f'设置了未来启动{scheduled_hour}:{scheduled_minute}，等待({(scheduled_hour-now.hour)*3600+(scheduled_minute-now.minute)*60}s)', group_name)
                 self.log_dispatch(group_name, True)
-                # caps_state = True
                 while True:
                     now = datetime.datetime.now()
                     if now.hour == scheduled_hour and now.minute == scheduled_minute:
                         break
                     time.sleep(8)
-                    # pyautogui.press('capslock') # 防止系统休眠
-                    # caps_state = not caps_state
                     self.log(f"等待启动时间：{now.hour}:{now.minute}，目标{scheduled_hour}:{scheduled_minute}，还有{(scheduled_hour-now.hour)*60+(scheduled_minute-now.minute)}min(10s)", group_name)
                     self.log_dispatch(group_name)
                 self.log('启动时间到！(10s)', group_name)
                 self.log_dispatch(group_name, True)
-                # if not caps_state:
-                    # pyautogui.press('capslock') 
 
 
         # 筛选策略-链
         if len(strategy_index_list) == 0:
-            self.log(f"空操作，退出", group_name) # 有可能是空操作用于终止上一个操作
             self.log_dispatch(group_name, True)
+            self.log(f"\033[33m空操作，退出\033[0m", group_name) # 有可能是空操作用于终止上一个操作
+            self.log_dispatch(group_name, True)
+            if self.bcz.quitPosterQueue(group_id):
+                self.log(f"🌟 停止发海报", group_name)
+                self.log_dispatch(group_name, True)
+            self.bcz.quitTidalToken(group_id)
+            threading.Thread(target=self.stop, args=(share_key,)).start()
             return
         strategy_index = strategy_index_list[0]
         strategy_index_list.pop(0)
@@ -1132,49 +1141,56 @@ class Filter:
                 time.sleep(max(0, delay + random.randint(-10, 10) / 10)) # 随机延迟，避免多个线程同时执行
         
             except Exception as e:
-                # if len(self.clients_message) == 0:
-                    # 无人值守，等待10s后重试
-                    self.log(e, group_name)
-                    traceback_str = traceback.format_exc()
-                    self.log(traceback_str, group_name)
-                    self.log(f"\033[1;31m有点问题呐...等待10s后重试(10s)\033[0m", group_name)
-                    self.log_dispatch(group_name, True)
-                    time.sleep(10.5)
-                    pass
-                # else:
-                #     self.log(f"出现错误！{e}(99999s)", group_name)
-                #     self.log_dispatch(group_name)
-                #     # 创建线程调用filter.stop()
-                #     threading.Thread(target=self.stop, args=()).start()
-                
-        self.log(f'❄️ \033[1;36m{strategy_name}筛选结束！\033[0m', group_name)
-        if self.bcz.quitPosterQueue(group_id):
-            self.log(f"🌟 停止发海报", group_name)
-            self.log_dispatch(group_name, True)
-        # print(strategy_index_list)
-        if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
-            self.log(f'❄️ \033[1;36m进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选 \033[0m', group_name)
-            self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
-            self.activate_groups[share_key]['tids'].start()
-        else:
-            self.log('❄️ \033[1;32m 所有筛选结束！\033[0m', group_name)
+                # 无人值守，等待10s后重试
+                self.log(e, group_name)
+                traceback_str = traceback.format_exc()
+                # 将错误信息打印到/errors/目录下
+                if not os.path.exists('errors'):
+                    os.makedirs('errors')
+                # 要先在bcz.py中处理掉网络错误（顺便改个http2），不然这都打印些啥
+                # with open(f'errors/{group_name}_{datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")}.txt', 'w', encoding='utf-8') as f:
+                #     f.write(f"NAME: {group_name}\nTIME: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nERROR: {e}\n\n")
+                #     f.write(traceback_str)
+                self.log(f"\033[1;31m有点问题呐...等待10s后重试(10s)\033[0m", group_name)
+                self.log_dispatch(group_name, True)
+                time.sleep(10.5)
+                pass
+        
+        if self.activate_groups[share_key]['stop']:
+            self.log(f"❄️ \033[1;33m{strategy_name}筛选已中止\033[0m", group_name)
+            if self.bcz.quitPosterQueue(group_id):
+                self.log(f"🌟 停止发海报", group_name)
+                self.log_dispatch(group_name, True)
             self.bcz.quitTidalToken(group_id)
             threading.Thread(target=self.stop, args=(share_key,)).start()
-        self.log('(99998s)', group_name)
-        self.log_dispatch(group_name, True)
+            self.log('(99998s)', group_name)
+            self.log_dispatch(group_name, True)
+        else:
+            self.log(f'❄️ \033[1;36m{strategy_name}筛选结束！\033[0m', group_name)
+            if self.bcz.quitPosterQueue(group_id):
+                self.log(f"🌟 停止发海报", group_name)
+                self.log_dispatch(group_name, True)
+            # print(strategy_index_list)
+            if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
+                self.log(f'❄️ \033[1;36m进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选 \033[0m', group_name)
+                self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
+                self.activate_groups[share_key]['tids'].start()
+            else:
+                self.log('❄️ \033[1;32m 所有筛选结束！\033[0m', group_name)
+                self.bcz.quitTidalToken(group_id)
+                threading.Thread(target=self.stop, args=(share_key,)).start()
+            self.log('(99998s)', group_name)
+            self.log_dispatch(group_name, True)
 
 
 
     def start(self, authorized_token: str, strategy_index_list: list[str], share_key: str = "", group_id: str = "", scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 12, tidal_index: int = 10) -> None:
         # 时间含义：24h，到当天的scheduled_hour:scheduled_minute时，开始筛选
-        # print("\033[1;32m启动监控\033[0m")
         self.stop(share_key) # 防止重复运行
         self.bcz.setPosterTracker(poster)
         self.bcz.setTidalTokenTracker(group_id)
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
-        # if share_key != "2vodwy4c38bjt15n" :
-        #     return
 
         local_sync_dict = []
         quantity = 0
@@ -1192,9 +1208,6 @@ class Filter:
         )['data']
         absence_dict = {line[0]:line[4] for line in member_list if line[3] == ''}
         date_dict = list(set(line[4] for line in member_list))
-        # for date in date_dict:
-        #     print(f'-#{date}#')
-        # return
         today = datetime.datetime.now()
         today_str = today.strftime('%Y-%m-%d')
         for i in range(1, 30):
@@ -1202,9 +1215,6 @@ class Filter:
             if day_str not in date_dict:
                 local_sync_dict.append(day_str)
                 quantity += 1
-        # for local_sync in local_sync_dict:
-        #     print(f'#{local_sync}#')
-        # return
         if absence_dict:
             for id, daka_date in absence_dict.items():
                 if id in daka_dict and daka_date in daka_dict[id]:

@@ -10,6 +10,8 @@ requests = "*"
 flask = "*"
 flask-sse = "*"
 httpx = "*"
+fastapi = "*"
+uvicorn = "*"
 
 [dev-packages]
 

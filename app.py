@@ -1,14 +1,18 @@
 import sys
 import time
+import json
+import os
 import logging
 import datetime
 import traceback
+import uvicorn
 
-from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request, stream_with_context
-from werkzeug.serving import WSGIRequestHandler, _log
-# from flask_sockets import Sockets  
-# from flask_socketio import SocketIO
-from flask_sse import sse
+# from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request, stream_with_context
+from fastapi import FastAPI, Request, Response
+from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse, RedirectResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+
 
 from src.bcz import BCZ, recordInfo, verifyInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
 from src.config import Config, Strategy
@@ -17,32 +21,46 @@ from src.xlsx import Xlsx
 from src.schedule import Schedule
 from src.filter import Filter, Monitor
 
-# if '--debug' in sys.argv or (hasattr(sys, 'gettrace') and sys.gettrace() is not None):
+
 if '--debug' in sys.argv:
-    level = logging.INFO # DEBUG太多了，暂时不好处理
+    level = logging.DEBUG
+    DEBUG = True
 else:
     level = logging.INFO
+    DEBUG = False
 
 logging.basicConfig(
     format='%(asctime)s [%(name)s][%(levelname)s] %(message)s',
     level=level
 )
 
-WSGIRequestHandler.address_string = lambda self: self.headers.get('x-real-ip', self.client_address[0])
-class MyRequestHandler(WSGIRequestHandler):
-    def log(self, type, message, *args):
-        _log(type, f'{self.address_string()} {message % args}\n')
+app = FastAPI()
 
+# 不能直接将static挂载到根目录，否则会导致主页无法访问
+# app.mount("/", StaticFiles(directory="static"), name="static")
+# 将static/lib、static/img、static/favicon.ico挂载到根目录下
+app.mount("/lib", StaticFiles(directory="static/lib"), name="lib")
+app.mount("/img", StaticFiles(directory="static/img"), name="img")
+@app.get('/favicon.ico') # 用mount会307+404，应该是只有文件夹可以
+async def favicon():
+    return FileResponse('static/favicon.ico')
 
-app = Flask(__name__, static_folder='static', static_url_path='/')
-app.json.ensure_ascii = False
+templates = Jinja2Templates(directory="templates")
+
+# fastapi自带日志，无需中间件
+# @app.middleware('http')
+# async def log_(request: Request, call_next):
+#     client_ip = request.headers.get('x-real-ip', request.client.host)
+#     response = await call_next(request)
+#     logging.info(f"{client_ip} {request.method} {request.url} - {response.status_code}")
+#     return response
 
 config = Config()
 strategy = Strategy()
 bcz = BCZ(config)
 xlsx = Xlsx(config)
 sqlite = SQLite(config)
-filter = Filter(strategy, bcz, sqlite, sse, config)
+filter = Filter(strategy, bcz, sqlite, config)
 monitor = None
 processing = False
 logger = logging.getLogger(__name__)
@@ -52,34 +70,35 @@ if not config.main_token:
     time.sleep(5)
     sys.exit(0)
 
-@app.route('/')
-def index():
-    return render_template('index.html')
+@app.get('/')
+async def index(request: Request):
+    return templates.TemplateResponse('index.html', {'request': request})
 
-@app.route('/group', methods=['GET'])
-def group():
-    return render_template('group.html')
+@app.get('/group')
+async def group(request: Request):
+    return templates.TemplateResponse('group.html', {'request': request})
 
-@app.route('/group/<id>', methods=['GET'])
-def details(id=None):
-    return render_template('details.html')
+@app.get('/group/<id>')
+async def detail(request: Request, id: str=None):
+    return templates.TemplateResponse('group_id.html', {'request': request, 'id': id})
 
-@app.route('/data', methods=['GET'])
-def data():
-    return render_template('data.html')
+@app.get('/data')
+async def data(request: Request):
+    return templates.TemplateResponse('data.html', {'request': request})
 
-@app.route('/setting', methods=['GET'])
-def setting():
-    return render_template('setting.html')
+@app.get('/setting')
+async def setting(request: Request):
+    return templates.TemplateResponse('setting.html', {'request': request})
 
-@app.route('/download', methods=['POST'])
-def download():
+@app.post('/download')
+def download(request: Request, item: dict):
+    # 需要测试！Request的结构和之前的是否一样？
     global processing
     if processing:
         return restful(403, '有正在处理的下载，请稍后再试 (ᗜ ˰ ᗜ)"')
     processing = True
     try:
-        result = sqlite.queryMemberTable(request.json, union_temp=True)
+        result = sqlite.queryMemberTable(item, union_temp=True)
         xlsx = Xlsx(config)
         xlsx.write('用户信息', result['data'])
         xlsx.save()
@@ -87,76 +106,75 @@ def download():
         return restful(500, f'下载数据时发生错误(X_X): {e}')
     finally:
         processing = False
-    return send_file(config.output_file)
+    return FileResponse(config.output_file, media_type='application/octet-stream', filename=f'用户信息_{datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")}.xlsx')
 
-@app.route('/get_data_info', methods=['GET'])
+@app.get('/get_data_info')
 def get_data_info():
     info = bcz.getInfo()
     info.update(sqlite.getInfo())
     return restful(200, '', info)
 
-@app.route('/get_user_group', methods=['GET'])
-def get_user_group():
-    user_id = request.args.get('id')
-    groups = bcz.getUserGroupInfo(user_id)
+@app.get('/get_user_group') # 注意：在fastapi中，要用app.get才能接受args
+def get_user_group(request: Request, id: str=None):
+    groups = bcz.getUserGroupInfo(id)
+    print(groups)
     if groups:
         return restful(200, '', groups)
     else:
         return restful(404, '未查询到该用户的小班Σ(っ °Д °;)っ')
 
-@app.route('/observe_group', methods=['GET', 'POST'])
-def observe_group():
-    if request.method == 'GET':
-        '''获取关注小班列表'''
-        group_id = request.args.get('id', '')
-        cache_all = request.args.get('cache_all', False)
-        try:
-            if cache_all or config.real_time_cache_favorite:
-                groups = refreshTempMemberTable(
-                    bcz,
-                    sqlite,
-                    group_id,
-                    latest=True,
-                    with_nickname=False,
-                    only_favorite=not cache_all,
-                )
-            else:
-                groups = sqlite.queryObserveGroupInfo(group_id)
-            for group in groups:
-                group['auth_token'] = len(group['auth_token']) * '*'
-                if not group_id:
-                    group.pop('members')
-            if group_id and not groups:
-                return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
-            return restful(200, '', groups)
-        except Exception as e:
-            return restful(400, f'查询小班时发生错误(X_X): {e}')
-
-    elif request.method == 'POST':
-        '''添加或修改关注小班列表'''
-        groups = sqlite.queryObserveGroupInfo()
-        if 'share_key' in request.json and len(request.json) == 1:
-            share_key = request.json.get('share_key')
-            if share_key in [group['share_key'] for group in groups]:
-                return restful(403, '该小班已存在ヾ(≧▽≦*)o')
-            group_info = bcz.getGroupInfo(share_key)
-            sqlite.addObserveGroupInfo([group_info])
-            msg = '成功添加新的关注小班ヾ(≧▽≦*)o'
-        elif 'id' in request.json:
-            group_id = request.json.get('id')
-            if int(group_id) not in [group['id'] for group in groups]:
-                return restful(403, '该小班不存在Σ(っ °Д °;)っ')
-            group_info = sqlite.queryObserveGroupInfo(group_id=group_id)[0]
-            group_info.update(request.json)
-            if group_info['late_daka_time'] == '00:00':
-                group_info['late_daka_time'] = ''
-            sqlite.updateObserveGroupInfo([group_info])
-            msg = '操作成功! ヾ(≧▽≦*)o'
+@app.get('/observe_group')
+def observe_group_get(request: Request, id: str='', cache_all: bool=False):
+    '''获取关注小班列表'''
+    group_id = id
+    try:
+        if cache_all or config.real_time_cache_favorite:
+            groups = refreshTempMemberTable(
+                bcz,
+                sqlite,
+                group_id,
+                latest=True,
+                with_nickname=False,
+                only_favorite=not cache_all,
+            )
         else:
-            return restful(400, '调用方法异常Σ(っ °Д °;)っ')
-        return restful(200, msg)
+            groups = sqlite.queryObserveGroupInfo(group_id)
+        for group in groups:
+            group['auth_token'] = len(group['auth_token']) * '*'
+            if not group_id:
+                group.pop('members')
+        if group_id and not groups:
+            return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
+        return restful(200, '', groups)
+    except Exception as e:
+        return restful(400, f'查询小班时发生错误(X_X): {e}')
 
-@app.route('/monitor_status', methods=['GET'])
+@app.post('/observe_group')
+def observe_group_post(request: Request, item: dict):
+    '''添加或修改关注小班列表'''
+    groups = sqlite.queryObserveGroupInfo()
+    if 'share_key' in item and len(item) == 1:
+        share_key = item.get('share_key')
+        if share_key in [group['share_key'] for group in groups]:
+            return restful(403, '该小班已存在ヾ(≧▽≦*)o')
+        group_info = bcz.getGroupInfo(share_key)
+        sqlite.addObserveGroupInfo([group_info])
+        msg = '成功添加新的关注小班ヾ(≧▽≦*)o'
+    elif 'id' in item:
+        group_id = item.get('id')
+        if int(group_id) not in [group['id'] for group in groups]:
+            return restful(403, '该小班不存在Σ(っ °Д °;)っ')
+        group_info = sqlite.queryObserveGroupInfo(group_id=group_id)[0]
+        group_info.update(item)
+        if group_info['late_daka_time'] == '00:00':
+            group_info['late_daka_time'] = ''
+        sqlite.updateObserveGroupInfo([group_info])
+        msg = '操作成功! ヾ(≧▽≦*)o'
+    else:
+        return restful(400, '调用方法异常Σ(っ °Д °;)っ')
+    return restful(200, msg)
+
+@app.get('/monitor_status')
 def monitor_status():
     # 返回若干个监控状态
     with open("temp.json", 'r') as f:
@@ -174,10 +192,10 @@ def monitor_status():
     return restful(200, '', status)
     
         
-@app.route('/query_strategy_verdict_details', methods=['POST'])
-def query_strategy_verdict_details():
+@app.post('/query_strategy_verdict_details')
+def query_strategy_verdict_details(request: Request, item: dict):
     '''获取策略审核详情'''
-    unique_id = request.json.get('unique_id')
+    unique_id = item.get('unique_id')
     if not unique_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
@@ -201,12 +219,12 @@ def query_strategy_verdict_details():
         logger.error(f'查询审核记录时发生错误: {e}')
         return restful(400, f'查询审核记录时发生错误(X_X): {e}')
 
-@app.route('/recheck_strategy_verdict', methods=['POST'])   
-def recheck_strategy_verdict():
+@app.post('/recheck_strategy_verdict')   
+def recheck_strategy_verdict(request: Request, item: dict):
     '''重新审核策略，仅限在班成员'''
-    unique_id = int(request.json.get('unique_id'))
-    group_id = int(request.json.get('group_id'))
-    strategy_id = (request.json.get('strategy_id'))
+    unique_id = int(item.get('unique_id'))
+    group_id = int(item.get('group_id'))
+    strategy_id = (item.get('strategy_id'))
     if not unique_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     strategy_dict = strategy.get(strategy_id)
@@ -278,10 +296,10 @@ def recheck_strategy_verdict():
     filter.log_dispatch('全局')
     return restful(200, f'审核结果: {operation}<br>{reason}')
 
-@app.route('/copy_strategy', methods=['POST'])
-def copy_strategy():
+@app.post('/copy_strategy')
+def copy_strategy(request: Request, item: dict):
     '''复制策略'''
-    strategy_id = request.json.get('strategy_id')
+    strategy_id = item.get('strategy_id')
     if not strategy_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
@@ -295,10 +313,10 @@ def copy_strategy():
         return restful(500, f'复制策略时发生错误(X_X): {e}')
     
     
-@app.route('/hash_strategy', methods=['POST'])
-def hash_strategy():
+@app.post('/hash_strategy')
+def hash_strategy(request: Request, item: dict):
     '''计算策略hash值'''
-    strategy_dict = request.json
+    strategy_dict = item
     if not strategy_dict:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
@@ -306,11 +324,11 @@ def hash_strategy():
     except Exception as e:
         return restful(500, f'计算策略hash值时发生错误(X_X): {e}')
     
-@app.route('/save_strategy', methods=['POST'])
-def save_strategy():
+@app.post('/save_strategy')
+def save_strategy(request: Request, item: dict):
     '''保存策略'''
-    strategy_dict = request.json.get('strategy_dict', None)
-    previous_strategy_id = request.json.get('previous_strategy_id')
+    strategy_dict = item.get('strategy_dict', None)
+    previous_strategy_id = item.get('previous_strategy_id')
     if not strategy:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
@@ -328,12 +346,12 @@ def save_all_strategy():
     strategy.save()
     return restful(200, '保存成功! ヾ(≧▽≦*)o')
 
-@app.route('/query_filter_log', methods=['POST'])
-def query_filter_log():
+@app.post('/query_filter_log')
+def query_filter_log(request: Request, item: dict):
     '''获取过滤日志'''
-    group_id = request.json.get('group_id')
-    count_start = request.json.get('count_start', 0)
-    count_limit = request.json.get('count_limit', 20)
+    group_id = item.get('group_id')
+    count_start = item.get('count_start', 0)
+    count_limit = item.get('count_limit', 20)
     try:
         conn = sqlite.connect()
         logger.debug(f'查询日志记录: group_id={group_id}, count_start={count_start}, count_limit={count_limit}')
@@ -347,28 +365,28 @@ def query_filter_log():
         traceback.print_exc()
         return restful(400, f'查询日志记录时发生错误(X_X): {e}')
 
-@app.route('/query_today_filter_log', methods=['POST'])
-def query_today_filter_log():
+@app.post('/query_today_filter_log')
+def query_today_filter_log(request: Request, item: dict):
     '''获取今日过滤日志'''
-    group_id_list = request.json.get('group_id_list', [])
+    group_id_list = item.get('group_id_list', [])
     logs = sqlite.queryTodayAcceptedStatus(group_id_list)
     if not logs:
         return restful(404, '未查询到今日日志记录Σ(っ °Д °;)っ')
     return restful(200, '', logs)
 
 
-@app.route('/get_strategy_list', methods=['GET'])
+@app.get('/get_strategy_list')
 def query_strategy():
     '''获取策略'''
     return restful(200, '', strategy.get())
 
-@app.route('/start_filter', methods=['POST'])
-def start_filter():
+@app.post('/start_filter')
+def start_filter(request: Request, item: dict):
     '''开始筛选'''
-    group_id = str(request.json.get('group_id'))
-    strategy_id_list = request.json.get('strategy_id_list')
-    scheduled_hour = request.json.get('scheduled_hour', None)
-    scheduled_minute = request.json.get('scheduled_minute', None)
+    group_id = str(item.get('group_id'))
+    strategy_id_list = item.get('strategy_id_list')
+    scheduled_hour = item.get('scheduled_hour', None)
+    scheduled_minute = item.get('scheduled_minute', None)
     print(f'开始筛选: group_id={group_id}, strategy_id_list={strategy_id_list}, scheduled_hour={scheduled_hour}, scheduled_minute={scheduled_minute}')
     try:
         share_key = sqlite.queryGroupShareKey(group_id)
@@ -383,19 +401,18 @@ def start_filter():
     except Exception as e:
         return restful(500, f'筛选启动失败：{e}')
 
-@app.route('/stop_filter', methods=['POST'])
-def stop_filter():
+@app.post('/stop_filter')
+def stop_filter(request: Request, item: dict):
     '''停止筛选'''
-    group_id = int(request.json.get('group_id'))
+    group_id = int(item.get('group_id'))
     share_key = sqlite.queryGroupShareKey(str(group_id))
     filter.stop(share_key)
     return restful(200, '筛选已停止!')
 
-@app.route('/query_filter_state', methods=['POST'])
-def query_filter():
+@app.post('/query_filter_state')
+def query_filter(request: Request, item: dict):
     '''获取筛选运行状态'''
-    group_id = request.json.get('group_id')
-    logger.info(f'查询小班{group_id}的筛选状态')
+    group_id = item.get('group_id')
     return restful(200, '', filter.getState(sqlite.queryGroupShareKey((group_id))))
     
 
@@ -409,11 +426,11 @@ def query_filter():
 
         
 
-@app.route('/query_group_details', methods=['POST'])
-def query_group_details():
+@app.post('/query_group_details') # 必须使用app.post，而不是app.post，否则无法获取item参数
+def query_group_details(request: Request, item: dict):
     '''获取关注小班列表'''
-    group_id = request.json.get('id', '')
-    week = request.json.get('week', '')
+    group_id = item.get('id', '')
+    week = item.get('week', '')
     if not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
@@ -426,23 +443,24 @@ def query_group_details():
             return restful(404, '未查询到该小班Σ(っ °Д °;)っ')
         return restful(200, '', groups)
     except Exception as e:
+        logger.error(f'查询小班信息时发生错误: {e} {traceback.format_exc()}')
         return restful(400, f'查询小班信息时发生错误(X_X): {e}')
 
-@app.route('/get_group_details_option', methods=['GET'])
+@app.get('/get_group_details_option')
 def get_group_details_option():
     option = {'week': getWeekOption()}
     return restful(200, '', option)
 
-@app.route('/get_search_option', methods=['GET'])
+@app.get('/get_search_option')
 def get_search_option():
     option = sqlite.getSearchOption()
     return restful(200, '', option)
 
-@app.route('/query_member_table', methods=['POST'])
-def query_member_table():
+@app.post('/query_member_table')
+def query_member_table(request: Request, item: dict):
     try:
         refreshTempMemberTable(bcz, sqlite)
-        result = sqlite.queryMemberTable(request.json, header=True, union_temp=True)
+        result = sqlite.queryMemberTable(item, header=True, union_temp=True)
         data = []
         for row in result['data']:
             row = list(row)
@@ -453,17 +471,15 @@ def query_member_table():
     except Exception as e:
         return restful(500, f'查询数据时发生错误(X_X): {e}')
 
-@app.route('/search_group', methods=['GET'])
-def search_group():
-    share_key = request.args.get('share_key')
-    user_id = request.args.get('uid')
+@app.get('/search_group')
+def search_group(share_key:str=None, uid:str=None):
     try:
         if share_key:
             group_info = bcz.getGroupInfo(share_key)
             group_info.pop('members')
             result = {group_info['id']: group_info}
-        elif user_id:
-            result = bcz.getUserGroupInfo(user_id)
+        elif uid:
+            result = bcz.getUserGroupInfo(uid)
         else:
             return restful(400, '请求参数错误Σ(っ °Д °;)っ')
         if len(result):
@@ -472,47 +488,46 @@ def search_group():
     except Exception as e:
         return restful(400, f'搜索小班时发生错误(X_X): {e}')
 
-@app.route('/search_user', methods=['GET'])
-def search_user():
-    user_id = request.args.get('uid')
-    detail = request.args.get('detail', 0)  
+@app.get('/search_user')
+def search_user(uid:str=None, detail:int=0):
     try:
-        if not user_id:
+        if not uid:
             return restful(400, '请求参数错误Σ(っ °Д °;)っ')
-        user_info = bcz.getUserAllInfo(user_id, detail = detail)
+        user_info = bcz.getUserAllInfo(uid, detail = detail)
         if user_info:
             return restful(200, '', user_info)
         return restful(404, '未搜索到符合条件的用户Σ(っ °ω°;)っ')
     except Exception as e:
         return restful(400, f'搜索用户时发生错误(X_X): {e}')
 
-@app.route('/configure', methods=['GET', 'POST'])
-def configure():
-    if request.method == 'GET':
-        '''获取配置文件'''
-        info = config.getInfo()
-        info['main_token'] = len(info['main_token']) * '*'
-        return restful(200, '', info)
-    elif request.method == 'POST':
-        '''修改配置文件'''
-        try:
-            config.modify(request.json)
-        except Exception as e:
-            return restful(400, f'修改配置时发生错误(X_X): {e}')
-        return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
+@app.get('/configure')
+def get_configure():
+    '''获取配置文件'''
+    info = config.getInfo()
+    info['main_token'] = len(info['main_token']) * '*'
+    return restful(200, '', info)
 
-@app.route('/get_whitelist', methods=['POST'])
-def get_whitelist():
-    group_id = str(request.json.get('group_id', ''))
+@app.post('/configure')
+def post_configure(request: Request, item: dict):
+    '''修改配置文件'''
+    try:
+        config.modify(item)
+    except Exception as e:
+        return restful(400, f'修改配置时发生错误(X_X): {e}')
+    return restful(200, '配置修改成功! ヾ(≧▽≦*)o')
+
+@app.post('/get_whitelist')
+def get_whitelist(request: Request, item: dict):
+    group_id = str(item.get('group_id', ''))
 
     if not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     return restful(200, '', sqlite.queryWhitelist(group_id, with_nickname = True))
 
-@app.route('/add_whitelist', methods=['POST'])
-def add_whitelist():
-    id = request.json.get('id', '')
-    group_id = request.json.get('group_id', '')
+@app.post('/add_whitelist')
+def add_whitelist(request: Request, item: dict):
+    id = item.get('id', '')
+    group_id = item.get('group_id', '')
     if not id or not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
@@ -522,10 +537,10 @@ def add_whitelist():
         return restful(400, f'添加白名单时发生错误(X_X): {e}')
 
 
-@app.route('/remove_whitelist', methods=['POST'])
-def delete_whitelist():
-    id = request.json.get('id', '')
-    group_id = request.json.get('group_id', '')
+@app.post('/remove_whitelist')
+def delete_whitelist(request: Request, item: dict):
+    id = item.get('id', '')
+    group_id = item.get('group_id', '')
     if not id or not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
@@ -536,7 +551,7 @@ def delete_whitelist():
 
 
 # 以下几个是手动接口    
-@app.route('/errors', methods=['GET'])
+@app.get('/errors')
 def get_errors():
     '''获取错误日志列表'''
     try:
@@ -547,11 +562,10 @@ def get_errors():
     except Exception as e:
         return restful(500, f'获取错误日志列表时发生错误(X_X): {e}')
 
-@app.route('/error', methods=['GET'])
-def get_error():
+@app.get('/error')
+def get_error(file_name:str=''):
     '''获取错误日志内容'''
     try:
-        file_name = request.args.get('file_name')
         if not os.path.exists(f'errors/{file_name}'):
             return restful(404, '未找到该日志文件Σ(っ °Д °;)っ')
         with open(f'errors/{file_name}', 'r', encoding='utf-8') as f:
@@ -560,15 +574,14 @@ def get_error():
     except Exception as e:
         return restful(500, f'获取错误日志内容时发生错误(Use file_name=?)(X_X): {e}')
     
-@app.route('/stop_all', methods=['GET'])
+@app.get('/stop_all')
 def stop_all():
     '''紧急停止'''
     filter.stop()
     return restful(200, '所有筛选已停止!')
 
-@app.route('/combo', methods=['GET'])
-def combo():
-    days = request.args.get('days', None)
+@app.get('/combo')
+def combo(request: Request, days: str=None):
     if not days: 
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     days = days.split('/')
@@ -576,7 +589,7 @@ def combo():
     completed_times = int(days[0])
     return restful(200, '',  sqlite.ComboExpectancy(completed_times / join_days, join_days))
 
-@app.route('/slice_log', methods=['GET'])
+@app.get('/slice_log')
 def slice_log(in_app = True):    
     '''去掉7天前的STRATEGY_VERDICT记录和90天前的FILTER_LOG记录'''
     conn = sqlite.connect()
@@ -596,45 +609,44 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     retcode = 1
     if code == 200:
         retcode = 0
-    return jsonify({'code': code,
+    return Response(json.dumps({'code': code,
             'retcode': retcode,
             'msg': msg,
             'data': data
-    }), code
+    }, ensure_ascii=False), code, {'Content-Type': 'application/json; charset=utf-8'})
 
 
 
 # 处理SSE连接
-@app.route('/message')
-def sse_message() -> Response:
-    return Response(stream_with_context(filter.generator()), content_type='text/event-stream')
+@app.get("/message")
+async def sse_message(request: Request) -> StreamingResponse:
+    return StreamingResponse(filter.generator(request, DEBUG), media_type='text/event-stream')
 
 
 # 如果用的bot可以集成到project里面，就不用接口。
-#
-#
-# @app.route('/blacklist/add', methods=['POST'])
+
+# @app.get('/blacklist/add')
 # def add_blacklist() -> None:
 #     # 前端收集的信息包括：add_by班长昵称, type王者班长=1, reason原因, bundle黑名单用户id列表
 #     try:
-#         data = request.json
+#         data = item
 #         sqlite.saveBlacklist(data['add_by'], data['type'], data['reason'], data['bundle'])
 #         return restful(200, '添加成功!')
 #     except Exception as e:
 #         return restful(500, f'添加黑名单失败：{e}')
 
-# @app.route('/blacklist/query', methods=['GET'])
+# @app.get('/blacklist/query')
 # def query_blacklist() -> None:
 #     unique_id = request.args.get('unique_id', '')
 #     if unique_id == '':
 #         return restful(400, '请求参数错误Σ(っ °Д °;)っ')
 #     return restful(200, '', sqlite.queryBlacklist(unique_id))
     
-# @app.route('/blacklist/delete', methods=['POST'])
+# @app.get('/blacklist/delete')
 # def delete_blacklist() -> None:
 #     # 前端收集的信息包括：unique_id, date_time；前端获取时只展示查询者本人添加的记录
 #     try:
-#         data = request.json
+#         data = item
 #         sqlite.deleteBlacklist(data['unique_id'], data['date_time'])
 #         return restful(200, '删除成功!')
 #     except Exception as e:
@@ -648,15 +660,13 @@ if __name__ == '__main__':
     if config.daily_verify:
         Schedule(config.daily_verify, lambda: verifyInfo(bcz, sqlite))
     
-    app.register_blueprint(sse, url_prefix='/stream')
+    
+    if '--slice' in sys.argv:
+        slice_log(in_app = False)
+    if '--auto' in sys.argv:
+        monitor = Monitor(filter, sqlite)
     if '--debug' in sys.argv:
-        import os
-        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' and '--auto' in sys.argv:
-            monitor = Monitor(filter, sqlite)
-        app.run(debug=True, host=config.host, port=config.port, request_handler=MyRequestHandler)
+        app.debug = True
+        uvicorn.run(app, host=config.host, port=config.port, timeout_keep_alive=5, log_level='debug')
     else:
-        if '--slice' in sys.argv:
-            slice_log(in_app = False)
-        if '--auto' in sys.argv:
-            monitor = Monitor(filter, sqlite)
-        app.run(config.host, config.port, request_handler=MyRequestHandler)
+        uvicorn.run(app, host=config.host, port=config.port, timeout_keep_alive=5)
