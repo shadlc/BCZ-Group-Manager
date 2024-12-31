@@ -584,7 +584,7 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
                 'absence': absence,
             })
 
-        # 删除星期天不在小班的成员贡献的打卡天数
+        # 删除不在小班的成员贡献的打卡天数
         for member in group['members']:
             if member['data_time'] == '' and edate not in member['daka']:
                 for daka_date in member['daka']:
@@ -607,14 +607,14 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
         )
     return groups
 
-def getWeekOption(date: str = '', range_day: list[int] = [-180, 0]) -> list:
+def getWeekOption(data_date: str = '', range_day: list[int] = [-180, 0]) -> list:
     '''获取指定时间指定范围内所有的周'''
     target_date = datetime.today()
-    if date:
-        try:    
-            target_date = datetime.strptime(date, '%Y-%m-%d')
+    if data_date:
+        try:
+            target_date = datetime.strptime(data_date, '%Y-%m-%d')
         except Exception as e:
-            logger.warning(f'转换时间[{date}]出错: {e}')
+            logger.warning(f'转换时间[{data_date}]出错: {e}')
 
     start_date = target_date + timedelta(days=range_day[0])
     end_date = target_date + timedelta(days=range_day[1])

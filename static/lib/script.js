@@ -1,11 +1,12 @@
 // 增加获取周数函数
 Date.prototype.getWeek = function() {
-  let target  = new Date(this.valueOf());
-  let dayNr   = (this.getDay() + 6) % 7;
-  target.setDate(target.getDate() - dayNr + 3);
-  let jan4    = new Date(target.getFullYear(), 0, 4);
-  let dayDiff = (target - jan4) / 86400000;
-  return 1 + Math.floor(dayDiff / 7);
+  let nowDate = new Date(this.valueOf());
+  let firstDay = new Date(this.valueOf());
+  firstDay.setMonth(0);
+  firstDay.setDate(1);
+  let diffDays = Math.ceil((nowDate - firstDay)/(24*60*60*1000));
+  let week = Math.ceil(diffDays/7);
+  return week === 0 ? 1 : week;
 };
 
 // 初始化云层
