@@ -1,12 +1,25 @@
 // 增加获取周数函数
 Date.prototype.getWeek = function() {
-  let nowDate = new Date(this.valueOf());
-  let firstDay = new Date(this.valueOf());
-  firstDay.setMonth(0);
-  firstDay.setDate(1);
-  let diffDays = Math.ceil((nowDate - firstDay)/(24*60*60*1000));
-  let week = Math.ceil(diffDays/7);
-  return week === 0 ? 1 : week;
+    const currentDate = new Date(this.getFullYear(), this.getMonth(), this.getDate());
+    const startOfYear = new Date(this.getFullYear(), 0, 1);
+    const startDay = (startOfYear.getDay() || 7) - 1;
+    const startOfFirstWeek = new Date(this.getFullYear(), 0, 1 - startDay);
+    const diffInMilliseconds = currentDate - startOfFirstWeek;
+    const diffInDays = diffInMilliseconds / (1000 * 60 * 60 * 24);
+    return Math.ceil((diffInDays + 1) / 7);
+};
+Date.prototype.getISOWeek = function () {
+  const currentDate = new Date(this.getFullYear(), this.getMonth(), this.getDate());
+  currentDate.setHours(0, 0, 0, 0);
+  currentDate.setDate(currentDate.getDate() + 4 - (currentDate.getDay() || 7));
+  const yearStart = new Date(currentDate.getFullYear(), 0, 1);
+  const weekNumber = Math.ceil(((currentDate - yearStart) / 86400000 + 1) / 7);
+  return weekNumber;
+};
+Date.prototype.getISOYear = function () {
+  const currentDate = new Date(this.getFullYear(), this.getMonth(), this.getDate());
+  currentDate.setDate(currentDate.getDate() + 4 - (currentDate.getDay() || 7));
+  return currentDate.getFullYear();
 };
 
 // 初始化云层
