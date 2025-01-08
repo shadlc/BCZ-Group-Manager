@@ -395,10 +395,6 @@ class BCZ:
         return 1001
 
     def tidalTokenThread(self, tidal_token: list) -> None:
-        # return
-        # print(self.tidal_thread_tids)
-        # if self.tidal_thread_tids is not None:
-        #     return
         def update_tidal_token_class_list(user):
             # 更新tidal_token_class_list
             # print(f'请求token:{user["access_token"]}')
@@ -418,7 +414,8 @@ class BCZ:
                 if str(info['id']) in self.tidal_tracker and info['join_days'] < 3:
                     user['current_tidal_group_count'] = user.get('current_tidal_group_count', 0) + 1
         
-        time_delta = 10
+        time_delta = 24
+        current_total_tidal_cnt = 0
         current_share_key = ''
         current_group_id = ''
         current_group_name = ''
@@ -449,11 +446,15 @@ class BCZ:
                 if current_group_id != '':
                     logger.info(f"🌊 优先级最高的潮汐组[{current_share_key},{current_group_id}]{current_group_name}(-{self.tidal_token_queue[current_group_id]['tidal_vacancy']})")
                     all_tidal_token_cleared = False
-                logger.info(f"潮汐队列：{vacancy_log}")
-
+                logger.info(f"潮汐队列：{vacancy_log} 已使用{current_total_tidal_cnt}牌(位)")
+                if len(vacancy_log) == 0:
+                    break
+                total_count = 0
+                
+                random.shuffle(tidal_token)
                 for user in tidal_token:
                     user_name = user['name']
-                    user_grade = user['grade']
+                    user_grade = user.get('grade', -1)
 
 
                     # logger.info(f"开始检查潮汐令牌[{user_name}]")
@@ -469,6 +470,7 @@ class BCZ:
                     current_tidal_group_count = user['current_tidal_group_count']
                     if current_tidal_group_count > 0:
                         all_tidal_token_cleared = False # 有潮汐小班，不清空队列
+                        total_count += current_tidal_group_count
                     
                     # 先检查是否有加入并且已经不需要的潮汐小班
                     checked = 0
@@ -526,7 +528,7 @@ class BCZ:
                 if not current_preserve_rank:
                     time.sleep(time_delta)
                 else:
-                    time.sleep(time_delta / 2)
+                    time.sleep(time_delta >> 2)
         except Exception as e:
             logger.error(f"tidalTokenThread出现异常：{e}")
         finally:
