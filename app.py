@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
 
-from src.bcz import BCZ, recordInfo, verifyInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
+from src.bcz import BCZ, http2_client, recordInfo, verifyInfo, refreshTempMemberTable, analyseWeekInfo, getWeekOption
 from src.config import Config, Strategy
 from src.sqlite import SQLite
 from src.xlsx import Xlsx
@@ -57,7 +57,8 @@ templates = Jinja2Templates(directory="templates")
 
 config = Config()
 strategy = Strategy()
-bcz = BCZ(config)
+http2_client_obj = http2_client()
+bcz = BCZ(config, http2_client_obj)
 xlsx = Xlsx(config)
 sqlite = SQLite(config)
 filter = Filter(strategy, bcz, sqlite, config)
@@ -550,7 +551,17 @@ def delete_whitelist(request: Request, item: dict):
         return restful(400, f'删除白名单时发生错误(X_X): {e}')
 
 
-# 以下几个是手动接口    
+# 以下几个是手动调试接口
+
+@app.get('/reload')
+def reload():
+    '''重新http2_client(例如启动或关闭fiddler后更新代理)'''
+    try:
+        http2_client_obj.reload_http2_client()
+        return restful(200, '重载成功!')
+    except Exception as e:
+        return restful(500, f'重载失败：{e}')
+    
 @app.get('/errors')
 def get_errors():
     '''获取错误日志列表'''

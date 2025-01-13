@@ -56,7 +56,12 @@ def db_sync(db_path, group_name, date_list: list):
         current_page = 0
 
         while page_max > current_page:
-            response = requests.post(url, json=payload, auth=auth.HTTPBasicAuth(username, password))
+            try:
+                response = requests.post(url, json=payload, auth=auth.HTTPBasicAuth(username, password))
+            except requests.exceptions.RequestException as e:
+                logger.error(f"Error occurred while syncing: {e}")
+                index_n = 0
+                break
             response_json = response.json()['data']
         
             if response.status_code == 401:

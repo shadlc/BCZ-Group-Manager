@@ -544,9 +544,7 @@ class Filter:
 
     def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 999999, tidal_index: int = 999999) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
-        
-        # pyautogui.FAILSAFE = False # 关闭自动退出功能
-        # print(strategy_index_list)
+        member_dict_temp = {}
         while True:
             try:
                 member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)

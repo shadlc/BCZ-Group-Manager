@@ -15,10 +15,137 @@ from src.get_headers import getHeaders
 
 logger = logging.getLogger(__name__)
 
+
+class http2_client:
+    def __init__(self):
+        self.client = None
+        self.async_client = None
+        self.lock = threading.Lock()
+
+    # post(url, headers=headers, json='{}', timeout=10)
+    def post(self, url, headers=None, json=None, timeout=10):
+        headers['Content-Type'] = 'application/json'
+        client = self.get_http2_client()
+        failed_count = 0
+        while True:
+            try:
+                response = client.post(url, headers=headers, json=json, timeout=timeout)
+                if response.status_code != 200:
+                    raise Exception(f'status_code: {response.status_code}')
+                return response
+            except Exception as e:
+                print(f'http2 error: {e}')
+                if client.is_closed:
+                    client = self.get_http2_client()
+                    continue
+                time.sleep(10)
+                failed_count += 1
+                if failed_count > 7:
+                    Warning('http2 error, failed_count > 7')
+                    time.sleep(60)
+                    failed_count = 0
+                continue
+
+    # get(url, headers=headers, timeout=10)
+    def get(self, url, headers=None, timeout=10):
+        client = self.get_http2_client()
+        failed_count = 0
+        while True:
+            try:
+                response = client.get(url, headers=headers, timeout=timeout)
+                if response.status_code != 200:
+                    raise Exception(f'status_code: {response.status_code}')
+                return response
+            except Exception as e:
+                print(f'http2 error: {e}')
+                if client.is_closed:
+                    client = self.get_http2_client()
+                    continue
+                time.sleep(10)
+                failed_count += 1
+                if failed_count > 7:
+                    Warning('http2 error, failed_count > 7')
+                    time.sleep(60)
+                    failed_count = 0
+                continue
+
+
+    
+    async def asyncFetch(self, url: str, method: str = 'GET', headers: dict = {}, payload = None) -> httpx.Response:
+        '''异步网络请求'''
+        client = self.get_http2_client(async_client=True)
+        if method.upper() == 'GET':
+            while True:
+                try:
+                    response = await client.get(url, headers=headers)
+                    if response.status_code == 200:
+                        return response
+                    raise Exception(f'status code: {response.status_code}')
+                except Exception as e:
+                    print(f'async http2 error: {e}')
+                    if client.is_closed:
+                        client = self.get_http2_client(async_client=True)
+                        continue
+                    await asyncio.sleep(10)
+        elif method.upper() == 'POST':
+            while True:
+                try:
+                    response = await client.post(url, json=payload, headers=headers)
+                    if response.status_code == 200: 
+                        return response
+                    raise Exception(f'status code: {response.status_code}')
+                except Exception as e:
+                    print(f'async http2 error: {e}')
+                    if client.is_closed:
+                        client = self.get_http2_client(async_client=True)
+                        continue
+                    await asyncio.sleep(10)
+        else:
+            raise ValueError('不支持的请求协议')
+
+    def get_http2_client(self, async_client=False):
+        '''在get或post前获取client，避免重复创建'''
+        with self.lock:
+            if async_client:
+                if self.async_client is None or self.async_client.is_closed:
+                    self.async_client = httpx.AsyncClient(http2=True, verify=certifi.where())
+                return self.async_client
+            else:
+                if self.client is None or self.client.is_closed:
+                    self.client = httpx.Client(http2=True, verify=certifi.where())
+                return self.client
+
+    def reload_http2_client(self):
+        '''重新http2_client(例如启动或关闭fiddler后更新代理)'''
+        if not(self.client is None or self.client.is_closed):
+            self.client.close()
+        if not(self.async_client is None or self.async_client.is_closed):
+            self.rua(self.async_client.aclose())
+        self.client = httpx.Client(http2=True, verify=certifi.where())
+        self.async_client = httpx.AsyncClient(http2=True, verify=certifi.where())
+
+    def __del__(self):
+        if not(self.client is None or self.client.is_closed):
+            self.client.close()
+        if not(self.async_client is None or self.async_client.is_closed):
+            self.rua(self.async_client.aclose())
+
+    def rua(self, async_corutine):
+        # 多用asyncio.run()，即可点亮破大防三件套: Event loop was closed、bind to different loop、no available event loop
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_closed():
+                loop = asyncio.new_event_loop()
+        except:
+            loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        return loop.run_until_complete(async_corutine)
+
 class BCZ:
-    def __init__(self, config: Config) -> None:
+    def __init__(self, config: Config, http2_client_obj: http2_client) -> None:
         '''小班解析类'''
         self.config = config
+        self.http2_client_obj = http2_client_obj
         self.invalid_pattern = r'[\000-\010]|[\013-\014]|[\016-\037]'
         self.own_info_url = 'https://social.baicizhan.com/api/deskmate/home_page'
         self.group_list_url = 'https://group.baicizhan.com/group/own_groups'
@@ -120,23 +247,13 @@ class BCZ:
         headers = getHeaders(authorized_token)
         # https://group.baicizhan.com/group/set_only_public_key_join?shareKey=1alv4ldkkhcxyln6
         url = f"https://group.baicizhan.com/group/set_only_public_key_join?shareKey={share_key}"
-        response = requests.post(url, headers=headers, json='{}', timeout=10)
+        response = self.http2_client_obj.post(url, headers=headers, json='{}', timeout=10)
         if response.json().get("code",0) != 1:
             logger.info(f"切换小班是否仅允许邀请码加入失败，请检查{response.json()}")
             return False
         logger.info(f"切换小班是否仅允许邀请码加入成功")
         return True
 
-    async def asyncFetch(self, url: str, method: str = 'GET', headers: dict = {}, payload = None) -> httpx.Response:
-        '''异步网络请求'''
-        async with httpx.AsyncClient(verify=certifi.where()) as client:
-            if method.upper() == 'GET':
-                response = await client.get(url, headers=headers)
-            elif method.upper() == 'POST':
-                response = await client.post(url, json=payload, headers=headers)
-            else:
-                raise ValueError('不支持的请求协议')
-            return response
         
     
     def joinGroup(self, share_key: str, access_token: str) -> int:
@@ -149,7 +266,7 @@ class BCZ:
             "shareKey": share_key,
             "source": 3
         }
-        response = requests.post(f"https://group.baicizhan.com/group/join", headers=headers, json=json, timeout=10)
+        response = self.http2_client_obj.post(f"https://group.baicizhan.com/group/join", headers=headers, json=json, timeout=10)
         data = response.json()
         if data.get("code",0) != 1:
             logger.info(f"加入小班失败，请检查{data}")
@@ -163,7 +280,7 @@ class BCZ:
         '''退出小班'''
         headers = getHeaders(access_token)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response_json = requests.post(f'https://group.baicizhan.com/group/quit?shareKey={share_key}', data='{}', headers=headers).json()
+        response_json = self.http2_client_obj.post(f'https://group.baicizhan.com/group/quit?shareKey={share_key}', data='{}', headers=headers).json()
         if response_json.get("code",0) != 1:
             logger.info(f"退出小班失败，请检查{response_json}")
             return False
@@ -204,7 +321,7 @@ class BCZ:
             get_url = 'https://group.baicizhan.com/group/get_recruitment_post_list?anchorId=0&direction=1'
             self.poster_fetch_time[grade-1] = time.time()
             headers = getHeaders(access_token)
-            response = requests.get(get_url, headers=headers, timeout=10)
+            response = self.http2_client_obj.get(get_url, headers=headers, timeout=10)
             self.buffered_poster_list[grade-1] = response.json().get('data')['recruitmentPostVoList']
 
 
@@ -340,7 +457,7 @@ class BCZ:
         '''发送海报'''
         get_url = 'https://group.baicizhan.com/group/get_recruitment_style_info'
         headers = getHeaders(access_token)
-        response = requests.get(get_url, headers=headers, timeout=10)
+        response = self.http2_client_obj.get(get_url, headers=headers, timeout=10)
         time.sleep(1)
         style_info = response.json().get('data')['list']
         style = -1
@@ -367,7 +484,7 @@ class BCZ:
             "style": style,
             "type": 1,
         }
-        response = requests.post(post_url, headers=headers, json=payload, timeout=10)
+        response = self.http2_client_obj.post(post_url, headers=headers, json=payload, timeout=10)
         data = response.json()
         if data.get("code",0) != 1:
             logger.info(f"发送海报失败，请检查{response.json()}")
@@ -386,7 +503,7 @@ class BCZ:
         group_id = int(group_id)
         if self.rank_buffer_time.get(rank) is None or self.rank_buffer_time[rank] + buffer_time < time.time():
             headers = getHeaders(access_token)
-            response = requests.get(f"https://group.baicizhan.com/group/get_group_rank?rank={rank}", headers=headers, timeout=10)
+            response = self.http2_client_obj.get(f"https://group.baicizhan.com/group/get_group_rank?rank={rank}", headers=headers, timeout=10)
             self.rank_buffer_time[rank] = time.time()
             self.rank_buffer[rank] = response.json().get('data')['list']
         for i, group in enumerate(self.rank_buffer[rank]):
@@ -582,7 +699,7 @@ class BCZ:
         headers["Origin"] = "https://activity.baicizhan.com"
         headers["Referer"] = "https://activity.baicizhan.com"
         
-        response = requests.options(url, headers = headers, timeout=10)# 先发一个OPTIONS测跨域POST
+        response = self.http2_client_obj.options(url, headers = headers, timeout=10)# 先发一个OPTIONS测跨域POST
         json =  {
             "memberIds": user_id,
             "shareKey": share_key,
@@ -592,7 +709,7 @@ class BCZ:
         headers["Content-Type"] = "application/json"
         headers["Origin"] = "https://activity.baicizhan.com"
         headers["Referer"] = "https://activity.baicizhan.com"
-        response = requests.post(url, headers = headers, json = json, timeout=10)
+        response = self.http2_client_obj.post(url, headers = headers, json = json, timeout=10)
         # print(f"测试！删除：{json}")
         if response.json().get("code",0) != 1:
             msg = response.json().get("message","")
@@ -629,7 +746,7 @@ class BCZ:
             'name': None,
         }
         headers = getHeaders(token)
-        response = requests.get(self.own_info_url, headers=headers, timeout=10)
+        response = self.http2_client_obj.get(self.own_info_url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'使用token获取用户信息失败!\n{response.text}')
         user_info = response.json().get('data')
@@ -648,7 +765,7 @@ class BCZ:
             return
         url = f'{self.user_deskmate_url}?uniqueId={user_id}'
         headers = getHeaders(self.config.main_token)
-        response = requests.get(url, headers=headers, timeout=10)
+        response = self.http2_client_obj.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取同桌失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
@@ -657,11 +774,11 @@ class BCZ:
         user_info['unique_id'] = user_id
         user_info['name'] = response.json()['data']['userInfo']['name']
         user_info['deskmate_days'] = response.json()['data']['deskmateDays']
-        response = requests.get(f'{self.user_card_info}?uniqueId={user_id}', headers=headers, timeout=10)
+        response = self.http2_client_obj.get(f'{self.user_card_info}?uniqueId={user_id}', headers=headers, timeout=10)
         user_info['max_daka_days'] = response.json()['data']['dakaDays']
         # 获取小队信息
         url = f'{self.user_team_url}?bcz_id={user_id}'
-        response = requests.get(url, headers=headers, timeout=10)
+        response = self.http2_client_obj.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             logger.warning(f'获取小队信息失败!\n{response.text}')
         team_info = response.json().get('data').get('members')
@@ -682,7 +799,7 @@ class BCZ:
         if access_token == '':
             access_token = self.config.main_token
         headers = getHeaders(access_token)
-        response = requests.get('https://group.baicizhan.com/group/get_group_user_info', headers=headers) # 我的小班
+        response = self.http2_client_obj.get('https://group.baicizhan.com/group/get_group_user_info', headers=headers) # 我的小班
         data = response.json().get('data')
         if not data:
             return 0
@@ -697,7 +814,7 @@ class BCZ:
             access_token = self.config.main_token
         url = f'{self.group_list_url}?uniqueId={user_id}'
         headers = getHeaders(access_token)
-        response = requests.get(url, headers=headers, timeout=10)
+        response = self.http2_client_obj.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取我的小班信息失败! 用户不存在或主授权令牌无效'
             logger.error(f'{msg}\n{response.text}')
@@ -750,7 +867,7 @@ class BCZ:
         
         url = f'{self.group_detail_url}?shareKey={share_key}'
         headers = getHeaders(self.config.main_token)
-        main_response = requests.get(url, headers=headers, timeout=10)
+        main_response = self.http2_client_obj.get(url, headers=headers, timeout=10)
         if main_response.status_code != 200 or main_response.json().get('code') != 1:
             msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
             logger.warning(f'{msg}\n{main_response.text}')
@@ -763,7 +880,7 @@ class BCZ:
         auth_data = {}
         if auth_token:
             headers = getHeaders(auth_token)
-            auth_response = requests.get(url, headers=headers, timeout=10)
+            auth_response = self.http2_client_obj.get(url, headers=headers, timeout=10)
             if auth_response.status_code != 200 or main_response.json().get('code') != 1:
                 msg = f'使用内部授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或内部授权令牌无效'
                 logger.warning(f'{msg}\n{main_response.text}')
@@ -785,7 +902,7 @@ class BCZ:
                 })
             main_headers = getHeaders(self.config.main_token)
             main_future = asyncio.gather(*[
-                self.asyncFetch(f'{self.group_detail_url}?shareKey={i["share_key"]}', headers=main_headers)
+                self.http2_client_obj.asyncFetch(f'{self.group_detail_url}?shareKey={i["share_key"]}', headers=main_headers)
                 for i in group_fetch_list
             ])
             # auth_response_list = []
@@ -793,12 +910,12 @@ class BCZ:
             if with_nickname:
                 # 利用班内排行榜即可获取小班昵称，因此注释该段
                 # auth_future = asyncio.gather(*[
-                #     self.asyncFetch(i['url'], headers=getHeaders(i['auth_token']))
+                #     self.http2_client_obj.asyncFetch(i['url'], headers=getHeaders(i['auth_token']))
                 #     for i in group_fetch_list if i['auth_token']
                 # ] )
                 # auth_response_list: list[httpx.Response] = await auth_future
                 rank_future = asyncio.gather(*[
-                    self.asyncFetch(f'{self.get_week_rank_url}?shareKey={i["share_key"]}', headers=main_headers)
+                    self.http2_client_obj.asyncFetch(f'{self.get_week_rank_url}?shareKey={i["share_key"]}', headers=main_headers)
                     for i in group_fetch_list
                 ] )
                 rank_response_list: list[httpx.Response] = await rank_future
@@ -835,7 +952,7 @@ class BCZ:
                 ))
 
             return groups_result
-        return asyncio.run(asyncGroupsInfo(groups))
+        return self.http2_client_obj.rua(asyncGroupsInfo(groups))
 
     def parseGroupInfo(self, main_data: dict, auth_data: dict = {}, rank_data: dict = {}) -> dict:
         '''请调用 getGroupInfo 或 getGroupsInfo，此函数仅内部调用，仅用于信息解析'''
@@ -948,12 +1065,12 @@ class BCZ:
 
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
         headers = getHeaders(self.config.main_token)
-        week_response = requests.get(f'{url}&week=1', headers=headers, timeout=10)
+        week_response = self.http2_client_obj.get(f'{url}&week=1', headers=headers, timeout=10)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班成员历史打卡信息失败! 小班不存在或主授权令牌无效'
             logger.warning(f'{msg}\n{week_response.text}')
             return {}
-        last_week_response = requests.get(f'{url}&week=2', headers=headers, timeout=10)
+        last_week_response = self.http2_client_obj.get(f'{url}&week=2', headers=headers, timeout=10)
         week_data = week_response.json().get('data')
         last_week_data = last_week_response.json().get('data')
         daka_dict = {}
