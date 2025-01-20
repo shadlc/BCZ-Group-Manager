@@ -670,7 +670,7 @@ class Filter:
         
         check_count = 0 # 检查次数，标志成员更新状态
         
-        while self.activate_groups[share_key]['stop'] == False:
+        while self.activate_groups.get(share_key, {}).get('stop', True) == False:
             try:
                 # 每次循环都重新加载白名单
                 white_list = self.sqlite.queryWhitelist(group_id)

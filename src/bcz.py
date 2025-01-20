@@ -280,7 +280,7 @@ class BCZ:
         '''退出小班'''
         headers = getHeaders(access_token)
         headers['Content-Type'] = 'application/json; charset=UTF-8'
-        response_json = self.http2_client_obj.post(f'https://group.baicizhan.com/group/quit?shareKey={share_key}', data='{}', headers=headers).json()
+        response_json = self.http2_client_obj.post(f'https://group.baicizhan.com/group/quit?shareKey={share_key}', json='{}', headers=headers).json()
         if response_json.get("code",0) != 1:
             logger.info(f"退出小班失败，请检查{response_json}")
             return False
@@ -699,7 +699,7 @@ class BCZ:
         headers["Origin"] = "https://activity.baicizhan.com"
         headers["Referer"] = "https://activity.baicizhan.com"
         
-        response = self.http2_client_obj.options(url, headers = headers, timeout=10)# 先发一个OPTIONS测跨域POST
+        # response = self.http2_client_obj.options(url, headers = headers, timeout=10)# 先发一个OPTIONS测跨域POST
         json =  {
             "memberIds": user_id,
             "shareKey": share_key,
