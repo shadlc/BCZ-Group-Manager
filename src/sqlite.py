@@ -405,7 +405,7 @@ class SQLite:
                 member['completed_time'] = recorded_time[0]
                 # 可能加入新的小班后，会产生更晚的时间，以早的为准
             cursor.execute(
-            f'INSERT INTO MEMBERS (USER_ID, TODAY_DATE, GROUP_ID, NICKNAME, GROUP_NICKNAME, COMPLETED_TIME, WORD_COUNT, STUDY_CHEAT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_NAME, AVATAR, DATA_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(USER_ID, TODAY_DATE, GROUP_ID) DO UPDATE SET '
+            f'INSERT OR REPLACE INTO MEMBERS (USER_ID, TODAY_DATE, GROUP_ID, NICKNAME, GROUP_NICKNAME, COMPLETED_TIME, WORD_COUNT, STUDY_CHEAT, COMPLETED_TIMES, DURATION_DAYS, BOOK_NAME, GROUP_NAME, AVATAR, DATA_TIME) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(USER_ID, TODAY_DATE, GROUP_ID) DO UPDATE SET '
             ' NICKNAME = excluded.NICKNAME, '
             'GROUP_NICKNAME = excluded.GROUP_NICKNAME, '
             'COMPLETED_TIME = excluded.COMPLETED_TIME, '
@@ -744,7 +744,7 @@ class SQLite:
             if last_date is not None and last_date[0] >= today_date_0 and len(filter_log['accept_list']) + len(filter_log['remove_list']) + len(filter_log['quit_list']) == 0:
                 continue # 今天已经记录过了
             cursor.execute(
-                f'INSERT INTO FILTER_LOG (GROUP_ID, STRATEGY_NAME, DATETIME, MEMBER_COUNT, NEWBIES_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?,?,?)',
+                f'INSERT OR REPLACE INTO FILTER_LOG (GROUP_ID, STRATEGY_NAME, DATETIME, MEMBER_COUNT, NEWBIES_COUNT, ACCEPTED_COUNT, ACCEPT_LIST, REMOVE_LIST, QUIT_LIST ) VALUES (?,?,?,?,?,?,?,?,?)',
                 (
                     filter_log['group_id'],
                     filter_log['strategy_name'],
@@ -838,7 +838,7 @@ class SQLite:
                 for key, value in reason_dict.items():
                     reason += f'{key}:{value}\n'
                 cursor.execute(
-                    f'INSERT INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE, OPERATION, REASON) VALUES (?,?,?,?,?,?) ON CONFLICT (UNIQUE_ID, STRATEGY_ID, DATE) DO UPDATE SET '
+                    f'INSERT OR REPLACE INTO STRATEGY_VERDICT (UNIQUE_ID, STRATEGY_ID, SUB_STRATEGY_ID, DATE, OPERATION, REASON) VALUES (?,?,?,?,?,?) ON CONFLICT (UNIQUE_ID, STRATEGY_ID, DATE) DO UPDATE SET '
                     'SUB_STRATEGY_ID = excluded.SUB_STRATEGY_ID, '
                     'OPERATION = excluded.OPERATION, '
                     'REASON = excluded.REASON',
@@ -1075,7 +1075,7 @@ class SQLite:
         for personal_info in personal_info_list:
             unique_id = personal_info['unique_id']
             cursor.execute(
-                f'INSERT INTO PERSONAL_INFO (UNIQUE_ID, DATETIME, DESKMATE_DAYS, DEPENDABLE_FRAME) VALUES (?,?,?,?) ON CONFLICT(UNIQUE_ID, DATETIME) DO UPDATE SET'
+                f'INSERT OR REPLACE INTO PERSONAL_INFO (UNIQUE_ID, DATETIME, DESKMATE_DAYS, DEPENDABLE_FRAME) VALUES (?,?,?,?) ON CONFLICT(UNIQUE_ID, DATETIME) DO UPDATE SET'
                 ' DESKMATE_DAYS = excluded.DESKMATE_DAYS, DEPENDABLE_FRAME = excluded.DEPENDABLE_FRAME',
                 (unique_id, datetime.now().strftime('%Y-%m-%d'), personal_info['deskmate_days'], personal_info['dependable_frame'])
             )
