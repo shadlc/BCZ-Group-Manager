@@ -25,7 +25,10 @@ class Config:
             'pass_key': random.randint(1000, 9999), # 用于筛选时班长远程发卡
             # 用法：记下pass_key，将需要加入白名单的用户unique_id乘上(pass_key*10000+日期MMDD)，让该用户将结果的前4位加入班内昵称即可不踢出。
             'real_time_cache_favorite': False,
-            'groups_strategy_id':{}
+            'groups_strategy_id':{},
+            'qq_contact': [],
+            'wechat_contact': [],
+            'other_contact': [],
         }
         self.initConfig()
         self.raw = self.read()
@@ -39,6 +42,10 @@ class Config:
         self.cache_second = self.raw.get('cache_second', '')
         self.pass_key = self.raw.get('pass_key', '')
         self.real_time_cache_favorite = self.raw.get('real_time_cache_favorite', '')
+        self.groups_strategy_id = self.raw.get('groups_strategy_id', {})
+        self.qq_contact = self.raw.get('qq_contact', [])
+        self.wechat_contact = self.raw.get('wechat_contact', [])
+        self.other_contact = self.raw.get('other_contact', [])
         self.verify()
 
     def initConfig(self):
@@ -123,6 +130,31 @@ class Config:
             value = self.default_config_dict[key]
             self.save(key, value)
             self.real_time_cache_favorite = value
+        if self.pass_key == '':
+            key = 'pass_key'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.pass_key = value
+        if self.groups_strategy_id == {}:
+            key = 'groups_strategy_id'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.groups_strategy_id = value
+        if self.qq_contact == []:
+            key = 'qq_contact'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.qq_contact = value
+        if self.wechat_contact == []:
+            key = 'wechat_contact'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.wechat_contact = value
+        if self.other_contact == []:
+            key = 'other_contact'
+            value = self.default_config_dict[key]
+            self.save(key, value)
+            self.other_contact = value
 
     def getInfo(self) -> dict:
         '''获取配置文件相关状态信息'''
@@ -157,6 +189,18 @@ class Config:
                 self.real_time_cache_favorite = configure[key]
                 self.raw[key] = configure[key]
                 self.save(key, self.real_time_cache_favorite)
+            elif key == 'qq_contact':
+                self.qq_contact = configure[key]
+                self.raw[key] = configure[key]
+                self.save(key, self.qq_contact)
+            elif key == 'wechat_contact':
+                self.wechat_contact = configure[key]
+                self.raw[key] = configure[key]
+                self.save(key, self.wechat_contact)
+            elif key == 'other_contact':
+                self.other_contact = configure[key]
+                self.raw[key] = configure[key]
+                self.save(key, self.other_contact)
 
 
 

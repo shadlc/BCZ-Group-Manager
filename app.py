@@ -554,10 +554,10 @@ def delete_whitelist(request: Request, item: dict):
 # 以下几个是手动调试接口
 
 @app.get('/reload')
-def reload():
+async def reload():
     '''重新http2_client(例如启动或关闭fiddler后更新代理)'''
     try:
-        http2_client_obj.reload_http2_client()
+        await http2_client_obj.reload_http2_client()
         return restful(200, '重载成功!')
     except Exception as e:
         return restful(500, f'重载失败：{e}')

@@ -35,6 +35,7 @@ class Filter:
         self.sqlite = sqlite
 
         self.lock = threading.Lock()
+        self.daka_check_lock = threading.Lock()
         self.clients_message_lock = threading.Lock()
 
         self.activate_groups = {}
@@ -111,6 +112,8 @@ class Filter:
             
             self.activate_groups.pop(shareKey)
             self.log(f'筛选线程已停止，shareKey = {shareKey}', '全局')
+        except KeyError: # 已经停止
+            pass
         except Exception as e:
             self.log(f'停止筛选线程失败，shareKey = {shareKey}, error = {e}', '全局')
         finally:
@@ -203,7 +206,21 @@ class Filter:
                 refer_dict[name] = f"✓ {member_value} <= {value}; "
             return True
         
-
+    def get_member_week_daka_cnt(self, last_week_info, this_week_info, duration_days, completed_time):
+        '''计算成员上周和本周打卡天数'''
+        weekday_count = int(time.strftime("%w"))
+        if weekday_count == 0 : # 星期日
+            weekday_count = 7
+        last_week_total_days = min(7, max(0, duration_days - weekday_count))
+        this_week_total_days = min(weekday_count, duration_days) - 1 # 计算本周在班总天数，不含今天
+        # two_week_total_days = min(7 + weekday_count, duration_days)
+        
+        this_week_daka_days = len(this_week_info)
+        if completed_time != '':
+            this_week_daka_days -= 1 # 去掉今天
+        last_week_daka_days = len(last_week_info)
+        return last_week_total_days - last_week_daka_days, this_week_total_days - this_week_daka_days
+    
     def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, group_name:str, late_daka_time:str, conn: sqlite3.Connection) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
@@ -259,24 +276,9 @@ class Filter:
         # 【2】本班1个月内历史信息（满卡计算2周，早卡计算1个月）
         # 先获取今日星期，然后计算从该成员上周一到今天打卡天数和漏卡天数，注意上周一之后才入班的情况单独处理
         # week_info示例:['05-24','05-25','05-27']
-        
-        weekday_count = int(time.strftime("%w"))
-        if weekday_count == 0 : # 星期日
-            weekday_count = 7
-        last_week_total_days = min(7, max(0, member_dict['duration_days'] - weekday_count))
-        this_week_total_days = min(weekday_count, member_dict['duration_days']) - 1 # 计算本周在班总天数，不含今天
-        two_week_total_days = min(7 + weekday_count, member_dict['duration_days'])
-        
-        today_str = time.strftime("%Y-%m-%d")
-        this_week_daka_days = len(this_week_info)
-        if today_str in this_week_info:
-            this_week_daka_days -= 1
-        last_week_daka_days = len(last_week_info)
-        
-        member_dict['drop_last_week'] = last_week_total_days - last_week_daka_days # 计算两周内漏卡天数
-        member_dict['drop_this_week'] = this_week_total_days - this_week_daka_days
-
+        member_dict['drop_last_week'], member_dict['drop_this_week'] = self.get_member_week_daka_cnt(last_week_info, this_week_info, member_dict['duration_days'], member_dict['completed_time'])
         member_dict['wanka_index'] = 0
+
         daka_time_dict = self.sqlite.getCompletedTime(uniqueId, 7, conn)
         if len(daka_time_dict) > 0:
             def hh_mm_ss_to_seconds(hh_mm_ss):
@@ -294,7 +296,7 @@ class Filter:
                 if daka_time is not None and len(daka_time.split(':')) == 3:
                     daka_seconds.append(hh_mm_ss_to_seconds(daka_time))
                 else:
-                    daka_seconds.append(86400) # 未打卡，默认24:00:00
+                    daka_seconds.append(86400) #  未打卡，默认24:00:00
             for seconds in daka_seconds:
                 average_daka_time += seconds
             average_daka_time = average_daka_time / len(daka_time_dict)
@@ -541,39 +543,165 @@ class Filter:
         finally:
             with self.clients_message_lock:
                 self.clients_message.pop(client_id, None)
+    
+    def check_daka(self, member_dict: dict, group_name: str):
+        '''检查打卡情况，打印出 未打卡的成员'''
+        qq_contact = self.config.qq_contact
+        wechat_contact = self.config.wechat_contact
+        other_contact = self.config.other_contact
+        members = member_dict['members']
+        result_str = '快打卡哦！'
+        for member in members:
+            if member['completed_time'] == '':
+                unique_id = member['id']
+                completed_times = member['completed_times']
+                duration_days = member['duration_days']
+                cnt_str = ''
+                if unique_id in qq_contact:
+                    cnt_str += '【QQ】'
+                if unique_id in wechat_contact:
+                    cnt_str += '【微信】'
+                if unique_id in other_contact:
+                    cnt_str += '【其他】'
+                if cnt_str == '':
+                    cnt_str = '【无联系方式】'
+                    name = member['group_nickname'] if member['group_nickname'] != '' else member['nickname']
+                    result_str += f"@{name}`{unique_id} "
+                cnt_str += f"({unique_id})({completed_times}/{duration_days}) {member['nickname']}:{member['group_nickname']} 未打卡"
+                self.log(cnt_str, group_name)
+                self.log_dispatch(group_name, True)
+        print(result_str)
+    
+    def check_buka(self, member_dict: dict, week_daka_info: dict, group_name: str):
+        '''打印出漏卡的成员'''
+        qq_contact = self.config.qq_contact
+        wechat_contact = self.config.wechat_contact
+        other_contact = self.config.other_contact
+        members = member_dict['members']
+        weekday_count = int(time.strftime("%w"))
+        result_str = '漏卡的成员：'
+        for member in members:
+            unique_id = member['id']
+            completed_times = member['completed_times']
+            duration_days = member['duration_days']
+            completed_time = member['completed_time']
+            drop_last_week, drop_this_week = self.get_member_week_daka_cnt(week_daka_info['last_week'].get(unique_id, None), week_daka_info['this_week'].get(unique_id, None), duration_days, completed_time)
+            if drop_this_week == 0 and drop_last_week == 0:
+                continue
+            cnt_str = ''
+            if unique_id in qq_contact:
+                cnt_str += '【QQ】'
+            if unique_id in wechat_contact:
+                cnt_str += '【微信】'
+            if unique_id in other_contact:
+                cnt_str += '【其他】'
+            if cnt_str == '':
+                cnt_str = '【无联系方式】'
+                name = member['group_nickname'] if member['group_nickname'] != '' else member['nickname']
+                result_str += f"@{name}`{unique_id} "
+            cnt_str += f"{'▲' * drop_this_week + '△' * drop_last_week}({unique_id})({completed_times}/{duration_days}) {member['nickname']}:{member['group_nickname']} 漏卡提醒"
+            self.log(cnt_str, group_name)
+            self.log_dispatch(group_name, True)
+        print(result_str)
 
     def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 999999, tidal_index: int = 999999) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
-        member_dict_temp = {}
-        while True:
-            try:
-                member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
-            except:
-                print("请检查网络连接")
-            finally:
-                if member_dict_temp is not None:
-                    break
-                time.sleep(10)
-        group_id = member_dict_temp['id']
-        # 因为保存策略index要用到group_id，所以先获取
+        def stop_filter(group_name, group_id, share_key):
+            if self.bcz.quitPosterQueue(group_id):
+                self.log(f"🌟 停止发海报", group_name)
+                self.log_dispatch(group_name, True)
+            self.bcz.quitTidalToken(group_id)
+            threading.Thread(target=self.stop, args=(share_key,)).start()
+            return
         
-        # 获取小组信息
+        # 检查是否是空操作（可用于定时中止当前筛选）
+        group_name = self.sqlite.queryGroupName(group_id)
+        if len(strategy_index_list) == 0:
+            self.log(f"\033[33m空操作，退出\033[0m", group_name)
+            self.log_dispatch(group_name, True)
+            stop_filter(group_name, group_id, share_key)
+            return
+        
+        # 准备小组信息
+        member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
         leader_id = member_dict_temp['leader_id']
+        self.log(f'准备中...小组id = {group_id};班长id = {leader_id}', group_name)
+        self.log_dispatch(group_name, True)
         only_public_key_join = member_dict_temp['only_public_key_join']
 
         group_count_limit = member_dict_temp['count_limit']        
         self.logger_field['group_count_limit'] = group_count_limit
-        group_name = member_dict_temp['name'] # log要有group_name
-        tidal_limit = group_count_limit - 6 # 潮汐保持人数限制
+        tidal_limit = group_count_limit - 6
+        # 潮汐保持人数限制，推荐冲榜类策略保持人数 小于 这个值，筛选类策略 大于 这个值
+        self.log_dispatch(group_name, True)
         tidal_quit_limit = tidal_limit + 2 # 潮汐退出人数限制
-        if only_public_key_join == True:
-            self.log(f"本组仅允许邀请码加入，正在更改设置", group_name)
-            self.log_dispatch(group_name, True)
-            self.bcz.setGroupOnlyInviteCodeJoin(share_key, authorized_token)
-        self.log(f'本组潮汐水平{tidal_limit}，推荐冲榜类策略保持人数 小于 这个值，筛选类策略 大于 这个值', group_name)
+
         group_rank = member_dict_temp['rank']
         self.activate_groups[share_key]['name'] = group_name
-        fail_cnt = 0
+
+        # 特殊操作1：催卡
+        self.daka_check_lock.acquire() # 为保证记录完整性，每个小组要一块检查
+        try:
+            strategy_index_list.pop(strategy_index_list.index('check_daka'))
+            self.log(f"查打卡情况...", group_name)
+            self.log_dispatch(group_name, True)
+            self.check_daka(member_dict_temp, group_name)
+            if len(strategy_index_list) == 0:
+                self.daka_check_lock.release()
+                stop_filter(group_name, group_id, share_key)
+                return
+        except ValueError:
+            pass
+            
+        # 准备打卡历史信息
+        local_sync_dict = []
+        quantity = 0
+        self.log(f'检测打卡数据完整性...', group_name)
+        self.log_dispatch(group_name, True)
+        daka_dict = self.bcz.getGroupDakaHistory(share_key, parsed=False, buffered_time=0)
+        # 查询最近一个月，本班是否有未记录的打卡数据
+        sdate = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
+        member_list = self.sqlite.queryMemberTable(
+            {
+                'group_id': group_id,
+                'sdate': sdate,
+            },
+            header = False,
+        )['data']
+        absence_dict = {line[0]:line[4] for line in member_list if line[3] == ''}
+        date_dict = list(set(line[4] for line in member_list))
+        today = datetime.datetime.now()
+        today_str = today.strftime('%Y-%m-%d')
+        for i in range(1, 30):
+            day_str = (today - datetime.timedelta(days=i)).strftime('%Y-%m-%d')
+            if day_str not in date_dict:
+                local_sync_dict.append(day_str)
+                quantity += 1
+        if absence_dict:
+            for id, daka_date in absence_dict.items():
+                if id in daka_dict and daka_date in daka_dict[id]:
+                    if daka_date not in local_sync_dict and daka_date < today_str:
+                        local_sync_dict.append(daka_date)
+                    quantity += 1
+            self.log(f'检测到{quantity}条丢失记录，日期{local_sync_dict}', group_name)
+            self.log_dispatch(group_name, True)
+            if len(local_sync_dict) > 0:
+                with self.lock:
+                    db_sync(self.sqlite.db_path, group_name, local_sync_dict)
+        
+        # 特殊操作2：催补卡
+        try:
+            strategy_index_list.pop(strategy_index_list.index('check_buka'))
+            self.log(f"正在检查本周漏卡情况...", group_name)
+            self.log_dispatch(group_name, True)
+            self.check_buka(member_dict_temp, self.bcz.getGroupDakaHistory(share_key, parsed=True, buffered_time=5201), group_name)
+            if len(strategy_index_list) == 0:
+                self.daka_check_lock.release()
+                stop_filter(group_name, group_id, share_key)
+                return
+        except ValueError:
+            pass
+        self.daka_check_lock.release()
         
         # 等待直到启动时间
         if scheduled_hour is not None and scheduled_minute is not None:
@@ -595,24 +723,41 @@ class Filter:
                 self.log_dispatch(group_name, True)
 
 
-        # 筛选策略-链
-        if len(strategy_index_list) == 0:
+        # 检查邀请码设置
+        if only_public_key_join == True:
+            self.log(f"本组仅允许邀请码加入，正在更改设置", group_name)
             self.log_dispatch(group_name, True)
-            self.log(f"\033[33m空操作，退出\033[0m", group_name) # 有可能是空操作用于终止上一个操作
+            self.bcz.setGroupOnlyInviteCodeJoin(share_key, authorized_token)
+
+        # 启动潮汐令牌跟踪线程（负责记录班内的潮汐令牌，但不会改变潮汐状态）
+        self.bcz.setTidalTokenTracker(group_id)
+        # 特殊操作3：填满
+        try:
+            strategy_index_list.pop(strategy_index_list.index('fill_up'))
+            self.log(f"正在填满班级...", group_name)
             self.log_dispatch(group_name, True)
-            if self.bcz.quitPosterQueue(group_id):
-                self.log(f"🌟 停止发海报", group_name)
+            # 每10-20s获取一次班级人数，直到满员停止
+            while True:
+                member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+                vacancy = group_count_limit - len(member_dict_temp['members'])
+                if vacancy <= 0:
+                    self.log(f"执行完毕，班级已满员", group_name)
+                    self.log_dispatch(group_name, True)
+                    break
+                # 借用冲榜排名更新期间填满的方法
+                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, vacancy, self.tidal_token, preserve_rank=True)
+                self.log(f"班级人数：{len(member_dict_temp['members'])}/{group_count_limit}", group_name)
                 self.log_dispatch(group_name, True)
-            self.bcz.quitTidalToken(group_id)
-            threading.Thread(target=self.stop, args=(share_key,)).start()
-            return
+                time.sleep(random.randint(100, 200) / 10)
+            if len(strategy_index_list) == 0:
+                stop_filter(group_name, group_id, share_key)
+                return
+        except ValueError:
+            pass
+
+        # 加载普通策略
         strategy_index = strategy_index_list[0]
         strategy_index_list.pop(0)
-
-        # 远程发卡机
-        pass_key = self.config.pass_key
-        # 用法：记下pass_key，将需要加入白名单的用户unique_id乘上(pass_key*10000+日期MMDD)，让该用户将结果的前4位加入班内昵称即可不踢出。
-
         strategy_dict = self.strategy_class.get(strategy_index)
         strategy_name = strategy_dict['name']
         self.logger_field[group_name] = {}
@@ -629,30 +774,27 @@ class Filter:
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
 
-        delay = 5
-        delay_delta = 3
-        
-
-        kick_list = []
-        member_dict_temp = {} # 中途变量 
-        
-        
-        member_list = [] # 当前成员列表
-        member_check_count = {} # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
-        
-
-        
-
-        self.log(f'准备中...小组id = {group_id};班长id = {leader_id}, tidal_index = {tidal_index}', group_name)
-        self.log_dispatch(group_name, True)
-
-        
-
+        # 启动自动保存线程
         with self.lock:
             if self.autosave_is_running == False:
                 self.autosave_is_running = True
                 threading.Thread(target=self.autosave).start()
         
+        # 启动海报发送线程
+        self.bcz.setPosterTracker(poster)
+
+        # 加载远程发卡机
+        pass_key = self.config.pass_key # 远程发卡机用法：记下pass_key，将需要加入白名单的用户unique_id乘上(pass_key*10000+日期MMDD)，让该用户将结果的前4位加入班内昵称即可不踢出。
+        pass_key_today = int(pass_key)+int(time.strftime("%m%d"))*10000
+        self.log(f"pass_key:{pass_key_today} 使用方法：昵称后加(uniqueId*pass_key)的前四位", group_name)
+        self.log_dispatch(group_name, True)
+
+        delay = 5
+        delay_delta = 3
+        fail_cnt = 0
+        kick_list = []
+        member_list = [] # 当前成员列表
+        member_check_count = {} # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
         newbies_count = 0
         removed_count = 0
         old_members_count = 0
@@ -661,14 +803,10 @@ class Filter:
         total_quit_count = 0 # 已经接受但退出的成员数
         total_removed_count = 0
         total_accepted_count = 1 # 包括班长
-        time.sleep(random.randint(0, 6))
-        
-        pass_key_today = int(pass_key)+int(time.strftime("%m%d"))*10000
-        self.log(f"pass_key:{pass_key_today} 使用方法：昵称后加(uniqueId*pass_key)的前四位", group_name)
-        self.log_dispatch(group_name, True)
-        
-        
         check_count = 0 # 检查次数，标志成员更新状态
+        
+        # 随机启动延迟，防止多个小班同时启动卡顿
+        time.sleep(random.randint(0, 60) / 10)
         
         while self.activate_groups.get(share_key, {}).get('stop', True) == False:
             try:
@@ -1155,13 +1293,8 @@ class Filter:
                 pass
         
         if self.activate_groups[share_key]['stop']:
-            self.log(f"❄️ \033[1;33m{strategy_name}筛选已中止\033[0m", group_name)
-            if self.bcz.quitPosterQueue(group_id):
-                self.log(f"🌟 停止发海报", group_name)
-                self.log_dispatch(group_name, True)
-            self.bcz.quitTidalToken(group_id)
-            threading.Thread(target=self.stop, args=(share_key,)).start()
-            self.log('(99998s)', group_name)
+            stop_filter(group_name, group_id, share_key)
+            self.log(f"❄️ \033[1;33m{strategy_name}筛选已中止\033[0m (99998s)", group_name)
             self.log_dispatch(group_name, True)
         else:
             self.log(f'❄️ \033[1;36m{strategy_name}筛选结束！\033[0m', group_name)
@@ -1174,9 +1307,8 @@ class Filter:
                 self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
                 self.activate_groups[share_key]['tids'].start()
             else:
+                stop_filter(group_name, group_id, share_key)
                 self.log('❄️ \033[1;32m 所有筛选结束！\033[0m', group_name)
-                self.bcz.quitTidalToken(group_id)
-                threading.Thread(target=self.stop, args=(share_key,)).start()
             self.log('(99998s)', group_name)
             self.log_dispatch(group_name, True)
 
@@ -1185,46 +1317,8 @@ class Filter:
     def start(self, authorized_token: str, strategy_index_list: list[str], share_key: str = "", group_id: str = "", scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 12, tidal_index: int = 10) -> None:
         # 时间含义：24h，到当天的scheduled_hour:scheduled_minute时，开始筛选
         self.stop(share_key) # 防止重复运行
-        self.bcz.setPosterTracker(poster)
-        self.bcz.setTidalTokenTracker(group_id)
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
-
-        local_sync_dict = []
-        quantity = 0
-        group_name = self.sqlite.queryGroupName(group_id)
-        logger.info(f'正在获取小班[{group_name}({group_id})]的历史打卡数据')
-        daka_dict = self.bcz.getGroupDakaHistory(share_key)
-        # 查询最近一个月，本班是否有未记录的打卡数据
-        sdate = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
-        member_list = self.sqlite.queryMemberTable(
-            {
-                'group_id': group_id,
-                'sdate': sdate,
-            },
-            header = False,
-        )['data']
-        absence_dict = {line[0]:line[4] for line in member_list if line[3] == ''}
-        date_dict = list(set(line[4] for line in member_list))
-        today = datetime.datetime.now()
-        today_str = today.strftime('%Y-%m-%d')
-        for i in range(1, 30):
-            day_str = (today - datetime.timedelta(days=i)).strftime('%Y-%m-%d')
-            if day_str not in date_dict:
-                local_sync_dict.append(day_str)
-                quantity += 1
-        if absence_dict:
-            for id, daka_date in absence_dict.items():
-                if id in daka_dict and daka_date in daka_dict[id]:
-                    if daka_date not in local_sync_dict and daka_date < today_str:
-                        local_sync_dict.append(daka_date)
-                    quantity += 1
-            logger.info(f'检测到{quantity}条丢失记录，日期{local_sync_dict}')
-            if len(local_sync_dict) > 0:
-                with self.lock:
-                    db_sync(self.sqlite.db_path, group_name, local_sync_dict)
-
-
         self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
         self.activate_groups[share_key]['tids'].start()
 
@@ -1240,7 +1334,7 @@ class Monitor:
         #   "poster_session": 12, # 至少12个间隔者才能再次分享
         #   "strategies": [
         #     {
-        #         "enable": False,# 启用开关
+        #         "enable": false,# 启用开关(请勿使用字符串)
         #         "crontab": "* 5-7 * * 0", # 每周一早上5:00-7:00，一个时段只执行一次
         #         "strategy_list":[
         #             "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef",# 示例策略
@@ -1248,7 +1342,7 @@ class Monitor:
         #         ]
         #     },
         #     {
-        #         "enable": False,
+        #         "enable": false,
         #         "crontab": "* 9 * * 0", # 每周一早上9:00-10:00
         #         "strategy_list":[
         #             "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef"# 示例策略

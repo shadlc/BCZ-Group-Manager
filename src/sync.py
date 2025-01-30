@@ -27,6 +27,7 @@ except FileNotFoundError:
 def db_sync(db_path, group_name, date_list: list):
     if not local_enabled:
         logger.info("Local mode is not enabled. Syncing will not be performed.")
+        raise Exception("数据不完整，拒绝筛选")
         return
     logger.info(f"Syncing data...")
     logger.info(f"Group name: {group_name}")

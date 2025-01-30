@@ -429,7 +429,7 @@ class BCZ:
                     vacancy_log[name] = f'{vacancy}'
                     if preserve_rank:
                         vacancy_log[name] += '+'
-                    if group['tidal_index'] < min_tidal_index and (vacancy > 6 or (preserve_rank and vacancy > 0)): # 保持人数在max-6
+                    if group['tidal_index'] < min_tidal_index and (vacancy > 6 or (preserve_rank and vacancy > 0)): # 保持人数在某水平，暂定硬编码194（or冲榜排名更新期间塞满）
                         min_tidal_index = group['tidal_index']
                         current_share_key = group['share_key']
                         current_group_name = name
@@ -895,18 +895,6 @@ class BCZ:
                 group['leader'] = nickname
                 group['leader_id'] = member_id
 
-        # 利用班内排行榜即可获取小班昵称，因此注释该段
-        # if auth_data:
-        #     auth_member_list = auth_data.get('members') if auth_data else []
-        #     for member in auth_member_list:
-        #         member_id = member['uniqueId']
-        #         nickname = re.sub(self.invalid_pattern, '', member['nickname'])
-        #         for member_info in members:
-        #             if member_id == member_info['id'] and member_info['nickname'] != nickname:
-        #                 member_info['group_nickname'] = member['nickname']
-        # elif auth_data == '':
-        #     group['token_invalid'] = True
-
         if rank_data:
             rank_member_list = rank_data.get('list') if rank_data else []
             for member in rank_member_list:
@@ -916,7 +904,17 @@ class BCZ:
                     if member_id == member_info['id'] and member_info['nickname'] != nickname:
                         member_info['group_nickname'] = nickname
         else:
-            group['token_invalid'] = True
+            # 利用班内排行榜即可获取小班昵称
+            if auth_data:
+                auth_member_list = auth_data.get('members') if auth_data else []
+                for member in auth_member_list:
+                    member_id = member['uniqueId']
+                    nickname = re.sub(self.invalid_pattern, '', member['nickname'])
+                    for member_info in members:
+                        if member_id == member_info['id'] and member_info['nickname'] != nickname:
+                            member_info['group_nickname'] = member['nickname']
+            else:
+                group['token_invalid'] = True
 
         if today_daka_count != 0:
             group['today_daka_count'] = today_daka_count
@@ -936,7 +934,7 @@ class BCZ:
             # 如果当前时间比self.data_time晚少于buffered_time秒，则直接返回缓存数据
             if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
                 logger.info(f'使用缓存数据')
-                return self.buffered_daka_history.get(share_key)
+                return buffer_data
 
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
         headers = getHeaders(self.config.main_token)
@@ -957,21 +955,31 @@ class BCZ:
         for member in last_week_data.get('list', []):
             id = member['uniqueId']
             last_week_daka_dict[id] = member['weekDakaDates']
+            
+        nickname_dict = {}
+        for member in week_data.get('list', []):
+            nickname_dict[member['uniqueId']] = member['nickname']
+        result = {'data_time': time.strftime('%Y-%m-%d %H:%M:%S', time.localtime()),
+                    'this_week': daka_dict,
+                        'last_week': last_week_daka_dict,
+                            'group_nickname': nickname_dict}
+        self.buffered_daka_history[share_key] = result
         # 分离返回
         if parsed:
-            nickname_dict = {}
-            for member in week_data.get('list', []):
-                nickname_dict[member['uniqueId']] = member['nickname']
-                data_time = time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())
-            self.buffered_daka_history[share_key] = {'data_time': data_time, 'this_week': daka_dict, 'last_week': last_week_daka_dict, 'group_nickname': nickname_dict}
-            return self.buffered_daka_history.get(share_key)
+            return result
         # 将daka_dict和last_week_daka_dict合并返回
-        for id, daka_dates in daka_dict.items():
-            if id in last_week_daka_dict:
-                last_week_daka_dict[id].extend(daka_dates)
+        merged_dict = {}
+        for id, daka_dates in last_week_daka_dict.items():
+            if id in merged_dict:
+                merged_dict[id].extend(daka_dates)
             else:
-                last_week_daka_dict[id] = daka_dates
-        return last_week_daka_dict
+                merged_dict[id] = daka_dates.copy()
+        for id, daka_dates in daka_dict.items():
+            if id in merged_dict:
+                merged_dict[id].extend(daka_dates)
+            else:
+                merged_dict[id] = daka_dates.copy()
+        return merged_dict
 
     def updateGroupInfo(self, groups: list[dict], with_nickname: bool = True, only_favorite: bool = False) -> list:
         '''【参数传入的班内主页】获取最新信息并刷新小班信息列表'''
