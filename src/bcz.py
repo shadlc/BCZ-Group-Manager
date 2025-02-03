@@ -138,7 +138,7 @@ class BCZ:
         user_info = response.json().get('data')
         return user_info
 
-    def getUserGroupInfo(self, user_id: str = None) -> dict | None:
+    def getUserGroupInfo(self, user_id: str = None) -> list | None:
         '''获取我的小班信息'''
         if not user_id:
             return
@@ -402,10 +402,10 @@ class BCZ:
         user_info = self.getUserInfo(user_id)
         if not user_info:
             return
-        user_group_dict = self.getUserGroupInfo(user_id)
+        user_group_list = self.getUserGroupInfo(user_id)
         group_dict = {}
-        for group_id, group in user_group_dict.items():
-            group_dict[group_id] = self.getGroupInfo(group['share_key'])
+        for group in user_group_list:
+            group_dict[group['group_id']] = self.getGroupInfo(group['share_key'])
         user_info['group_dict'] = group_dict
         return user_info
 
