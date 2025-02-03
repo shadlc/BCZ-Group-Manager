@@ -138,7 +138,7 @@ class BCZ:
         user_info = response.json().get('data')
         return user_info
 
-    def getUserGroupInfo(self, user_id: str = None) -> dict | None:
+    def getUserGroupInfo(self, user_id: str = None) -> list | None:
         '''获取我的小班信息'''
         if not user_id:
             return
@@ -402,10 +402,10 @@ class BCZ:
         user_info = self.getUserInfo(user_id)
         if not user_info:
             return
-        user_group_dict = self.getUserGroupInfo(user_id)
+        user_group_list = self.getUserGroupInfo(user_id)
         group_dict = {}
-        for group_id, group in user_group_dict.items():
-            group_dict[group_id] = self.getGroupInfo(group['share_key'])
+        for group in user_group_list:
+            group_dict[group['group_id']] = self.getGroupInfo(group['share_key'])
         user_info['group_dict'] = group_dict
         return user_info
 
@@ -584,9 +584,9 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
                 'absence': absence,
             })
 
-        # 删除星期天不在小班的成员贡献的打卡天数
+        # 删除不在小班的成员贡献的打卡天数
         for member in group['members']:
-            if member['data_time'] == '' and edate not in member['daka']:
+            if edate not in member['daka']:
                 for daka_date in member['daka']:
                     daka = member['daka'][daka_date]
                     if daka['time']:
@@ -607,14 +607,14 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
         )
     return groups
 
-def getWeekOption(date: str = '', range_day: list[int] = [-180, 0]) -> list:
+def getWeekOption(data_date: str = '', range_day: list[int] = [-180, 0]) -> list:
     '''获取指定时间指定范围内所有的周'''
     target_date = datetime.today()
-    if date:
-        try:    
-            target_date = datetime.strptime(date, '%Y-%m-%d')
+    if data_date:
+        try:
+            target_date = datetime.strptime(data_date, '%Y-%m-%d')
         except Exception as e:
-            logger.warning(f'转换时间[{date}]出错: {e}')
+            logger.warning(f'转换时间[{data_date}]出错: {e}')
 
     start_date = target_date + timedelta(days=range_day[0])
     end_date = target_date + timedelta(days=range_day[1])

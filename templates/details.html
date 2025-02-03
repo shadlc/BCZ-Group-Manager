@@ -131,8 +131,8 @@
     let href = window.location.href;
     let group_id = href.substring(href.lastIndexOf('/') + 1);
     let today = new Date();
-    let current_week = today.getWeek();
-    current_week = today.getFullYear() + "-W" + ("0" + current_week).slice(-2);
+    let current_week = today.getISOWeek();
+    current_week = today.getISOYear() + "-W" + ("0" + current_week).slice(-2);
     window.onload = ()=>{
       getGroupDetailsOption()
       .then(()=>{

@@ -236,7 +236,7 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     }), code
 
 if __name__ == '__main__':
-    logging.info('BCZ-Group-Manger 启动中...')
+    logging.info('BCZ-Group-Manager 启动中...')
     if config.daily_record:
         Schedule(config.daily_record, lambda: recordInfo(bcz, sqlite))
     if config.daily_verify:

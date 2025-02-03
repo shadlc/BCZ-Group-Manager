@@ -49,9 +49,10 @@ class Config:
     def read(self, key: str = '') -> list | dict | str | int | bool:
         '''获取指定配置'''
         try:
-            json_data = json.load(open(self.config_file, encoding='utf-8'))
             if key:
                 json_data = json.load(open(self.config_file, encoding='utf-8')).get(key)
+            else:
+                json_data = json.load(open(self.config_file, encoding='utf-8'))
             return json_data
         except Exception as e:
             logger.error(f'配置文件读取异常: {e}，程序会在5秒后自动退出')
