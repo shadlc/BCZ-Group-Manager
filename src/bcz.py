@@ -586,7 +586,7 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
 
         # 删除不在小班的成员贡献的打卡天数
         for member in group['members']:
-            if member['data_time'] == '' and edate not in member['daka']:
+            if edate not in member['daka']:
                 for daka_date in member['daka']:
                     daka = member['daka'][daka_date]
                     if daka['time']:
