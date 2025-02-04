@@ -560,6 +560,8 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
             absence = 0
             if is_this_week and member['completed_time']:
                 group['total_times'] += 1
+            if is_this_week and group['late_daka_time'] and member['completed_time'] > group['late_daka_time']:
+                late += 1
             for line in week_data['data']:
                 if line[0] == member['id']:
                     if line[4] in daka_time_dict or line[4] == member['today_date']:
@@ -586,13 +588,21 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
 
         # 删除不在小班的成员贡献的打卡天数
         for member in group['members']:
-            if edate not in member['daka']:
+            if is_this_week or (not is_this_week and edate not in member['daka']):
+                late = False
+                absence = False
                 for daka_date in member['daka']:
-                    daka = member['daka'][daka_date]
-                    if daka['time']:
+                    if (is_this_week and member['data_time'] == '') or (not is_this_week and edate not in member['daka']):
+                        daka = member['daka'][daka_date]
+                        if group['late_daka_time'] and daka['time'] > group['late_daka_time']:
+                            late = True
+                        if daka['time'] == '':
+                            absence = True
                         group['total_times'] -= 1
-                    if group['late_daka_time'] and daka['time'] > group['late_daka_time']:
-                        group['late_count'] -= 1
+                if late:
+                    group['late_count'] -= 1
+                if absence:
+                    group['absence_count'] -= 1
 
 
         # 对成员进行排序
