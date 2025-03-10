@@ -260,7 +260,7 @@ def recheck_strategy_verdict(request: Request, item: dict):
             personal_dict_temp,
                 rank_dict['this_week'].get(unique_id, None),
                     rank_dict['last_week'].get(unique_id, None),
-                        sub_strat_dict, '全局', late_daka_time, conn)
+                        sub_strat_dict, '全局', late_daka_time, conn, config.main_token)
         logger.debug(f'sub_strat_dict={sub_strat_dict} result={result}')
         log_condition = int(sub_strat_dict['logCondition'])
         sub_strat_name = sub_strat_dict['name']
@@ -341,8 +341,8 @@ def save_strategy(request: Request, item: dict):
     except Exception as e:
         return restful(500, f'保存策略时发生错误(X_X): {e}')
     
-@app.route('/save_all_strategies', methods=['GET', 'POST'])
-def save_all_strategy():
+@app.route('/save_all_strategies', methods=['GET'])
+def save_all_strategy(request: Request):
     '''保存所有策略'''
     strategy.save()
     return restful(200, '保存成功! ヾ(≧▽≦*)o')
@@ -489,17 +489,6 @@ def search_group(share_key:str=None, uid:str=None):
     except Exception as e:
         return restful(400, f'搜索小班时发生错误(X_X): {e}')
 
-@app.get('/search_user')
-def search_user(uid:str=None, detail:int=0):
-    try:
-        if not uid:
-            return restful(400, '请求参数错误Σ(っ °Д °;)っ')
-        user_info = bcz.getUserAllInfo(uid, detail = detail)
-        if user_info:
-            return restful(200, '', user_info)
-        return restful(404, '未搜索到符合条件的用户Σ(っ °ω°;)っ')
-    except Exception as e:
-        return restful(400, f'搜索用户时发生错误(X_X): {e}')
 
 @app.get('/configure')
 def get_configure():
@@ -532,7 +521,7 @@ def add_whitelist(request: Request, item: dict):
     if not id or not group_id:
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     try:
-        sqlite.addWhitelist(group_id, id, bcz.getUserInfo(id).get('name', ''))
+        sqlite.addWhitelist(group_id, id, bcz.getUserInfo(id, config.main_token).get('name', ''))
         return restful(200, '添加成功! ヾ(≧▽≦*)o')
     except Exception as e:
         return restful(400, f'添加白名单时发生错误(X_X): {e}')

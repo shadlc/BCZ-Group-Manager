@@ -217,6 +217,15 @@ class SQLite:
         conn.close()
         return result
     
+    def clearWhitelist(self, group_id: str) -> bool:
+        '''清空白名单'''
+        conn = self.connect(self.db_path)
+        cursor = conn.cursor()
+        result = cursor.execute(f'DELETE FROM WHITELIST WHERE GROUP_ID = ?', (group_id,)).rowcount
+        conn.commit()
+        conn.close()
+        return result
+    
     def deleteWhitelist(self, group_id: str, user_id: str) -> bool:
         '''删除白名单'''
         conn = self.connect(self.db_path)

@@ -26,6 +26,8 @@ import os
 
 class Filter:
     stop_vacancy_threshold = 1 # 停止条件，当筛选接受人数和最大人数之差 小于等于 此值时，停止筛选。剩下的余额需要人工筛选。
+    primary_book_name = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '小学英语', 'KET']
+    # 其他的书名暂时不考虑，能学其他的也会比较主动，就当放过了
     def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, config: Config) -> None:
         # filter类全局仅一个，每个班级一个线程（当成局域网代理设备），但是strategy因为要前端更新，所以只储存Strategy类地址
         self.strategy_class = strategy_class
@@ -221,7 +223,7 @@ class Filter:
         last_week_daka_days = len(last_week_info)
         return last_week_total_days - last_week_daka_days, this_week_total_days - this_week_daka_days
     
-    def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, group_name:str, late_daka_time:str, conn: sqlite3.Connection) -> dict:
+    def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, group_name:str, late_daka_time:str, conn: sqlite3.Connection, authorized_token: str) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
         # self.log (f'正在验证id = {member_dict["id"]} with {substrategy_dict["name"]} in {member_dict["group_name"]}')
@@ -244,7 +246,7 @@ class Filter:
         # 【1】班内主页基础信息
         member_dict['finishing_rate'] = member_dict['completed_times'] / member_dict['duration_days']
         member_dict['modified_nickname'] = 0 if member_dict['nickname'] == member_dict['group_nickname'] else 1
-        for name in ['completed_time_stamp', 'today_study_cheat', 'duration_days', 'completed_times', 'finishing_rate', 'modified_nickname', 'group_nickname_contain']:
+        for name in ['completed_time_stamp', 'today_study_cheat', 'duration_days', 'completed_times', 'finishing_rate', 'modified_nickname', 'group_nickname_contain', 'is_primary_student']:
             try:
                 pos = condition_name.index(name)
                 if name == 'group_nickname_contain':
@@ -256,6 +258,13 @@ class Filter:
                     condition_name.pop(pos)
                     conditions.pop(pos)
                     continue
+                if name == 'is_primary_student':
+                    for book_name in Filter.primary_book_name:
+                        if book_name in member_dict['book_name']:
+                            member_dict['is_primary_student'] = 1
+                            break
+                    else:
+                        member_dict['is_primary_student'] = 0
                 if not self.condition(member_dict, refer_dict, conditions[pos], group_name, log_condition):
                     accept = 0
                     break
@@ -658,7 +667,7 @@ class Filter:
         quantity = 0
         self.log(f'检测打卡数据完整性...', group_name)
         self.log_dispatch(group_name, True)
-        daka_dict = self.bcz.getGroupDakaHistory(share_key, parsed=False, buffered_time=0)
+        daka_dict = self.bcz.getGroupDakaHistory(share_key, parsed=False, buffered_time=0, token=authorized_token)
         # 查询最近一个月，本班是否有未记录的打卡数据
         sdate = (datetime.datetime.now() - datetime.timedelta(days=30)).strftime('%Y-%m-%d')
         member_list = self.sqlite.queryMemberTable(
@@ -694,7 +703,7 @@ class Filter:
             strategy_index_list.pop(strategy_index_list.index('check_buka'))
             self.log(f"正在检查本周漏卡情况...", group_name)
             self.log_dispatch(group_name, True)
-            self.check_buka(member_dict_temp, self.bcz.getGroupDakaHistory(share_key, parsed=True, buffered_time=5201), group_name)
+            self.check_buka(member_dict_temp, self.bcz.getGroupDakaHistory(share_key, parsed=True, buffered_time=5201, token=authorized_token), group_name)
             if len(strategy_index_list) == 0:
                 self.daka_check_lock.release()
                 stop_filter(group_name, group_id, share_key)
@@ -702,6 +711,19 @@ class Filter:
         except ValueError:
             pass
         self.daka_check_lock.release()
+
+        # 特殊操作3：清空白名单
+        try:
+            strategy_index_list.pop(strategy_index_list.index('clear_whitelist'))
+            self.log(f"正在清空白名单...", group_name)
+            self.log_dispatch(group_name, True)
+            self.log(f"清空了{self.sqlite.clearWhitelist(group_id)}条白名单", group_name)
+            self.log_dispatch(group_name, True)
+            if len(strategy_index_list) == 0:
+                stop_filter(group_name, group_id, share_key)
+                return
+        except ValueError:
+            pass
         
         # 等待直到启动时间
         if scheduled_hour is not None and scheduled_minute is not None:
@@ -738,7 +760,7 @@ class Filter:
             self.log_dispatch(group_name, True)
             # 每10-20s获取一次班级人数，直到满员停止
             while True:
-                member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token)
+                member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token, with_main_data=False)
                 vacancy = group_count_limit - len(member_dict_temp['members'])
                 if vacancy <= 0:
                     self.log(f"执行完毕，班级已满员", group_name)
@@ -748,7 +770,7 @@ class Filter:
                 self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, vacancy, self.tidal_token, preserve_rank=True)
                 self.log(f"班级人数：{len(member_dict_temp['members'])}/{group_count_limit}", group_name)
                 self.log_dispatch(group_name, True)
-                time.sleep(random.randint(100, 200) / 10)
+                time.sleep(random.randint(160, 320) / 10)
             if len(strategy_index_list) == 0:
                 stop_filter(group_name, group_id, share_key)
                 return
@@ -824,12 +846,12 @@ class Filter:
 
                 # 【开始筛选，获取信息】
                 # 点击成员管理页面
-                member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token) # 包含现有成员信息，结构：{基本信息,"members":{"uniqueId":...}}
+                member_dict_temp = self.bcz.getGroupInfo(share_key, authorized_token, with_main_data=False) # 包含现有成员信息，结构：{基本信息,"members":{"uniqueId":...}}
                 only_public_key_join = member_dict_temp['only_public_key_join']
                 if only_public_key_join == True:
                     self.log(f"\033[31m❗ 本组仅允许邀请码加入，请检查\033[0m", group_name)
                     self.log_dispatch(group_name, True)
-                member_dict_temp["week_daka_info"] = self.bcz.getGroupDakaHistory(share_key, parsed=True) # 本周和上周打卡信息，结构：{12345678:["05-23","05-25",...],...}
+                member_dict_temp["week_daka_info"] = self.bcz.getGroupDakaHistory(share_key, parsed=True, token=authorized_token) # 本周和上周打卡信息，结构：{12345678:["05-23","05-25",...],...}
                 self.log(f'开始第{check_count+1}次检测，预计({min(30, ((len(member_dict_temp["members"])-old_members_count))*2)}s)', group_name)
                 self.log_dispatch(group_name, True)
                 # 由于member_dict_temp获取的是observed_group的信息，所以不需要保存到数据库
@@ -920,7 +942,7 @@ class Filter:
                                     personal_dict_temp,
                                     member_dict_temp["week_daka_info"]['this_week'].get(uniqueId, None),
                                         member_dict_temp["week_daka_info"]['last_week'].get(uniqueId, None),
-                                        sub_strat_dict, group_name, late_daka_time, conn)
+                                        sub_strat_dict, group_name, late_daka_time, conn, authorized_token)
                                 log_condition = int(sub_strat_dict['logCondition'])
                                 sub_strat_name = sub_strat_dict['name']
                                 

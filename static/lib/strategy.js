@@ -317,6 +317,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                             <option value="duration_days">加入天数</option>
                             <option value="completed_times">完成天数</option>
                             <option value="wanka_index">上周晚卡指数hh:mm:ss</option>
+                            <option value="is_primary_student">是否在学小学词书</option>
                             <!-- <option value="late_this_week">本周晚卡天数</option> -->
                         </select>
                     </div>
@@ -469,6 +470,7 @@ function addCondition(subItemName) {
                     <option value="duration_days">加入天数</option>
                     <option value="completed_times">完成天数</option>
                     <option value="wanka_index">上周晚卡指数hh:mm:ss</option>
+                    <option value="is_primary_student">是否在学小学词书</option>
                     <!-- <option value="late_this_week">本周晚卡天数</option> -->
                 </select>
             </div>
@@ -527,13 +529,13 @@ function deleteCondition(button) {
 function saveAllStrategies() {
     // 直接请求/save_all_strategies接口，将所有策略保存到数据库
     return fetch(`../save_all_strategies`, {
-        method: 'POST',
+        method: 'GET',
         headers: {
             'Content-Type': 'application/json'
         },
-        body: JSON.stringify({
-            strategy_dict: strategies
-        })
+        // body: JSON.stringify({
+        //     strategy_dict: strategies
+        // })
     }).then(response => {
         if (response.ok) {
             notify('保存成功');

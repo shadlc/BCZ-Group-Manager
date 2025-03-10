@@ -399,6 +399,9 @@ class BCZ:
             user['current_tidal_group_count'] = 0
             user['join_limit'], user['auth_limit'], user['grade'] = j, a, g
             for info in user_groups_info:
+                if str(info['id']) in self.tidal_tracker and info['join_days'] == 8: # 上周一漏掉的
+                    if self.quitGroup(info['share_key'], user['access_token']):
+                        logger.info(f"退出加入 8天 的小班{info['name']}({info['share_key']}) 成功")
                 user['join_groups'].append(str(info['id']))
                 user['join_groups_share_keys'].append(info['share_key'])
                 user['join_groups_days'].append(info['join_days'])
@@ -406,7 +409,7 @@ class BCZ:
                 if str(info['id']) in self.tidal_tracker and info['join_days'] < 3:
                     user['current_tidal_group_count'] = user.get('current_tidal_group_count', 0) + 1
         
-        time_delta = 24
+        time_delta = 4
         current_total_tidal_cnt = 0
         current_share_key = ''
         current_group_id = ''
@@ -633,13 +636,15 @@ class BCZ:
         data['name'] = user_info['mine']['name']
         return data
         
-    def getUserInfo(self, user_id: str = None) -> dict | None:
+    def getUserInfo(self, user_id: str = None, token: str = '') -> dict | None:
         '''【用户校牌】获取用户名、同桌天数、是否靠谱头像框'''
         # 获取同桌信息
         if not user_id:
             return
         url = f'{self.user_deskmate_url}?uniqueId={user_id}'
-        headers = getHeaders(self.config.main_token)
+        if token == '':
+            token = self.config.main_token
+        headers = getHeaders(token)
         response = self.http2_client_obj.get(url, headers=headers, timeout=10)
         if response.status_code != 200 or response.json().get('code') != 1:
             msg = f'获取同桌失败! 用户不存在或主授权令牌无效'
@@ -727,7 +732,7 @@ class BCZ:
             })
         return groups
 
-    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 1) -> dict:
+    def getGroupInfo(self, share_key: str, auth_token: str = '', buffered_time: int = 1, with_main_data: bool = True) -> dict:
         '''获取【班内主页】信息group/information'''
         if auth_token == '':
             auth_token = self.config.main_token
@@ -739,28 +744,31 @@ class BCZ:
             logger.info(f'使用缓存数据')
             return self.buffered_groups.get(share_key)
         
-        
-        url = f'{self.group_detail_url}?shareKey={share_key}'
-        headers = getHeaders(self.config.main_token)
-        main_response = self.http2_client_obj.get(url, headers=headers, timeout=10)
-        if main_response.status_code != 200 or main_response.json().get('code') != 1:
-            msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
-            logger.warning(f'{msg}\n{main_response.text}')
-            # raise Exception(msg)
-            return {
-                'share_key': share_key,
-                'exception': main_response.text,
-            }
-        main_data = main_response.json()['data']
+        main_data = {}
         auth_data = {}
+        url = f'{self.group_detail_url}?shareKey={share_key}'
         if auth_token:
             headers = getHeaders(auth_token)
             auth_response = self.http2_client_obj.get(url, headers=headers, timeout=10)
-            if auth_response.status_code != 200 or main_response.json().get('code') != 1:
+            if auth_response.status_code != 200 or auth_response.json().get('code') != 1:
                 msg = f'使用内部授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或内部授权令牌无效'
-                logger.warning(f'{msg}\n{main_response.text}')
+                logger.warning(f'{msg}\n{auth_response.text}')
             auth_data = auth_response.json()['data']
             
+            if with_main_data:
+                headers = getHeaders(self.config.main_token)
+                main_response = self.http2_client_obj.get(url, headers=headers, timeout=10)
+                if main_response.status_code != 200 or main_response.json().get('code') != 1:
+                    msg = f'使用主授权令牌获取分享码为{share_key}的小班信息失败! 小班不存在或主授权令牌无效'
+                    logger.warning(f'{msg}\n{main_response.text}')
+                    # raise Exception(msg)
+                    return {
+                        'share_key': share_key,
+                        'exception': main_response.text,
+                    }
+                main_data = main_response.json()['data']
+            else:
+                main_data = auth_data
         return self.parseGroupInfo(main_data, auth_data)
 
 
@@ -923,7 +931,7 @@ class BCZ:
         self.buffered_groups[group_info['shareKey']] = group
         return self.buffered_groups.get(group_info['shareKey'])
 
-    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 1) -> dict:
+    def getGroupDakaHistory(self, share_key: str, parsed: bool = False, buffered_time: int = 1, token: str = '') -> dict:
         '''获取小班成员历史打卡信息'''
         if parsed:
             # 暂定只有分离的记录模式
@@ -935,9 +943,10 @@ class BCZ:
             if buffer_time and (datetime.now() - datetime.strptime(buffer_time, '%Y-%m-%d %H:%M:%S')).seconds < buffered_time:
                 logger.info(f'使用缓存数据')
                 return buffer_data
-
+        if token == '':
+            token = self.config.main_token
+        headers = getHeaders(token)
         url = f'{self.get_week_rank_url}?shareKey={share_key}'
-        headers = getHeaders(self.config.main_token)
         week_response = self.http2_client_obj.get(f'{url}&week=1', headers=headers, timeout=10)
         if week_response.status_code != 200 or week_response.json().get('code') != 1:
             msg = f'获取分享码为{share_key}的小班成员历史打卡信息失败! 小班不存在或主授权令牌无效'
@@ -994,19 +1003,6 @@ class BCZ:
                 elif group['share_key'] == result.get('share_key'):
                      group.update(result)
         return groups
-
-    def getUserAllInfo(self, sqlite: SQLite, user_id: str, detail: int = 0) -> dict:
-        '''【用户校牌+所有小班内主页+黑名单信息】获取指定用户所有信息'''
-        # 目前这个函数在筛选器内没有引用，仅用作外部查询
-        user_info = self.getUserInfo(user_id)
-        if not user_info:
-            return {}
-        user_info['group_intro'] = self.getUserGroupInfo(user_id)
-        user_info['black_list'] = sqlite.queryBlacklist(user_id)
-        user_info['longest_info'] = sqlite.queryLongestInfo(user_id)
-        if detail == 1:
-            user_info['group_dict'] = self.getGroupsInfo(user_info['group_intro'])
-        return user_info
 
 def recordInfo(bcz: BCZ, sqlite: SQLite):
     '''记录用户信息'''
