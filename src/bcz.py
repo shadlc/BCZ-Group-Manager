@@ -409,7 +409,8 @@ class BCZ:
                 if str(info['id']) in self.tidal_tracker and info['join_days'] < 3:
                     user['current_tidal_group_count'] = user.get('current_tidal_group_count', 0) + 1
         
-        time_delta = 4
+        TIME_DELTA = 4
+        TIME_DELTA_LONG = 16
         current_total_tidal_cnt = 0
         current_share_key = ''
         current_group_id = ''
@@ -424,6 +425,7 @@ class BCZ:
                 current_group_id = ''
                 current_group_name = ''
                 current_preserve_rank = False
+                unknown_join_groups = False
                 vacancy_log = {}
                 for _, group in self.tidal_token_queue.items():
                     name = group['group_name']
@@ -448,16 +450,16 @@ class BCZ:
                 
                 random.shuffle(tidal_token)
                 for user in tidal_token:
-                    user_name = user['name']
-                    user_grade = user.get('grade', -1)
-
-
-                    # logger.info(f"开始检查潮汐令牌[{user_name}]")
                     if user.get('join_groups', None) is None:
                         update_tidal_token_class_list(user)
-                        logger.info(f"🥰 获取了{user_grade}{user_name}班级列表")
+                        logger.info(f"🥰 获取了{user.get('grade', -1)}{user['name']}班级列表")
                         all_tidal_token_cleared = False 
+                        unknown_join_groups = True
                         break
+
+                for user in tidal_token:
+                    user_name = user['name']
+                    user_grade = user.get('grade', -1)
 
                     groups = user['join_groups']
                     join_limit = user['join_limit'] # 默认3
@@ -476,9 +478,6 @@ class BCZ:
                         share_key = user_share_key[i]
                         join_days = user_join_days[i]
                         group_name = user_group_name[i]
-                        # print(group_name, group_id, type(group_id))
-                        # print(group_id in self.tidal_tracker, self.tidal_token_queue)
-                        # print(self.tidal_tracker)
 
                         if group_id not in self.tidal_tracker or join_days >= 3 or self.tidal_token_queue.get(group_id, None) is None:
                             # logger.info(f"找到{user_name}加入了{group_name}({group_id}) {join_days}天，不符合潮汐组，跳过")
@@ -498,11 +497,8 @@ class BCZ:
                             checked = 1
                             break # 保证每个账号每一轮只请求一次
 
-                    if checked == 0:
-                        # logger.info(f"[{user_name}]没有加入或移除tidal_groups完毕")
-                        ...
-                    else:
-                        continue
+                    if checked:
+                        continue # 如果已经有加入操作，则不再进行退出操作
 
                     # 从现有的找，如果没有，找个新的
                     if current_share_key == '':
@@ -520,10 +516,10 @@ class BCZ:
                             logger.warning(f"[{current_group_name}]加入潮汐令牌{user_grade}{user_name}失败(60s)")
                         update_tidal_token_class_list(user)
                         break
-                if not current_preserve_rank:
-                    time.sleep(time_delta)
+                if current_preserve_rank or unknown_join_groups:
+                    time.sleep(TIME_DELTA)
                 else:
-                    time.sleep(time_delta >> 2)
+                    time.sleep(TIME_DELTA_LONG)
         except Exception as e:
             logger.error(f"tidalTokenThread出现异常：{e}")
         finally:

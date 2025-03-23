@@ -26,6 +26,7 @@ import os
 
 class Filter:
     stop_vacancy_threshold = 1 # 停止条件，当筛选接受人数和最大人数之差 小于等于 此值时，停止筛选。剩下的余额需要人工筛选。
+    mid_stop_vacancy_threshold = 6 # 中间策略的停止
     primary_book_name = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '小学英语', 'KET']
     # 其他的书名暂时不考虑，能学其他的也会比较主动，就当放过了
     def __init__(self, strategy_class: Strategy, bcz: BCZ, sqlite: SQLite, config: Config) -> None:
@@ -1291,11 +1292,18 @@ class Filter:
                 self.log_dispatch(group_name)
 
                 self.log_dispatch(group_name, True)
-                if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold and not preserve_rank:
-                    # 当冲榜时，加入了潮汐号，不能算通过
-                    self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
-                    self.log_dispatch(group_name, True)
-                    break
+                if len(strategy_index_list) == 0:
+                    if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold and not preserve_rank:
+                        # 当冲榜时，加入了潮汐号，不能算通过
+                        self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
+                        self.log_dispatch(group_name, True)
+                        break
+                else:
+                    if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.mid_stop_vacancy_threshold:
+                        # 后面还有策略，所以可以放宽松退出条件
+                        self.log(f"{strategy_dict['name']} 中途条件满足 {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，下一个(99997s)", group_name)
+                        self.log_dispatch(group_name, True)
+                        break
                 time.sleep(max(0, delay + random.randint(-10, 10) / 10)) # 随机延迟，避免多个线程同时执行
         
             except Exception as e:
