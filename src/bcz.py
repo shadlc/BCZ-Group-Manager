@@ -411,7 +411,7 @@ class BCZ:
         
         TIME_DELTA = 4
         TIME_DELTA_LONG = 16
-        current_total_tidal_cnt = 0
+        total_count = 0
         current_share_key = ''
         current_group_id = ''
         current_group_name = ''
@@ -443,7 +443,7 @@ class BCZ:
                 if current_group_id != '':
                     logger.info(f"🌊 优先级最高的潮汐组[{current_share_key},{current_group_id}]{current_group_name}(-{self.tidal_token_queue[current_group_id]['tidal_vacancy']})")
                     all_tidal_token_cleared = False
-                logger.info(f"潮汐队列：{vacancy_log} 已使用{current_total_tidal_cnt}牌(位)")
+                logger.info(f"潮汐队列：{vacancy_log} 已使用{total_count}牌(位)")
                 if len(vacancy_log) == 0:
                     break
                 total_count = 0
@@ -461,7 +461,9 @@ class BCZ:
                     user_name = user['name']
                     user_grade = user.get('grade', -1)
 
-                    groups = user['join_groups']
+                    groups = user.get('join_groups')
+                    if groups is None:
+                        continue
                     join_limit = user['join_limit'] # 默认3
                     tidal_group_limit = user.get('tidal_group_limit', 6) # 默认6
                     current_tidal_group_count = user['current_tidal_group_count']
@@ -479,7 +481,7 @@ class BCZ:
                         join_days = user_join_days[i]
                         group_name = user_group_name[i]
 
-                        if group_id not in self.tidal_tracker or join_days >= 3 or self.tidal_token_queue.get(group_id, None) is None:
+                        if group_id not in self.tidal_tracker or join_days >= 2 or self.tidal_token_queue.get(group_id, None) is None:
                             # logger.info(f"找到{user_name}加入了{group_name}({group_id}) {join_days}天，不符合潮汐组，跳过")
                             continue # 不是潮汐小班 或 加入时间超过3天(不是潮汐令牌) 或 潮汐小班信息未给出
                         vacancy = self.tidal_token_queue[group_id]['tidal_vacancy']

@@ -1046,34 +1046,26 @@ class Filter:
                 current_minute_units = int(datetime.datetime.now().strftime("%M")) % 10
                 if current_minute_units == 9:
                     current_minute_units = -1
-                if current_minute_units == 8:
-                    current_minute_units = -2
                 preserve_rank = False # 冲榜保护排名
-                # print(1)
-                if current_minute_units <= 2 and self.bcz.getRank(group_id, authorized_token, group_rank) < 50:
+                if current_minute_units <= 2 and self.bcz.getRank(group_id, authorized_token, group_rank) < 100:
                     # 获取到分钟尾数为2的秒数
                     wait_second = 60 - current_second + (3 - current_minute_units) * 60 + random.randint(0, 5)
-                    if group_count_limit - current_daka_count < 10: # 推测为正在冲榜
+                    if group_count_limit - current_daka_count < 100: # 推测为正在冲榜
                         self.log(f"排名即将更新，暂不踢出普通踢出列表，等待({wait_second}s)", group_name) # 问题开始标记
                         self.log_dispatch(group_name)
                         preserve_rank = True
-                        # print(group_name)
                 # 【踢人】
                 # 序号小的先踢(执行)
                 # kick_list 候补踢出列表，remove_list 立刻踢出列表
                 minPeople_min = 200
                 remain_people_cnt = member_cnt
-                # print(group_name)
 
                 remove_list = []
                 remove_list_uniqueId = []
-                # print(group_name)
                 new_kick_list = []
                 has = 0
-                # print(group_name)
                 # 先找important_remove_list，再找remove_list
                 for index, this_verdict_dict in enumerate(reversed(kick_list)):
-                    # print(group_name)
                     sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
                     memberId = this_verdict_dict['memberId']
                     uniqueId = this_verdict_dict['uniqueId']
@@ -1102,7 +1094,6 @@ class Filter:
                     uniqueId = this_verdict_dict['uniqueId']
                     if this_verdict_dict["important"] == 0:
                         if not preserve_rank and int(sub_strat_dict["minPeople"]) < remain_people_cnt: # 如果正在冲榜或人数不足，则不筛
-                            # self.log(f'minpeople:{int(sub_strat_dict["minPeople"])}', group_name)
                             remain_people_cnt -= 1
                             remove_list.append(memberId) 
                             remove_list_uniqueId.append(uniqueId)
@@ -1293,14 +1284,14 @@ class Filter:
 
                 self.log_dispatch(group_name, True)
                 if len(strategy_index_list) == 0:
-                    if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold and not preserve_rank:
+                    if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold and len(used_tidal_token) == 0:
                         # 当冲榜时，加入了潮汐号，不能算通过
                         self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
                         self.log_dispatch(group_name, True)
                         break
                 else:
                     if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.mid_stop_vacancy_threshold:
-                        # 后面还有策略，所以可以放宽松退出条件
+                        # 后面还有策略，所以可以放宽松退出条件，也可以留有潮汐号
                         self.log(f"{strategy_dict['name']} 中途条件满足 {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，下一个(99997s)", group_name)
                         self.log_dispatch(group_name, True)
                         break
@@ -1349,7 +1340,7 @@ class Filter:
         self.stop(share_key) # 防止重复运行
         self.activate_groups[share_key] = {} # 每次stop后，share_key对应的字典会被清空
         self.activate_groups[share_key]['stop'] = False
-        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
+        self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list.copy(), share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
         self.activate_groups[share_key]['tids'].start()
 
         time.sleep(1) # 前端技术性延迟
