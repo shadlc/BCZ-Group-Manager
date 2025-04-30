@@ -311,7 +311,7 @@ class SQLite:
             for group in groups:
                 if group.get('exception'):
                     continue
-                self.saveMemberInfo(group['members'], conn = conn)
+                self.saveMemberInfo(group['members'], conn = conn, temp=True)
             return
         
         for group in groups:

@@ -1041,13 +1041,15 @@ class Filter:
                     break
                 
                 # 检查排名是否正在更新
-                # 获取当前分钟，如果分钟个位数是0或1，则等待到个位数变成2的秒数
+                # 获取当前分钟，如果分钟个位数是9、0、1、2且十位数是偶数，则等待到个位数变成3的秒数
                 current_second = int(datetime.datetime.now().strftime("%S"))
-                current_minute_units = int(datetime.datetime.now().strftime("%M")) % 10
+                current_minutes = int(datetime.datetime.now().strftime("%M"))
+                current_minute_cents = current_second // 10
+                current_minute_units = current_minutes % 10
                 if current_minute_units == 9:
                     current_minute_units = -1
                 preserve_rank = False # 冲榜保护排名
-                if current_minute_units <= 2 and self.bcz.getRank(group_id, authorized_token, group_rank) < 100:
+                if current_minute_cents & 1 == 0 and current_minute_units <= 2 and self.bcz.getRank(group_id, authorized_token, group_rank) < 100:
                     # 获取到分钟尾数为2的秒数
                     wait_second = 60 - current_second + (3 - current_minute_units) * 60 + random.randint(0, 5)
                     if group_count_limit - current_daka_count < 100: # 推测为正在冲榜
@@ -1202,6 +1204,7 @@ class Filter:
                 self.logger_field[group_name]['old_members_count'] = old_members_count
                 self.logger_field[group_name]['current_daka_count'] = current_daka_count
                 self.logger_field[group_name]['delay'] = delay
+                today_tidal_token = []
                 used_tidal_token = []
                 stay_tidal_token = []
                 for user in self.tidal_token:
@@ -1217,6 +1220,8 @@ class Filter:
                             tidal_group_limit = user.get('tidal_group_limit', '.')
                             current_tidal_group_count = user.get('current_tidal_group_count', '.')
                             used_tidal_token.append(f'{user["grade"]}{user["name"]}({current_join}/{join_limit} 潮汐{current_tidal_group_count}/{tidal_group_limit})')
+                            if join_groups_days == 1:
+                                today_tidal_token.append(f'{user["name"]}')
                     except ValueError:
                         pass
                     
@@ -1236,7 +1241,7 @@ class Filter:
                     function_str += '🏵️'if self.bcz.inPosterQueue(group_id) else '🧾'
                     function_str += str(self.bcz.getOwnPosterState(poster))
                     function_str += '🌊'if self.bcz.inTidalTokenQueue(group_id) else '🧭'
-                    function_str += f'{len(used_tidal_token)}+{len(stay_tidal_token)}'
+                    function_str += f'{len(today_tidal_token)}+{len(used_tidal_token)}+{len(stay_tidal_token)}'
                     
                     # 处理异常跨越
                     reboot = False
@@ -1284,7 +1289,7 @@ class Filter:
 
                 self.log_dispatch(group_name, True)
                 if len(strategy_index_list) == 0:
-                    if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold and len(used_tidal_token) == 0:
+                    if group_count_limit - (total_accepted_count - total_quit_count) <= Filter.stop_vacancy_threshold and len(today_tidal_token) == 0:
                         # 当冲榜时，加入了潮汐号，不能算通过
                         self.log(f"{strategy_dict['name']}已达到目标人数于{datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，停止筛选(99998s)", group_name)
                         self.log_dispatch(group_name, True)
