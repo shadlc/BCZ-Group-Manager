@@ -386,7 +386,8 @@ class BCZ:
                 return i + 1
         return 1001
 
-    def tidalTokenThread(self, tidal_token: list) -> None:
+    def tidalTokenThread(self, tidal_token: list, tidal_level_vacancy: int) -> None:
+        '''潮汐令牌会保持空位在tidal_level_vacancy'''
         def update_tidal_token_class_list(user):
             # 更新tidal_token_class_list
             # print(f'请求token:{user["access_token"]}')
@@ -434,7 +435,7 @@ class BCZ:
                     vacancy_log[name] = f'{vacancy}'
                     if preserve_rank:
                         vacancy_log[name] += '+'
-                    if group['tidal_index'] < min_tidal_index and (vacancy > 6 or (preserve_rank and vacancy > 0)): # 保持人数在某水平，暂定硬编码194（or冲榜排名更新期间塞满）
+                    if group['tidal_index'] < min_tidal_index and (vacancy > tidal_level_vacancy or (preserve_rank and vacancy > 0)): # 保持人数在某水平，暂定硬编码194（or冲榜排名更新期间塞满）
                         min_tidal_index = group['tidal_index']
                         current_share_key = group['share_key']
                         current_group_name = name
@@ -486,7 +487,7 @@ class BCZ:
                             continue # 不是潮汐小班 或 加入时间超过3天(不是潮汐令牌) 或 潮汐小班信息未给出
                         vacancy = self.tidal_token_queue[group_id]['tidal_vacancy']
                         preserve_rank = self.tidal_token_queue[group_id]['preserve_rank']
-                        if group_id in self.tidal_tracker and (vacancy < 6 and not preserve_rank): # 保持人数在max-6
+                        if group_id in self.tidal_tracker and (vacancy < tidal_level_vacancy and not preserve_rank): # 保持人数在group_count_limit - tidal_level_vacancy
                             update_tidal_token_class_list(user)
                             if group_id not in user['join_groups']:
                                 continue
@@ -528,11 +529,11 @@ class BCZ:
             logger.info(f"🧭 潮汐令牌队列为空，退出")
             self.tidal_thread_tids = None
                     
-    def joinTidalToken(self, share_key: str, group_name: str, tidal_index: int, group_id: str, tidal_vacancy: int, tidal_token: list, preserve_rank: bool) -> bool:
-        '''加入潮汐令牌。潮汐令牌使用指南：潮汐令牌会保持人数在194，主线程会在198退出，因此冲榜类策略保留人数应小于194，筛选类应大于194'''
+    def joinTidalToken(self, share_key: str, group_name: str, tidal_index: int, group_id: str, tidal_vacancy: int, tidal_token: list, preserve_rank: bool, tidal_level_vacancy: int) -> bool:
+        '''加入潮汐令牌队列'''
         group_id = str(group_id)# python实参可以改变形参的类型真的是很糟糕
         if self.tidal_thread_tids is None:
-            self.tidal_thread_tids = threading.Thread(target=self.tidalTokenThread, args=(tidal_token,))
+            self.tidal_thread_tids = threading.Thread(target=self.tidalTokenThread, args=(tidal_token, tidal_level_vacancy))
             self.tidal_thread_tids.start()
         if group_id not in self.tidal_token_queue:
             self.tidal_token_queue[group_id] = {'share_key': share_key, 'group_name': group_name, 'tidal_index': tidal_index, 'group_id': group_id, 'tidal_vacancy': tidal_vacancy, 'preserve_rank': preserve_rank}
@@ -548,9 +549,9 @@ class BCZ:
             return True
         return False
 
-    def inTidalTokenQueue(self, group_id: str) -> bool:
+    def inTidalTokenQueue(self, group_id: str, tidal_level_vacancy: int) -> bool:
         group_id = str(group_id)
-        if group_id in self.tidal_token_queue and self.tidal_token_queue[group_id]['tidal_vacancy'] > 6: # 保持人数在max-6
+        if group_id in self.tidal_token_queue and self.tidal_token_queue[group_id]['tidal_vacancy'] > tidal_level_vacancy: # 保持人数在group_count_limit - tidal_level_vacancy
             return True
         return False
         

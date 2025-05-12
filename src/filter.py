@@ -25,6 +25,9 @@ import os
 
 
 class Filter:
+    tidal_level_vacancy = 6 # 潮汐令牌保持的空位数量
+    user_poster_min_vacancy = 3 # 允许使用海报时的最小空位
+    remove_important_max_vacancy_cnt = 10 # 对于不打卡鸽，剔除后剩余的最大空位
     stop_vacancy_threshold = 1 # 停止条件，当筛选接受人数和最大人数之差 小于等于 此值时，停止筛选。剩下的余额需要人工筛选。
     mid_stop_vacancy_threshold = 6 # 中间策略的停止
     primary_book_name = ['一年级', '二年级', '三年级', '四年级', '五年级', '六年级', '小学英语', 'KET']
@@ -768,7 +771,7 @@ class Filter:
                     self.log_dispatch(group_name, True)
                     break
                 # 借用冲榜排名更新期间填满的方法
-                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, vacancy, self.tidal_token, preserve_rank=True)
+                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, vacancy, self.tidal_token, preserve_rank=True, tidal_level_vacancy = Filter.tidal_level_vacancy)
                 self.log(f"班级人数：{len(member_dict_temp['members'])}/{group_count_limit}", group_name)
                 self.log_dispatch(group_name, True)
                 time.sleep(random.randint(160, 320) / 10)
@@ -1048,18 +1051,19 @@ class Filter:
                 current_minute_units = current_minutes % 10
                 if current_minute_units == 9:
                     current_minute_units = -1
+                    current_minute_cents += 1
                 preserve_rank = False # 冲榜保护排名
-                if current_minute_cents & 1 == 0 and current_minute_units <= 2 and self.bcz.getRank(group_id, authorized_token, group_rank) < 100:
+                if current_minute_cents & 1 == 1 and current_minute_units <= 2 and self.bcz.getRank(group_id, authorized_token, group_rank) < 150:
                     # 获取到分钟尾数为2的秒数
                     wait_second = 60 - current_second + (3 - current_minute_units) * 60 + random.randint(0, 5)
-                    if group_count_limit - current_daka_count < 100: # 推测为正在冲榜
+                    if group_count_limit - current_daka_count < 150: # 推测为正在冲榜
                         self.log(f"排名即将更新，暂不踢出普通踢出列表，等待({wait_second}s)", group_name) # 问题开始标记
                         self.log_dispatch(group_name)
                         preserve_rank = True
                 # 【踢人】
                 # 序号小的先踢(执行)
                 # kick_list 候补踢出列表，remove_list 立刻踢出列表
-                minPeople_min = 200
+                maxVacancy_max = 0
                 remain_people_cnt = member_cnt
 
                 remove_list = []
@@ -1073,7 +1077,7 @@ class Filter:
                     uniqueId = this_verdict_dict['uniqueId']
                     
                     if this_verdict_dict["important"] == 1:
-                        if 190 < remain_people_cnt: # 重要踢出列表，只踢出不打卡的
+                        if Filter.remove_important_max_vacancy_cnt > group_count_limit - remain_people_cnt: # 重要踢出列表，只踢出不打卡的
                             remain_people_cnt -= 1
                             important_remove_list.append(memberId) # 加入重要踢出列表
                             remove_list_uniqueId.append(uniqueId)
@@ -1091,11 +1095,11 @@ class Filter:
 
                 for index, this_verdict_dict in enumerate(reversed(kick_list)):
                     sub_strat_dict = strategy_dict["subItems"][this_verdict_dict['verdict']]
-                    minPeople_min = min(minPeople_min, int(sub_strat_dict["minPeople"])) # 取最小的minPeople
+                    maxVacancy_max = max(maxVacancy_max, int(sub_strat_dict["maxVacancy"])) # 取最大的maxVacancy
                     memberId = this_verdict_dict['memberId']
                     uniqueId = this_verdict_dict['uniqueId']
                     if this_verdict_dict["important"] == 0:
-                        if not preserve_rank and int(sub_strat_dict["minPeople"]) < remain_people_cnt: # 如果正在冲榜或人数不足，则不筛
+                        if not preserve_rank and int(sub_strat_dict["maxVacancy"]) > group_count_limit - remain_people_cnt: # 如果正在冲榜或人数不足，则不筛
                             remain_people_cnt -= 1
                             remove_list.append(memberId) 
                             remove_list_uniqueId.append(uniqueId)
@@ -1184,17 +1188,17 @@ class Filter:
                 if check_count > 1:
                     delay = min(max(delay - delay_delta * (newbies_count - 1), 0.5), 57.5) # 筛选暂停，延迟增加
 
-                if delay >= 20 and poster != '' and group_count_limit - member_cnt > 3: # 使用海报令牌
+                if delay >= 20 and poster != '' and group_count_limit - member_cnt > Filter.user_poster_min_vacancy: # 使用海报令牌
                     if self.bcz.joinPosterQueue(poster_session, poster, group_id, group_name, self.poster_token):
                         self.log(f"🌟 开始预约海报令牌", group_name)
                         self.log_dispatch(group_name, True)
                         # 如果False，则为已在队列中
-                elif delay < 20 or group_count_limit - member_cnt <= 3: # 人数不足3人，则不使用海报令牌
+                elif delay < 20 or group_count_limit - member_cnt <= Filter.user_poster_min_vacancy: # 人数不足3人，则不使用海报令牌
                     if self.bcz.quitPosterQueue(group_id):
                         self.log(f"🌟 停止发海报", group_name)
                         self.log_dispatch(group_name, True)
 
-                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, group_count_limit - member_cnt, self.tidal_token, preserve_rank)
+                self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, group_count_limit - member_cnt, self.tidal_token, preserve_rank, tidal_level_vacancy = Filter.tidal_level_vacancy)
 
                 # 先同步前端
                 self.logger_field[group_name]['client_count'] = len(self.clients_message)
@@ -1240,7 +1244,7 @@ class Filter:
                         function_str += '🔝'
                     function_str += '🏵️'if self.bcz.inPosterQueue(group_id) else '🧾'
                     function_str += str(self.bcz.getOwnPosterState(poster))
-                    function_str += '🌊'if self.bcz.inTidalTokenQueue(group_id) else '🧭'
+                    function_str += '🌊'if self.bcz.inTidalTokenQueue(group_id, Filter.tidal_level_vacancy) else '🧭'
                     function_str += f'{len(today_tidal_token)}+{len(used_tidal_token)}+{len(stay_tidal_token)}'
                     
                     # 处理异常跨越
@@ -1354,28 +1358,38 @@ class Filter:
 
 
 class Monitor:
-    default_dict = {# 仅示例，一启动到时间就会自动执行，填入access_token生效，请谨慎操作
-        # "2268794":{# KO班级ID
-        #   "poster": "忽闻江上弄哀筝，苦含情，遣谁听！烟敛云收，依约是湘灵。欲待曲终寻问取，人不见，数峰青。",
-        #   "poster_session": 12, # 至少12个间隔者才能再次分享
-        #   "strategies": [
-        #     {
-        #         "enable": false,# 启用开关(请勿使用字符串)
-        #         "crontab": "* 5-7 * * 0", # 每周一早上5:00-7:00，一个时段只执行一次
-        #         "strategy_list":[
-        #             "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef",# 示例策略
-        #             "60a26b165db5b370ce9e9c2daf9779be2907f33eec598a2022766509828c630e" # 2048麦花喵.铂金
-        #         ]
-        #     },
-        #     {
-        #         "enable": false,
-        #         "crontab": "* 9 * * 0", # 每周一早上9:00-10:00
-        #         "strategy_list":[
-        #             "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef"# 示例策略
-        #         ]
-        #     }
-        #   ]
-        # }
+    default_dict = { # 仅示例，一启动到时间就会自动执行，填入access_token生效，请谨慎操作
+        "1234567":{ # 班级ID
+          "poster": "忽闻江上弄哀筝，苦含情，遣谁听！烟敛云收，依约是湘灵。欲待曲终寻问取，人不见，数峰青。",
+          "poster_session": 12, # 至少12个间隔者才能再次分享，如果不需要海报，请设置poster为空字符串
+          "tidal_index": 10, # 潮汐权重，越小越优先
+          "strategies": [
+            {
+                "enable": False,# 启用开关(请勿使用字符串)
+                "crontab": "* 5-8 * * 0", # 每周一早上5:00-8:00，一个时段只执行一次
+                "strategy_list":[
+                    "clear_whitelist", # 清理班级白名单
+                    "7152086c3dafb814ea3630f1f4a3f388abc066ff48516c9d0533238533985080", # 上周漏卡且今未卡
+                    "1258b58965f4af0bf06db741447256a0efe92320769aeb3d0bed322e295e1284", # 满卡班踢上周漏卡.7
+                    "9de57ebd73451fd4c37fbc6850b7fdbcf417caaea37f92336ef54ade161b4220", # 10天满或20天桌或靠谱且今已卡-x10.4
+                ]
+            },
+            {
+                "enable": False,
+                "crontab": "* 6-8 * * 1-6", # 除周一外的每天早上6:00-8:00
+                "strategy_list":[
+                    "9de57ebd73451fd4c37fbc6850b7fdbcf417caaea37f92336ef54ade161b4220" # 10天满或20天桌或靠谱且今已卡-x10.4
+                ]
+            },
+            {
+                "enable": False,
+                "crontab": "* 9 * * *", # 每天早上9:00-10:00
+                "strategy_list":[
+                    "fill_up" # 用潮汐号填满班级
+                ]
+            }
+          ]
+        }
     }
     def __init__(self, filter: Filter, sqlite: SQLite) -> None:
         '''初始化配置文件'''
@@ -1422,7 +1436,7 @@ class Monitor:
             self.deactivate(share_key)
 
             for item in strategy_plan:
-                if item['enable']:
+                if item['enable'] == True:
                     crontab = item['crontab']
                     strategy_list = item['strategy_list']
                     # logger.info(f'激活定时任务: {name}.{group_id}@{crontab}')

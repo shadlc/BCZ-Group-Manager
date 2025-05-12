@@ -336,7 +336,6 @@ def save_strategy(request: Request, item: dict):
         strategy.delete(previous_strategy_id)
         if strategy_dict:
             strategy.update(strategy_dict)
-        time.sleep(1) # 前端技术性延迟
         return restful(200, '保存成功! ヾ(≧▽≦*)o')
     except Exception as e:
         return restful(500, f'保存策略时发生错误(X_X): {e}')

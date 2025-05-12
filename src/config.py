@@ -207,94 +207,204 @@ class Config:
 class Strategy:
     # Strategy类更新较少，且是整体更新，故也是用json，创建新的类
     default_dict = {
-  "82e1a5b849e107429c522088c05fd0c28125884b587a36d963abc9e08beec6ef": {
-    "name": "示例策略",
+  "7152086c3dafb814ea3630f1f4a3f388abc066ff48516c9d0533238533985080": {
+    "name": "上周漏卡且今未卡.8",
+    "description": "",
     "subItems": [
       {
-        "name": "子条目1",
-        "minPeople": "199",
+        "name": "上周漏卡kick",
+        "maxVacancy": "8",
         "operation": "reject",
-        "logCondition": "2",
+        "logCondition": "0",
         "conditions": [
           {
-            "name": "completed_time_stamp",
-            "operator": ">",
-            "value": "0"
-          },
-          {
-            "name": "today_study_cheat",
-            "operator": "==",
-            "value": "否"
-          },
-          {
-            "name": "duration_days",
-            "operator": ">=",
-            "value": "1"
-          },
-          {
-            "name": "completed_times",
-            "operator": ">=",
-            "value": "1"
-          },
-          {
-            "name": "finishing_rate",
-            "operator": ">",
-            "value": "0.85"
-          },
-          {
-            "name": "drop_this_week",
-            "operator": "<",
-            "value": "1"
-          },
-          {
             "name": "drop_last_week",
-            "operator": "<",
+            "operator": ">=",
             "value": "1"
           },
           {
-            "name": "blacklisted",
+            "name": "completed_time_stamp",
             "operator": "==",
             "value": "0"
-          },
-          {
-            "name": "deskmate_days",
-            "operator": ">=",
-            "value": "170"
-          },
-          {
-            "name": "dependable_frame",
-            "operator": ">=",
-            "value": "3"
-          },
-          {
-            "name": "modified_nickname",
-            "operator": "<=",
-            "value": "1"
-          },
-          {
-            "name": "max_combo_expectancy",
-            "operator": ">",
-            "value": "10"
           }
         ]
       },
       {
-        "name": "兜底",
-        "minPeople": "1",
-        "operation": "reject",
+        "name": "通过",
+        "maxVacancy": "999",
+        "operation": "accept",
         "logCondition": "-1",
         "conditions": []
       }
     ]
   },
-  "60a26b165db5b370ce9e9c2daf9779be2907f33eec598a2022766509828c630e": {
-    "name": "2048麦花喵.铂金",
+  "e4fbf57a1c40d30d41c793380d6d4d94906f37ed760131dfc91abefb85c12411": {
+    "name": "标记晚卡(不踢)",
+    "description": "晚卡标准:上周打卡均时>18:00",
+    "subItems": [
+      {
+        "name": "晚卡老登",
+        "maxVacancy": "999",
+        "operation": "accept",
+        "logCondition": "0",
+        "conditions": [
+          {
+            "name": "wanka_index",
+            "operator": ">",
+            "value": "18:00:00"
+          }
+        ]
+      },
+      {
+        "name": "乖宝宝",
+        "maxVacancy": "999",
+        "operation": "accept",
+        "logCondition": "0",
+        "conditions": []
+      }
+    ]
+  },
+  "1258b58965f4af0bf06db741447256a0efe92320769aeb3d0bed322e295e1284": {
+    "name": "满卡班踢上周漏卡.7",
+    "description": "",
+    "subItems": [
+      {
+        "name": "上周漏卡kick",
+        "maxVacancy": "7",
+        "operation": "reject",
+        "logCondition": "0",
+        "conditions": [
+          {
+            "name": "drop_last_week",
+            "operator": ">=",
+            "value": "1"
+          }
+        ]
+      },
+      {
+        "name": "通过",
+        "maxVacancy": "999",
+        "operation": "accept",
+        "logCondition": "-1",
+        "conditions": []
+      }
+    ]
+  },
+  "7bc840c1edb50f66292f3ab67b40a2bac0f17bdc76c3737922fa0c9e9d265194": {
+    "name": "周中漏卡2或以上.3",
+    "description": "建议仅在周二到周五使用",
+    "subItems": [
+      {
+        "name": "周中漏卡>=2",
+        "maxVacancy": "3",
+        "operation": "reject",
+        "logCondition": "0",
+        "conditions": [
+          {
+            "name": "drop_this_week",
+            "operator": ">=",
+            "value": "2"
+          }
+        ]
+      },
+      {
+        "name": "通过",
+        "maxVacancy": "999",
+        "operation": "accept",
+        "logCondition": "-1",
+        "conditions": []
+      }
+    ]
+  },
+  "5b5c8506e5190a23744660f8ad96b625016c6b09fc742601cf28c1d1e88bda91": {
+    "name": "30天满且今已卡.3",
+    "description": "",
     "subItems": [
       {
         "name": "老成员",
-        "minPeople": "1",
+        "maxVacancy": "999",
         "operation": "accept",
+        "logCondition": "-1",
+        "conditions": [
+          {
+            "name": "completed_times",
+            "operator": ">=",
+            "value": "2"
+          }
+        ]
+      },
+      {
+        "name": "校牌不达标kick",
+        "maxVacancy": "3",
+        "operation": "reject",
         "logCondition": "0",
+        "conditions": [
+          {
+            "name": "completed_times",
+            "operator": "<=",
+            "value": "1"
+          },
+          {
+            "name": "max_combo_expectancy",
+            "operator": "<",
+            "value": "30"
+          }
+        ]
+      },
+      {
+        "name": "通过",
+        "maxVacancy": "999",
+        "operation": "accept",
+        "logCondition": "-1",
+        "conditions": []
+      }
+    ]
+  },
+  "58f5d2b7927d49e9957f288bf71d15f05d3d804192f23937fc23b49280b46a49": {
+    "name": "踢在班20天以下且晚卡.8.2000",
+    "description": "晚卡标准:上周打卡均时>20:00 若今日已打卡会被临时豁免",
+    "subItems": [
+      {
+        "name": "晚卡kick",
+        "maxVacancy": "8",
+        "operation": "reject",
+        "logCondition": "0",
+        "conditions": [
+          {
+            "name": "completed_times",
+            "operator": "<=",
+            "value": "20"
+          },
+          {
+            "name": "wanka_index",
+            "operator": ">",
+            "value": "20:00:00"
+          },
+          {
+            "name": "completed_time_stamp",
+            "operator": "==",
+            "value": "0"
+          }
+        ]
+      },
+      {
+        "name": "通过",
+        "maxVacancy": "999",
+        "operation": "accept",
+        "logCondition": "-1",
+        "conditions": []
+      }
+    ]
+  },
+  "9de57ebd73451fd4c37fbc6850b7fdbcf417caaea37f92336ef54ade161b4220": {
+    "name": "10天满或20天桌或靠谱且今已卡-x10.4",
+    "description": "尽量避免缺乏规则意识的小学生进班",
+    "subItems": [
+      {
+        "name": "老成员",
+        "maxVacancy": "999",
+        "operation": "accept",
+        "logCondition": "-1",
         "conditions": [
           {
             "name": "completed_times",
@@ -305,7 +415,7 @@ class Strategy:
       },
       {
         "name": "不打卡kick",
-        "minPeople": "148",
+        "maxVacancy": "4",
         "operation": "reject",
         "logCondition": "0",
         "conditions": [
@@ -318,7 +428,7 @@ class Strategy:
       },
       {
         "name": "新成员kick",
-        "minPeople": "148",
+        "maxVacancy": "4",
         "operation": "reject",
         "logCondition": "0",
         "conditions": [
@@ -330,18 +440,51 @@ class Strategy:
           {
             "name": "deskmate_days",
             "operator": "<",
-            "value": "60"
+            "value": "20"
           },
           {
             "name": "max_combo_expectancy",
             "operator": "<",
-            "value": "45"
+            "value": "10"
+          },
+          {
+            "name": "dependable_frame",
+            "operator": "!=",
+            "value": "3"
+          }
+        ]
+      },
+      {
+        "name": "小学生的校牌不达标kick",
+        "maxVacancy": "4",
+        "operation": "reject",
+        "logCondition": "0",
+        "conditions": [
+          {
+            "name": "is_primary_student",
+            "operator": "==",
+            "value": "1"
+          },
+          {
+            "name": "deskmate_days",
+            "operator": "<",
+            "value": "200"
+          },
+          {
+            "name": "max_combo_expectancy",
+            "operator": "<",
+            "value": "100"
+          },
+          {
+            "name": "completed_times",
+            "operator": "<=",
+            "value": "1"
           }
         ]
       },
       {
         "name": "通过",
-        "minPeople": "1",
+        "maxVacancy": "999",
         "operation": "accept",
         "logCondition": "-1",
         "conditions": []

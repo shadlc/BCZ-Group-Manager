@@ -44,7 +44,7 @@ function addStrategy() {
             {
                 name: "子条目1",
                 operation: "接受",
-                minPeople: 199,
+                maxVacancy: 1,
                 validity: "本周",
                 conditionsCount: 3,
                 conditions: [
@@ -121,7 +121,7 @@ function deleteCurrentStrategy(confirmed = false) {
     // 删除当前策略
 
     // 警告
-    if (!confirmed) showModal('确认删除策略？此操作不可恢复<div class="center-tag btn" onclick="deleteCurrentStrategy(true)">确认删除</div> <div class="center-tag btn" onclick="hideModal()">取消</div>', '警告');
+    if (!confirmed) showModal('确认删除策略？此操作不可恢复<div class="center-tag btn" onclick="deleteCurrentStrategy(true)">确认删除</div> <div class="center-tag btn" onclick="hideAllModals()">取消</div>', '警告');
     
 
     else {
@@ -130,7 +130,7 @@ function deleteCurrentStrategy(confirmed = false) {
             notify('策略列表中至少要有一个策略', 1000);
             return;
         }
-        showModal('删除中...', '此窗口可关闭');
+        notify('删除中...', 1000);
         delete strategies[currentStrategyHashId];
         fetch(`../save_strategy`, {
             method: 'POST',
@@ -141,10 +141,10 @@ function deleteCurrentStrategy(confirmed = false) {
                 previous_strategy_id: currentStrategyHashId
             })
         }).then(response => {
+            hideAllModals();
             if (response.ok){
-                notify('保存成功', 1000);
+                notify('删除成功', 1000);
                 initStrategyPage();
-                hideAllModals();
             }
         });
     }
@@ -174,7 +174,7 @@ function addSubItem() {
                 <div class="center-tag btn" onclick="copySubItem('${subItem.name}')">复制</div>
                 <div class="center-tag btn" onclick="deleteSubItem('${subItem.name}', false)">删除</div>
             </div>
-            <div class="tag">最低：<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人</div>
+            <div class="tag">最大空位<input type="number" class="maxVacancy" value="${subItem.maxVacancy || '1'}">人</div>
             <div class="tag">操作：<select class="operation" style="height: 2rem">
                     <option value="accept">接受</option>
                     <option value="reject">移出</option>
@@ -236,8 +236,9 @@ function showStrategyInfo(strategyHashId, no_save = false) {
     
     document.querySelector('.strategy-info').innerHTML = `
         <div class="card strategy" id="${currentStrategy.name}">
-            <div class="tag">
-                <input class="strategy-name" type="text" value="${currentStrategy.name}">
+            <div class="frame">
+                <input class="strategy-name" type="text" placeholder="策略名称" value="${currentStrategy.name}"><br>
+                <input class="strategy-description" style="font-size: smaller" type="text" placeholder="策略描述" value="${currentStrategy.description || ''}">
             </div>
             <div class="tag actions">
                 <div class="center-tag btn" onclick="addSubItem()">添加子条目</div>
@@ -275,7 +276,7 @@ function showStrategyInfo(strategyHashId, no_save = false) {
                 <div class="center-tag btn" onclick="copySubItem('${subItem.name}')">复制</div>
                 <div class="center-tag btn" onclick="deleteSubItem('${subItem.name}', false)">删除</div>
             </div>
-            <div class="tag">最低：<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人</div>
+            <div class="tag">最大空位<input type="number" class="maxVacancy" value="${subItem.maxVacancy || '1'}">人</div>
             <div class="tag">操作：<select class="operation" style="height: 2rem">
                     <option value="accept">接受</option>
                     <option value="reject">移出</option>
@@ -390,7 +391,7 @@ function copySubItem(subItemName) {
     copied_name = `复制的${subItemName}`
     const subItem = {
         name: copied_name,
-        minPeople: 199
+        maxVacancy: 1
     }
 
     // 复制子条目卡片  
@@ -406,7 +407,7 @@ function copySubItem(subItemName) {
             <div class="center-tag btn" onclick="copySubItem('${subItem.name}')">复制</div>
             <div class="center-tag btn" onclick="deleteSubItem('${subItem.name}', false)">删除</div>
         </div>
-        <div class="tag">最低：<input type="number" class="minPeople" value="${subItem.minPeople || '199'}">人</div>
+        <div class="tag">最大空位<input type="number" class="maxVacancy" value="${subItem.maxVacancy || '1'}">人</div>
         <div class="tag">操作：<select class="operation" style="height: 2rem">
                 <option value="accept">接受</option>
                 <option value="reject">移出</option>
@@ -552,13 +553,14 @@ function saveCurrentStrategy(copy_current_strategy = false) {
     // currentStrategyDiv = document.querySelector('.strategy-info');
     currentStrategy = {
         name : document.querySelector('.strategy-name').value,
+        description : document.querySelector('.strategy-description').value,
         subItems: []
     };
     const subItems = document.querySelectorAll('.subItem-detail');
     subItems.forEach((subItem) => {
         let subItemData = {
             name: subItem.querySelector('.subItem-name').value,
-            minPeople: subItem.querySelector('.minPeople').value,
+            maxVacancy: subItem.querySelector('.maxVacancy').value,
             operation: subItem.querySelector('.operation').value,
             logCondition: subItem.querySelector('.logCondition').value,
             conditions: []
@@ -591,7 +593,7 @@ function saveCurrentStrategy(copy_current_strategy = false) {
         delete strategies[currentStrategyHashId];
         strategies[hashId] = currentStrategy;
 
-        showModal('上传中，请稍候...<br>此页面可关闭', '提示');
+        notify('上传策略中...');
         // 发送到服务器
         return fetch(`../save_strategy`, {
             method: 'POST',
@@ -605,19 +607,14 @@ function saveCurrentStrategy(copy_current_strategy = false) {
         }).then(response => {
             if (response.ok){
                 notify('上传成功');
-                if (copy_current_strategy) showModal(`复制成功，将要复制策略名称${currentStrategy.name}`, '提示');
-                else showModal('上传成功，即将重新加载', '提示');
+                if (copy_current_strategy) notify(`复制成功，源策略名称${currentStrategy.name}`);
                 // 刷新页面
-                setTimeout(() => {
-                    initStrategyPage().then((data) => {
-                        if (copy_current_strategy) copyCurrentStrategy(hashId);
-                        hideAllModals();
-                    });
-                }, 1000);
+                initStrategyPage().then((data) => {
+                    if (copy_current_strategy) copyCurrentStrategy(hashId);
+                });
             }
         }).catch(error => {
             notify(`上传失败：${error}`);
-            hideAllModals();
         });
     });
 }

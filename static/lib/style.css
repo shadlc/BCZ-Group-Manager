@@ -244,9 +244,10 @@ img[src=""] {
 }
 
 .frame {
-  display: inline-flex;
-  flex-direction: column;
+  display: flex;
+  margin: 0.5rem;
   flex-grow: 1;
+  flex-direction: column;
 }
 
 .center-frame {
@@ -274,14 +275,7 @@ img[src=""] {
   align-items: center;
   margin: 0.3rem;
 }
-.strategy-name {
-  font-weight: bold;
-  font-size: larger;
-  background: transparent;
-  width: 100%;
-  text-align: center;
-}
-.subItem-name{
+.strategy-description,.strategy-name,.subItem-name{
   font-weight: bold;
   font-size: larger;
   background: transparent;
