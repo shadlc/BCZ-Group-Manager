@@ -685,10 +685,10 @@ class BCZ:
         return data["groupLimiteNumber"], data["groupAuthorizationLimiteNumber"], data['grade']
 
 
-    def getUserGroupInfo(self, user_id: str = None, access_token: str = '') -> list[dict]:
+    def getUserGroupInfo(self, user_id: str = None, access_token: str = '') -> list:
         '''获取【我的小班】信息own_groups'''
         if not user_id:
-            return {}
+            return []
         if access_token == '':
             access_token = self.config.main_token
         url = f'{self.group_list_url}?uniqueId={user_id}'
@@ -1003,6 +1003,18 @@ class BCZ:
                      group.update(result)
         return groups
 
+    def getUserAllInfo(self, user_id: str = None) -> dict | None:
+        '''获取指定用户所有信息'''
+        user_info = self.getUserInfo(user_id)
+        if not user_info:
+            return
+        user_group_list = self.getUserGroupInfo(user_id)
+        group_dict = {}
+        for group in user_group_list:
+            group_dict[group['group_id']] = self.getGroupInfo(group['share_key'])
+        user_info['group_dict'] = group_dict
+        return user_info
+
 def recordInfo(bcz: BCZ, sqlite: SQLite):
     '''记录用户信息'''
     groups = sqlite.queryObserveGroupInfo()
@@ -1188,9 +1200,9 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
                 'absence': absence,
             })
 
-        # 删除星期天不在小班的成员贡献的打卡天数
+        # 删除不在小班的成员贡献的打卡天数
         for member in group['members']:
-            if member['data_time'] == '' and edate not in member['daka']:
+            if edate not in member['daka']:
                 for daka_date in member['daka']:
                     daka = member['daka'][daka_date]
                     if daka['time']:
@@ -1211,14 +1223,14 @@ def analyseWeekInfo(groups: list[dict], sqlite: SQLite, week_date: str) -> list[
         )
     return groups
 
-def getWeekOption(date: str = '', range_day: list[int] = [-180, 0]) -> list:
+def getWeekOption(data_date: str = '', range_day: list[int] = [-180, 0]) -> list:
     '''获取指定时间指定范围内所有的周'''
     target_date = datetime.today()
-    if date:
-        try:    
-            target_date = datetime.strptime(date, '%Y-%m-%d')
+    if data_date:
+        try:
+            target_date = datetime.strptime(data_date, '%Y-%m-%d')
         except Exception as e:
-            logger.warning(f'转换时间[{date}]出错: {e}')
+            logger.warning(f'转换时间[{data_date}]出错: {e}')
 
     start_date = target_date + timedelta(days=range_day[0])
     end_date = target_date + timedelta(days=range_day[1])
