@@ -468,8 +468,6 @@ class Filter:
                 for key, value in self.activate_groups.items():
                     if not value['stop']:
                         current_group_list.append(value.get('name', '未知'))
-                    else:
-                        self.activate_groups.pop(key, None)
             except Exception as e:
                 self.log(f"activate_groups error: {e}", '全局') # 极少概率会出现：字典变化时迭代器失效
                 self.log_dispatch('全局')
@@ -1322,7 +1320,11 @@ class Filter:
                 time.sleep(10.5)
                 pass
         
-        if self.activate_groups[share_key]['stop']:
+        # if not self.activate_groups.get(share_key):
+        #     self.activate_groups[share_key] = {'stop': False}
+        halt = self.activate_groups[share_key].get('stop')
+        
+        if halt:
             stop_filter(group_name, group_id, share_key)
             self.log(f"❄️ \033[1;33m{strategy_name}筛选已中止\033[0m (99998s)", group_name)
             self.log_dispatch(group_name, True)
@@ -1331,8 +1333,7 @@ class Filter:
             if self.bcz.quitPosterQueue(group_id):
                 self.log(f"🌟 停止发海报", group_name)
                 self.log_dispatch(group_name, True)
-            # print(strategy_index_list)
-            if len(strategy_index_list) > 0 and not self.activate_groups[share_key]['stop']:
+            if len(strategy_index_list) > 0:
                 self.log(f'❄️ \033[1;36m进入下一轮筛选，剩余{len(strategy_index_list)}轮筛选 \033[0m', group_name)
                 self.activate_groups[share_key]['tids'] = threading.Thread(target=self.run, args=(authorized_token, strategy_index_list, share_key, group_id, scheduled_hour, scheduled_minute, poster, poster_session, tidal_index))
                 self.activate_groups[share_key]['tids'].start()

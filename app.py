@@ -79,9 +79,9 @@ async def index(request: Request):
 async def group(request: Request):
     return templates.TemplateResponse('group.html', {'request': request})
 
-@app.get('/group/<id>')
+@app.get('/group/{id}')
 async def detail(request: Request, id: str=None):
-    return templates.TemplateResponse('group_id.html', {'request': request, 'id': id})
+    return templates.TemplateResponse('details.html', {'request': request, 'id': id})
 
 @app.get('/data')
 async def data(request: Request):
@@ -602,6 +602,16 @@ def slice_log(in_app = True):
     if not in_app:
         return '7天前的判定和90天前的日志记录已清理!'
     return restful(200, '7天前的判定和90天前的日志记录已清理!')
+
+@app.get('/list')
+def list_group_ids():
+    '''获取所有小班ID'''
+    try:
+        return restful(200, '成功', [group['id'] for group in sqlite.queryObserveGroupInfo('')])
+    except Exception as e:
+        return restful(500, f'获取所有小班ID时发生错误(X_X): {e}')
+    
+
 
 def restful(code: int, msg: str = '', data: dict = {}) -> Response:
     '''以RESTful的方式进行返回响应'''
