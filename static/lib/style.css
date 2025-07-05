@@ -266,7 +266,10 @@ img[src=""] {
   flex-grow: 1;
   flex-direction: row;
 }
-
+td {
+  max-width: 1000px;
+  overflow: scroll;
+}
 .center-tag {
   display: flex;
   flex-direction: row;

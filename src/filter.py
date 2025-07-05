@@ -6,7 +6,6 @@ from src.config import Config
 from src.config import Strategy
 from fastapi import Request
 from src.sync import db_sync
-import flask_sse
 import uuid
 import logging
 import random

@@ -5,7 +5,11 @@ import time
 
 import certifi
 import httpx
-# import requests
+import importlib
+winreg_exists = importlib.find_loader('winreg')
+if winreg_exists:
+    import winreg
+
 
 FULL_ASYNC = False
 
@@ -38,6 +42,25 @@ class http2_client:
         if self._closing_state: # 结束当前线程
             raise AssertionError('http2 client is closing')
         
+    def set_proxy(self, enable=True, proxy_server="http://127.0.0.1:8080"):
+        '''因为某人总是忘记取消代理，服务器环境一般不需要的'''
+        if not winreg_exists:
+            print("winreg module not found, proxy setting ignored")
+            return
+        if enable:
+            print("Setting proxy to:", proxy_server)
+        else:
+            print("Disabling proxy...")
+        internet_settings = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                                        r'Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings',
+                                        0, winreg.KEY_ALL_ACCESS)
+        if enable:
+            winreg.SetValueEx(internet_settings, "ProxyEnable", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(internet_settings, "ProxyServer", 0, winreg.REG_SZ, proxy_server)
+        else:
+            winreg.SetValueEx(internet_settings, "ProxyEnable", 0, winreg.REG_DWORD, 0)
+        winreg.CloseKey(internet_settings)
+        
     def send_http2_request(self, method: str, url: str, headers: dict, content: dict) -> httpx.Response:
         '''同步http2请求（可多线程并发使用，但不适用于FastAPI）
         当FULL_ASYNC=True时，本函数将使用异步请求（兼容性考虑）'''
@@ -67,10 +90,12 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client()
                     continue
-                time.sleep(10)
+                time.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('http2 error, failed_count > 7')
+                    self.rua(self.reload_http2_client())
+                    self.set_proxy(False)
                     time.sleep(60)
                     failed_count = 0
                 continue
@@ -90,14 +115,15 @@ class http2_client:
                 return response
             except Exception as e:
                 print(f'http2 post error: {e}')
-                print(url, headers, json, timeout)
                 if client.is_closed:
                     client = self.get_http2_client()
                     continue
-                time.sleep(10)
+                time.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('http2 error, failed_count > 7')
+                    self.rua(self.reload_http2_client())
+                    self.set_proxy(False)
                     time.sleep(60)
                     failed_count = 0
                 continue
@@ -119,10 +145,12 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client()
                     continue
-                time.sleep(10)
+                time.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('http2 error, failed_count > 7')
+                    self.rua(self.reload_http2_client())
+                    self.set_proxy(False)
                     time.sleep(60)
                     failed_count = 0
                 continue
@@ -157,10 +185,12 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client(async_client=True)
                     continue
-                await asyncio.sleep(10)
+                await asyncio.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('async http2 error, failed_count > 7')
+                    await self.reload_http2_client()
+                    self.set_proxy(False)
                     await asyncio.sleep(60)
                     failed_count = 0
                 continue
@@ -181,10 +211,12 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client(async_client=True)
                     continue
-                await asyncio.sleep(10)
+                await asyncio.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('async http2 error, failed_count > 7')
+                    await self.reload_http2_client()
+                    self.set_proxy(False)
                     await asyncio.sleep(60)
                     failed_count = 0
                 continue
@@ -204,10 +236,12 @@ class http2_client:
                 if client.is_closed:
                     client = self.get_http2_client(async_client=True)
                     continue
-                await asyncio.sleep(10)
+                await asyncio.sleep(1.2)
                 failed_count += 1
                 if failed_count > 7:
                     Warning('async http2 error, failed_count > 7')
+                    await self.reload_http2_client()
+                    self.set_proxy(False)
                     await asyncio.sleep(60)
                     failed_count = 0
                 continue
@@ -226,12 +260,14 @@ class http2_client:
 
     async def reload_http2_client(self):
         '''重新加载http2_client(例如启动或关闭fiddler后更新代理)'''
-        if not(self.client is None or self.client.is_closed):
-            self.client.close()
-        if not(self.async_client is None or self.async_client.is_closed):
-            self.async_client.aclose()
-        self.client = httpx.Client(http2=True, verify=certifi.where())
-        self.async_client = httpx.AsyncClient(http2=True, verify=certifi.where())
+        with self.lock:
+            if not(self.client is None or self.client.is_closed):
+                self.client.close()
+            if not(self.async_client is None or self.async_client.is_closed):
+                self.async_client.aclose()
+            self.client = httpx.Client(http2=True, verify=certifi.where())
+            self.async_client = httpx.AsyncClient(http2=True, verify=certifi.where())
+            print('---http2 client reloaded---')
 
     def __del__(self):
         if not(self.client is None or self.client.is_closed):

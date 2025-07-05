@@ -199,7 +199,7 @@ class SQLite:
             conn.commit()
             conn.close()
             return True
-        except sqlite3.DatabaseError as e:
+        except IndexError as e:
             logger.error(f'写入数据库{self.db_path}出错: {e}')
         return False
     
@@ -1273,7 +1273,7 @@ class SQLite:
     def mergeTempMemberInfo(self) -> bool:
         '''把成员临时表中的数据合并到成员表'''
         return self.write(
-            f'INSERT INTO MEMBERS SELECT * FROM T_MEMBERS'
+            f'INSERT OR REPLACE INTO MEMBERS SELECT * FROM T_MEMBERS'
         )
 
     def deleteTempMemberTable(self, group_id_list: list) -> None:
