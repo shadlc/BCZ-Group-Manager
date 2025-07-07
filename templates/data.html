@@ -152,9 +152,6 @@
         return getSearchOption();
       })
       .then(()=>{
-        return queryMemberTable();
-      })
-      .then(()=>{
         document.querySelectorAll('.loading-text').forEach((e)=>{
           e.classList.add('hide');
         });
@@ -164,7 +161,8 @@
         document.querySelectorAll('.data-container').forEach((e)=>{
           e.classList.remove('hide');
         });
-      });
+        return queryMemberTable();
+      })
       bindScrollToTopBtn(document.querySelector('.wall-container'));
     }
 
@@ -301,6 +299,7 @@
 
     // 用户信息表查询
     function queryMemberTable(option=null) {
+      let modal = showModal(`<span><div class="loader"><span></span><span></span><span></span></div>数据获取中，请稍后...</span>`);
       if (option === '') {
         return;
       } else if (option == '-') {
@@ -337,7 +336,7 @@
             <input type="text" value= "${page_num}"
               style="margin-right: 0.2rem; width: ${(page_num.toString().length * 8) + 'px'}"
               oninput="this.style.width = (this.value.length * 8) + 'px'"
-              onkeypress="eventSearch(event)"
+              onkeypress="if(event.key === 'Enter') event.target.blur();"
               onblur="eventSearch(event)"
             />/${page_max}
           `
@@ -350,6 +349,9 @@
       .catch(error => {
         console.error('请求错误:', error);
         notify('请求错误:' + error);
+      })
+      .finally(()=>{
+        setTimeout(()=>{toggleModal(null, modal)}, 300);
       });
     }
 
