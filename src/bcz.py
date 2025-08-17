@@ -25,12 +25,12 @@ class BCZ:
                 "Connection": "keep-alive",
                 "User-Agent": "bcz_app_android/7060100 android_version/12 device_name/DCO-AL00 - HUAWEI",
                 "Accept": "*/*",
-                "Origin": "",
-                "X-Requested-With": "",
+                # "Origin": "",
+                # "X-Requested-With": "",
                 "Sec-Fetch-Site": "same-site",
                 "Sec-Fetch-Mode": "cors",
                 "Sec-Fetch-Dest": "empty",
-                "Referer": "",
+                # "Referer": "",
                 "Accept-Encoding": "gzip, deflate",
                 "Accept-Language": "zh-CN,zh;q=0.9,en-US;q=0.8,en;q=0.7"
             }
@@ -190,7 +190,7 @@ class BCZ:
             # raise Exception(msg)
             return {
                 'share_key': share_key,
-                'exception': main_response.text,
+                'exception': f"获取小班信息失败 {main_response.text}",
             }
         main_data = main_response.json()['data']
         auth_data = {}

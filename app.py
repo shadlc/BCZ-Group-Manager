@@ -130,6 +130,8 @@ def observe_group():
             if share_key in [group['share_key'] for group in groups]:
                 return restful(403, '该小班已存在ヾ(≧▽≦*)o')
             group_info = bcz.getGroupInfo(share_key)
+            if exception := group_info.get("exception"):
+                return restful(403, exception)
             sqlite.addObserveGroupInfo([group_info])
             msg = '成功添加新的关注小班ヾ(≧▽≦*)o'
         elif 'id' in request.json:
