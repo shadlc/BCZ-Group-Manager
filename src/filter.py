@@ -24,7 +24,7 @@ import os
 
 
 class Filter:
-    tidal_level_vacancy = 6 # 潮汐令牌保持的空位数量
+    tidal_level_vacancy = 5 # 潮汐令牌保持的空位数量
     user_poster_min_vacancy = 3 # 允许使用海报时的最小空位
     remove_important_max_vacancy_cnt = 10 # 对于不打卡鸽，剔除后剩余的最大空位
     stop_vacancy_threshold = 1 # 停止条件，当筛选接受人数和最大人数之差 小于等于 此值时，停止筛选。剩下的余额需要人工筛选。

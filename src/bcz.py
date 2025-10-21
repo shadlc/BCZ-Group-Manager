@@ -388,9 +388,9 @@ class BCZ:
 
     def tidalTokenThread(self, tidal_token: list, tidal_level_vacancy: int) -> None:
         '''潮汐令牌会保持空位在tidal_level_vacancy'''
+        is_monday = (datetime.now().weekday() == 0)
         def update_tidal_token_class_list(user):
             # 更新tidal_token_class_list
-            # print(f'请求token:{user["access_token"]}')
             j, a, g = self.getUserLimit(user['access_token'])
             user_groups_info = self.getUserGroupInfo('0', user['access_token']) # uniqueId填0时获取自身
             user['join_groups'] = []
@@ -400,9 +400,10 @@ class BCZ:
             user['current_tidal_group_count'] = 0
             user['join_limit'], user['auth_limit'], user['grade'] = j, a, g
             for info in user_groups_info:
-                if str(info['id']) in self.tidal_tracker and info['join_days'] == 8: # 上周一漏掉的
+                if str(info['id']) in self.tidal_tracker and 2 <= info['join_days'] <= 8 and is_monday: # 上周一漏掉的
                     if self.quitGroup(info['share_key'], user['access_token']):
-                        logger.info(f"退出加入 8天 的小班{info['name']}({info['share_key']}) 成功")
+                        logger.info(f"退出加入 {info['join_days']}天 的小班{info['name']}({info['share_key']}) 成功")
+                        continue
                 user['join_groups'].append(str(info['id']))
                 user['join_groups_share_keys'].append(info['share_key'])
                 user['join_groups_days'].append(info['join_days'])
@@ -410,8 +411,8 @@ class BCZ:
                 if str(info['id']) in self.tidal_tracker and info['join_days'] < 3:
                     user['current_tidal_group_count'] = user.get('current_tidal_group_count', 0) + 1
         
-        TIME_DELTA = 4
-        TIME_DELTA_LONG = 16
+        TIME_DELTA = 3
+        TIME_DELTA_LONG = 9
         total_count = 0
         current_share_key = ''
         current_group_id = ''
@@ -484,7 +485,7 @@ class BCZ:
 
                         if group_id not in self.tidal_tracker or join_days >= 2 or self.tidal_token_queue.get(group_id, None) is None:
                             # logger.info(f"找到{user_name}加入了{group_name}({group_id}) {join_days}天，不符合潮汐组，跳过")
-                            continue # 不是潮汐小班 或 加入时间超过3天(不是潮汐令牌) 或 潮汐小班信息未给出
+                            continue # 不是潮汐小班 或 加入时间超过2天(不是潮汐令牌) 或 潮汐小班信息未给出
                         vacancy = self.tidal_token_queue[group_id]['tidal_vacancy']
                         preserve_rank = self.tidal_token_queue[group_id]['preserve_rank']
                         if group_id in self.tidal_tracker and (vacancy < tidal_level_vacancy and not preserve_rank): # 保持人数在group_count_limit - tidal_level_vacancy
@@ -493,15 +494,16 @@ class BCZ:
                                 continue
                             # logger.info(f'找到{user_name}加入了{group_name}({group_id}) {join_days}天，退出')
                             if self.quitGroup(share_key, user['access_token']):
-                                logger.info(f"[{group_name}]🌊 \033[1;35m移除tidal_token{user_grade}{user_name}，加入时间{join_days}(<3)天，还剩{user['current_tidal_group_count'] - 1}个\033[0m(60s)")
+                                logger.info(f"[{group_name}]🌊 \033[1;35m移除tidal_token{user_grade}{user_name}，加入时间{join_days}(<2)天，还剩{user['current_tidal_group_count'] - 1}个\033[0m(60s)")
                                 self.tidal_token_queue[group_id]['tidal_vacancy'] += 1
                             else:
                                 logger.warning(f"[{group_name}]退出潮汐令牌{user_grade}{user_name}失败(60s)")
+                            update_tidal_token_class_list(user)
                             checked = 1
                             break # 保证每个账号每一轮只请求一次
 
                     if checked:
-                        continue # 如果已经有加入操作，则不再进行退出操作
+                        continue # 每一个账号只能操作一次
 
                     # 从现有的找，如果没有，找个新的
                     if current_share_key == '':
@@ -520,9 +522,9 @@ class BCZ:
                         update_tidal_token_class_list(user)
                         break
                 if current_preserve_rank or unknown_join_groups:
-                    time.sleep(TIME_DELTA)
+                    time.sleep(TIME_DELTA * random.random() * 2)
                 else:
-                    time.sleep(TIME_DELTA_LONG)
+                    time.sleep(TIME_DELTA_LONG * random.random() * 2)
         except Exception as e:
             logger.error(f"tidalTokenThread出现异常：{e}")
         finally:
