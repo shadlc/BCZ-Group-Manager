@@ -84,13 +84,6 @@ class Filter:
 
         # activate_groups内格式：shareKey:{tids, stop}
 
-        
-    def getState(self, shareKey: str) -> bool:
-        '''获取指定班筛选器状态：是否运行，筛选层次和进度'''
-        return True if self.activate_groups.get(shareKey, None) is not None else False
-
-
-
 
     
     def stop(self, shareKey: str = None) -> None:
@@ -614,6 +607,10 @@ class Filter:
             self.log_dispatch(group_name, True)
         print(result_str)
 
+    def stop_flag(self, share_key):
+        '''检查是否需要停止当前小班的筛选(内部和外部中断)'''
+        return share_key not in self.activate_groups or self.activate_groups[share_key].get('stop', True)
+
     def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 999999, tidal_index: int = 999999) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
         def stop_filter(group_name, group_id, share_key):
@@ -647,7 +644,8 @@ class Filter:
         tidal_quit_limit = tidal_limit + 2 # 潮汐退出人数限制
 
         group_rank = member_dict_temp['rank']
-        self.activate_groups[share_key]['name'] = group_name
+        if not self.stop_flag(share_key): # 有可能任务已经被下一个顶掉了，需要先检查
+            self.activate_groups[share_key]['name'] = group_name
 
         # 特殊操作1：催卡
         self.daka_check_lock.acquire() # 为保证记录完整性，每个小组要一块检查
@@ -831,7 +829,7 @@ class Filter:
         # 随机启动延迟，防止多个小班同时启动卡顿
         time.sleep(random.randint(0, 60) / 10)
         
-        while self.activate_groups.get(share_key, {}).get('stop', True) == False:
+        while not self.stop_flag(share_key):
             try:
                 # 每次循环都重新加载白名单
                 white_list = self.sqlite.queryWhitelist(group_id)
@@ -900,7 +898,7 @@ class Filter:
                         personal_dict_temp['group_nickname'] = '' # 班内昵称与排行榜昵称相同，则表示没修改昵称，则不显示
 
 
-                    if self.activate_groups[share_key]['stop'] == True:
+                    if self.stop_flag(share_key):
                         break
                     member_check_count[uniqueId] = check_count # 每个成员每次启动只判断一次，除非被踢，再进时需要重新判断
                     if uniqueId == leader_id:
@@ -1037,7 +1035,7 @@ class Filter:
                         member_check_count[uniqueId] = check_count
 
                 # 内核级bug：不完整的循环不应该记录，否则会有杂值
-                if self.activate_groups[share_key]['stop'] == True:
+                if self.stop_flag(share_key):
                     break
                 
                 # 检查排名是否正在更新
@@ -1319,9 +1317,7 @@ class Filter:
                 time.sleep(10.5)
                 pass
         
-        # if not self.activate_groups.get(share_key):
-        #     self.activate_groups[share_key] = {'stop': False}
-        halt = self.activate_groups[share_key].get('stop')
+        halt = self.stop_flag(share_key)
         
         if halt:
             stop_filter(group_name, group_id, share_key)
