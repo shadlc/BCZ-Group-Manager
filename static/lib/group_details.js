@@ -376,7 +376,10 @@ let group_id = '';
         }
         setGroupInfo(group);
         getAcceptedFilter(group);//包含setMemberInfo
-        queryFilterLog('1');
+        // 确保WebSocket连接已初始化
+        if (!ws) {
+          initWebSocket();
+        }
         return true;
       })
       .catch(error => {
@@ -500,84 +503,245 @@ let group_id = '';
       container.innerHTML = '';
       container.insertBefore(info_div, container.firstChild);
     }
-    function eventFilterSearch(event) {
-      if (event.key === "Enter" || event.type === 'blur') {
-        queryFilterLog(event?.target?.value);
+    let ws = null;
+    let objectInfos = {};
+    let totalProcessedCount = 0;
+    
+    function initWebSocket() {
+      // 关闭已存在的连接
+      if (ws) {
+        ws.close();
+      }
+      
+      // 创建新的WebSocket连接
+      ws = new WebSocket('ws://' + window.location.host + '/ws');
+      
+      ws.onopen = function() {
+        console.log('WebSocket连接已建立');
+      };
+      
+      ws.onmessage = function(event) {
+        let data = JSON.parse(event.data);
+        handleWebSocketMessage(data);
+      };
+      
+      ws.onerror = function(error) {
+        console.error('WebSocket错误:', error);
+      };
+      
+      ws.onclose = function() {
+        console.log('WebSocket连接已关闭');
+        // 尝试重连
+        setTimeout(initWebSocket, 3000);
+      };
+    }
+    
+    function handleWebSocketMessage(event) {
+      console.log(event);
+      const data = event.data;
+      switch(event.type) {
+        case 'filter_start':
+          // 筛选器组启动/进入下一个筛选任务
+          break;
+        case 'object_info':
+          // 获取到对象信息
+          // 合并info和member_info数据
+          const combinedInfo = { ...data.info, ...data.member_info };
+          updateObjectInfo(data.shareKey, data.uniqueId, combinedInfo);
+          break;
+        case 'filter_verdict':
+          // 筛选器判断结果
+          updateObjectInfo(data.shareKey, data.uniqueId, {'verdict': data})
+          break;
+        case 'object_quit':
+          updateObjectInfo(data.shareKey, data.uniqueId, {'status': '已退出'})
+          break;
+        case 'object_add_remove_queue':
+          // 对象被加入准备移除队列
+          updateObjectInfo(data.shareKey, data.uniqueId, {'status': '准备移除'})
+          break;
+        case 'object_removed':
+          // 对象被移除
+          updateObjectInfo(data.shareKey, data.uniqueId, {'status': '已移除'})
+          deleteObject(data.uniqueId);
+          break;
+        case 'filter_status_change':
+          // 筛选器状态切换
+          break;
+        case 'filter_progress':
+          // 筛选进度条变更
+          updateProgressBars(data);
+          break;
+        case 'filter_sleep':
+          // 下一轮筛选前睡眠
+          break;
+        case 'filter_stop':
+          // 筛选器组被强行停止
+          break;
+        case 'log':
+          // 日志消息
+          break;
       }
     }
-    function queryFilterLog(option = '1') {
-      // 向后端请求筛选日志
-      filter_page_num = document.querySelector('.filter-page-num');
-      // filter_page_num的内容是 当前页/总页数
-      let page_num = parseInt(filter_page_num.textContent.split('/')[0]);
-      let page_max = parseInt(filter_page_num.textContent.split('/')[1]);
-      if (option === '') {
-        return;
-      } else if (option == '-') {
-        page_num --;
-      } else if (option == '+') {
-        page_num ++;
-      } else if (option !== null && !isNaN(option)) {
-        if (option < 0) {
-          page_num = page_max + 1 + parseInt(option);
-        } else {
-          page_num = parseInt(option);
-        }
-      }
-      if (page_num > page_max) {
-        page_num = page_max;
-      }
-      else if (page_num < 1) {
-        page_num = 1;
-      }
-      page_count = parseInt(document.querySelector('#filter-page-count').value)
-      
-      let payload = {
-        'group_id': group_id,
-        'count_start': (page_num - 1) * page_count,
-        'count_limit': page_count,
-      }
-      fetch('../query_filter_log', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload) 
-      })
-      .then(response => response.json())
-      .then(data => {
-        if (data.retcode != 0) {
-          return;
-        }
-        let result = data.data;
-        result.data.unshift(['时间','策略名','人数','累计筛选','累计接受','接受名单','踢出名单','退出名单']);
-      
-        // 将result最前面加上分页信息
-        
-        page_max = result.page_max;
-        page_num = result.page_num;
 
-        filter_page_num.style="margin-right: 0.2rem; width: ${(page_num.toString().length * 8) + 'px'}"
-        filter_page_num.oninput="this.style.width = (this.value.length * 8) + 'px'"
-        filter_page_num.onkeypress="eventFilterSearch(event)"
-        filter_page_num.onblur="eventFilterSearch(event)"
-        filter_page_num.textContent = `${page_num}/${page_max}`;
-        
-        
-        let table = document.getElementById("filter_log_table");
-        // 如果没有数据，则提示为空
-        if (result.data.length == 0) {
-          table.innerHTML = '<br><span class="center">暂无筛选数据</span><br><br>';
-          return;
-        }
-        else {
-          table.innerHTML = '';
-          fillDataToTable(result.data, table);
-        }
-      })
-      .catch(error => {
-        console.error('请求错误:', error);
-        notify('请求错误:' + error);
-      });
+    function deleteObject(uniqueId) {
+      // 给元素增加渐隐动画，然后删除
+      const ele = document.getElementById(`object-info-${uniqueId}`);
+      ele.style.animation = 'fade-out 0.5s ease-in-out forwards';
+      setTimeout(() => {
+        ele.remove();
+        delete objectInfos[uniqueId];
+      }, 500);
     }
+    
+    function updateProgressBars(data) {
+      console.log(data);
+      // 累计处理数量
+      totalProcessedCount += data.processed_count;
+      
+      // 更新总进度条（累计接受人数/班级人数上限）
+      const totalProgressBar = document.getElementById('total-progress-bar');
+      const countLimit = data.count_limit; // 班级人数上限
+      const progress = (data.accepted_count / countLimit) * 100;
+      totalProgressBar.style.width = progress + '%';
+      totalProgressBar.textContent = `累计接受${data.accepted_count}/上限${countLimit}`;
+      
+      // 更新二级进度条（累计已处理对象数/总对象数）
+      const secondaryProgressBar = document.getElementById('current-progress-bar');
+      const secondaryProgress = (totalProcessedCount / data.total_count) * 100;
+      secondaryProgressBar.style.width = secondaryProgress + '%';
+      secondaryProgressBar.textContent = `已处理${totalProcessedCount}/当前人数${data.total_count}`;
+    }
+    
+    function updateObjectInfo(shareKey, uniqueId, info) {
+      // 存储对象信息
+      if (!objectInfos[uniqueId]) {
+        objectInfos[uniqueId] = {};
+      }
+      // 采用update的方式合并更新
+      for (const key in info) {
+        objectInfos[uniqueId][key] = info[key];
+      }
+      
+      // 更新或创建信息框
+      renderObjectInfo(uniqueId);
+    }
+    
+    function renderObjectInfo(uniqueId) {
+      const objectInfo = objectInfos[uniqueId];
+      const container = document.getElementById('objects-info-container');
+      
+      // 检查是否已存在该对象的信息框
+      let infoBox = document.getElementById(`object-info-${uniqueId}`);
+      
+      if (!infoBox) {
+        // 创建新的信息框
+        infoBox = document.createElement('div');
+        infoBox.id = `object-info-${uniqueId}`;
+        infoBox.className = 'object-info-box';
+        container.appendChild(infoBox);
+      }
+      
+      // 构建信息框内容
+      let content = '';
+      
+      // 第一行：头像、名称和ID
+      content += `
+        <div class="object-info-header">
+          <div class="avatar">
+            <img src="${objectInfo.info?.avatar || 'img/default_avatar_new2.png'}" />
+          </div>
+          <div class="object-info-name">
+            <span class="name">${objectInfo.info?.name || '未获取'}</span>
+            <span class="uniqueId">${uniqueId}</span>
+          </div>
+        </div>
+      `;
+      
+      // 第二行：标签
+      content += `
+        <div class="object-info-tags">
+          ${objectInfo.info?.is_primary_student == 1 ? '<span class="tag primary-student">在学小学词书</span>' : ''}
+          ${objectInfo.info?.blacklisted == 1 ? '<span class="tag blacklisted">在王者联黑</span>' : ''}
+        </div>
+      `;
+      
+      // 第三行：状态和操作区
+      content += `
+        <div class="object-info-status">
+          <span class="status">${objectInfo.status || '未获取'}</span>
+          <div class="object-info-actions">
+            <button class="btn small" onclick="emergencyCancelRemove('${uniqueId}')">紧急取消移除</button>
+            <button class="btn small" onclick="undoRemoveAndAddWhitelist('${uniqueId}')">撤销移除并添加白名单</button>
+          </div>
+        </div>
+      `;
+      
+      // 第四行：打卡信息
+      content += `
+        <div class="object-info-daka">
+          <span>本周打卡: ${objectInfo.info?.drop_this_week || '未获取'}</span>
+          <span>上周打卡: ${objectInfo.info?.drop_last_week || '未获取'}</span>
+        </div>
+      `;
+      
+      // 第五行：加权平均打卡时间
+      content += `
+        <div class="object-info-wanka">
+          <span>加权平均打卡时间: ${objectInfo.info?.wanka_index || '未获取'}</span>
+        </div>
+      `;
+      
+      // 第6-11行：所在群组
+      content += `
+        <div class="object-info-groups">
+          ${renderGroups(objectInfo.info?.groups || [])}
+        </div>
+      `;
+      
+      infoBox.innerHTML = content;
+    }
+    
+    function renderGroups(groups) {
+      let content = '';
+      // 最多6个群组
+      groups.forEach(group => {
+        content += `
+          <div class="group-item">
+            <div class="group-avatar">
+              <img src="${group.group_avatar || 'img/default0.png'}" />
+            </div>
+            <div class="group-info">
+              <span class="group-name">${group.group_name || '未获取'} (${group.rank || '未获取段位'})</span>`;
+              if (group.join_days && group.daka_days){ content += `
+                <span class="group-stats">加入${group.join_days}天，打卡${group.daka_days}天，个人完成率${group.finishing_rate}%</span>`;
+              } else { content += `
+                <span class="group-stats">班级完成率${group.finishing_rate}%</span>`;
+              } content += `
+            </div>
+          </div>
+        `;
+      });
+      
+      return content;
+    }
+    
+    function emergencyCancelRemove(uniqueId) {
+      // 紧急取消移除功能（暂未实现）
+      console.log('紧急取消移除:', uniqueId);
+      notify('紧急取消移除功能暂未实现');
+    }
+    
+    function undoRemoveAndAddWhitelist(uniqueId) {
+      // 撤销移除并添加白名单功能（暂未实现）
+      console.log('撤销移除并添加白名单:', uniqueId);
+      notify('撤销移除并添加白名单功能暂未实现');
+    }
+    
+    // 初始化WebSocket连接
+    window.onload = function() {
+      initWebSocket();
+    };
     function reCheckStrategyVerdict(member_id, group_id, strategy_id) {
       // 在弹窗中按下重新检测按钮后触发
       // 1.获取策略列表并询问用户选择策略
@@ -890,3 +1054,186 @@ let group_id = '';
         }
       });
     }
+    
+    // 添加WebSocket消息展示的样式
+    function addWebSocketStyles() {
+      return;
+      let style = document.createElement('style');
+      style.textContent = `
+        /* 进度条样式 */
+        .progress-container {
+          margin: 10px 0;
+          padding: 10px;
+          background: #f5f5f5;
+          border-radius: 4px;
+        }
+        .progress-bar {
+          height: 20px;
+          background: #4CAF50;
+          border-radius: 10px;
+          transition: width 0.3s ease;
+        }
+        .progress-text {
+          margin-top: 5px;
+          font-size: 12px;
+          color: #666;
+        }
+        
+        /* 操作区样式 */
+        .action-area {
+          margin: 10px 0;
+          padding: 10px;
+          background: #f9f9f9;
+          border-radius: 4px;
+          border: 1px solid #ddd;
+        }
+        .action-area button {
+          margin-right: 10px;
+          padding: 5px 10px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          background: #fff;
+          cursor: pointer;
+        }
+        .action-area button:hover {
+          background: #f0f0f0;
+        }
+        
+        /* 对象信息框样式 */
+        #object_info_container {
+          margin-top: 20px;
+        }
+        .object-info-box {
+          margin-bottom: 15px;
+          padding: 15px;
+          background: #fff;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .object-info-header {
+          display: flex;
+          align-items: center;
+          margin-bottom: 10px;
+        }
+        .object-info-header .avatar {
+          width: 50px;
+          height: 50px;
+          border-radius: 50%;
+          overflow: hidden;
+          margin-right: 15px;
+        }
+        .object-info-header .avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .object-info-name .name {
+          display: block;
+          font-weight: bold;
+          font-size: 16px;
+          margin-bottom: 5px;
+        }
+        .object-info-name .uniqueId {
+          font-size: 12px;
+          color: #666;
+        }
+        
+        /* 标签样式 */
+        .object-info-tags {
+          margin-bottom: 10px;
+        }
+        .tag {
+          display: inline-block;
+          padding: 3px 8px;
+          border-radius: 12px;
+          font-size: 12px;
+          margin-right: 8px;
+        }
+        .tag.primary-student {
+          background: #e8f5e8;
+          color: #2e7d32;
+        }
+        .tag.blacklisted {
+          background: #ffebee;
+          color: #c62828;
+        }
+        
+        /* 状态和操作区样式 */
+        .object-info-status {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+          padding: 10px;
+          background: #f5f5f5;
+          border-radius: 4px;
+        }
+        .object-info-actions button {
+          padding: 3px 8px;
+          font-size: 12px;
+          border: 1px solid #ddd;
+          border-radius: 4px;
+          background: #fff;
+          cursor: pointer;
+          margin-left: 5px;
+        }
+        .object-info-actions button:hover {
+          background: #f0f0f0;
+        }
+        
+        /* 打卡信息样式 */
+        .object-info-daka {
+          margin-bottom: 10px;
+          font-size: 14px;
+        }
+        .object-info-daka span {
+          margin-right: 20px;
+        }
+        
+        /* 加权平均打卡时间样式 */
+        .object-info-wanka {
+          margin-bottom: 10px;
+          font-size: 14px;
+        }
+        
+        /* 群组信息样式 */
+        .object-info-groups {
+          margin-top: 10px;
+        }
+        .group-item {
+          display: flex;
+          align-items: center;
+          margin-bottom: 8px;
+          padding: 8px;
+          background: #f9f9f9;
+          border-radius: 4px;
+        }
+        .group-avatar {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          overflow: hidden;
+          margin-right: 10px;
+        }
+        .group-avatar img {
+          width: 100%;
+          height: 100%;
+          object-fit: cover;
+        }
+        .group-info .group-name {
+          display: block;
+          font-weight: bold;
+          font-size: 13px;
+          margin-bottom: 3px;
+        }
+        .group-info .group-stats {
+          font-size: 11px;
+          color: #666;
+        }
+      `;
+      document.head.appendChild(style);
+    }
+    
+    // 初始化时添加样式
+    addWebSocketStyles();

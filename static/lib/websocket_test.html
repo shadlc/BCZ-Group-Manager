@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebSocket测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .status {
+            padding: 10px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .status.connected {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        .status.disconnected {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        .messages {
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            padding: 10px;
+            height: 400px;
+            overflow-y: scroll;
+            margin-bottom: 20px;
+            background-color: #f9f9f9;
+        }
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 4px;
+            background-color: white;
+            border-left: 4px solid #007bff;
+        }
+        .message.filter_start {
+            border-left-color: #28a745;
+        }
+        .message.object_info {
+            border-left-color: #17a2b8;
+        }
+        .message.filter_verdict {
+            border-left-color: #ffc107;
+        }
+        .message.object_quit {
+            border-left-color: #dc3545;
+        }
+        .message.object_add_remove_queue {
+            border-left-color: #6f42c1;
+        }
+        .message.object_removed {
+            border-left-color: #fd7e14;
+        }
+        .message.filter_status_change {
+            border-left-color: #20c997;
+        }
+        .message.filter_progress {
+            border-left-color: #1864ab;
+        }
+        .message.filter_sleep {
+            border-left-color: #6c757d;
+        }
+        .message.filter_stop {
+            border-left-color: #e83e8c;
+        }
+        .message.log {
+            border-left-color: #6c757d;
+            background-color: #f8f9fa;
+        }
+        .message-header {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #333;
+        }
+        .message-content {
+            font-size: 14px;
+            color: #666;
+        }
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 4px;
+            background-color: #007bff;
+            color: white;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #0069d9;
+        }
+        button:disabled {
+            background-color: #6c757d;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>WebSocket测试</h1>
+        <div class="status disconnected" id="status">未连接</div>
+        <div class="controls">
+            <button id="connect">连接</button>
+            <button id="disconnect" disabled>断开</button>
+        </div>
+        <div class="messages" id="messages"></div>
+    </div>
+
+    <script>
+        const statusElement = document.getElementById('status');
+        const messagesElement = document.getElementById('messages');
+        const connectButton = document.getElementById('connect');
+        const disconnectButton = document.getElementById('disconnect');
+        
+        let ws = null;
+        
+        function connect() {
+            // 连接到WebSocket服务器
+            ws = new WebSocket('ws://127.0.0.1:8840/ws');
+            
+            ws.onopen = function() {
+                statusElement.textContent = '已连接';
+                statusElement.className = 'status connected';
+                connectButton.disabled = true;
+                disconnectButton.disabled = false;
+                addMessage('系统', '已连接到WebSocket服务器');
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleEvent(data);
+                } catch (error) {
+                    addMessage('错误', `解析消息失败: ${event.data}`);
+                }
+            };
+            
+            ws.onclose = function() {
+                statusElement.textContent = '已断开';
+                statusElement.className = 'status disconnected';
+                connectButton.disabled = false;
+                disconnectButton.disabled = true;
+                addMessage('系统', 'WebSocket连接已断开');
+            };
+            
+            ws.onerror = function(error) {
+                addMessage('错误', `WebSocket错误: ${error}`);
+            };
+        }
+        
+        function disconnect() {
+            if (ws) {
+                ws.close();
+            }
+        }
+        
+        function handleEvent(data) {
+            const eventType = data.type;
+            const eventData = data.data;
+            const timestamp = data.timestamp;
+            
+            switch (eventType) {
+                case 'filter_start':
+                    addMessage('筛选器启动', `班级: ${eventData.shareKey}, 筛选器组: ${eventData.filter_group.name}, 即将执行: 第${eventData.next_filter_index + 1}个`, eventType);
+                    break;
+                case 'object_info':
+                    addMessage('对象信息', `班级: ${eventData.shareKey}, 对象: ${eventData.uniqueId}`, eventType);
+                    break;
+                case 'filter_verdict':
+                    addMessage('筛选器判断', `班级: ${eventData.shareKey}, 对象: ${eventData.uniqueId}, 缓存: ${eventData.used_cache}, 状态: ${eventData.status}`, eventType);
+                    break;
+                case 'object_quit':
+                    addMessage('对象退出', `班级: ${eventData.shareKey}, 对象: ${eventData.uniqueId}`, eventType);
+                    break;
+                case 'object_add_remove_queue':
+                    addMessage('加入移除队列', `时间: ${new Date(parseInt(eventData.timestamp)).toLocaleString()}, 班级: ${eventData.shareKey}, 对象: ${eventData.uniqueId}`, eventType);
+                    break;
+                case 'object_removed':
+                    addMessage('对象移除', `班级: ${eventData.shareKey}, 对象: ${eventData.uniqueId}`, eventType);
+                    break;
+                case 'filter_status_change':
+                    addMessage('状态切换', `类型: ${eventData.type}, 状态: ${eventData.status}`, eventType);
+                    break;
+                case 'filter_progress':
+                    addMessage('筛选进度', `轮数: ${eventData.current_round}, 处理: ${eventData.processed_count}/${eventData.total_count}, 接受: ${eventData.accepted_count}`, eventType);
+                    break;
+                case 'filter_sleep':
+                    addMessage('筛选睡眠', `班级: ${eventData.shareKey}, 时间: ${eventData.sleep_time}s, 开始: ${new Date(parseInt(eventData.sleep_start_timestamp)).toLocaleString()}`, eventType);
+                    break;
+                case 'filter_stop':
+                    addMessage('筛选停止', `班级: ${eventData.shareKey}`, eventType);
+                    break;
+                case 'log':
+                    addMessage('日志', `班级: ${eventData.group_name}, 消息: ${eventData.message}`, eventType);
+                    break;
+                default:
+                    addMessage('未知事件', JSON.stringify(data), 'unknown');
+            }
+        }
+        
+        function addMessage(title, content, type = 'system') {
+            const messageElement = document.createElement('div');
+            messageElement.className = `message ${type}`;
+            
+            const headerElement = document.createElement('div');
+            headerElement.className = 'message-header';
+            headerElement.textContent = `${new Date().toLocaleString()} - ${title}`;
+            
+            const contentElement = document.createElement('div');
+            contentElement.className = 'message-content';
+            contentElement.textContent = content;
+            
+            messageElement.appendChild(headerElement);
+            messageElement.appendChild(contentElement);
+            messagesElement.appendChild(messageElement);
+            
+            // 滚动到底部
+            messagesElement.scrollTop = messagesElement.scrollHeight;
+        }
+        
+        // 绑定按钮事件
+        connectButton.addEventListener('click', connect);
+        disconnectButton.addEventListener('click', disconnect);
+        
+        // 页面加载时自动连接
+        window.onload = function() {
+            connect();
+        };
+    </script>
+</body>
+</html>

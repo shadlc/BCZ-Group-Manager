@@ -8,7 +8,7 @@ import traceback
 import uvicorn
 
 # from flask import Flask, Response, json, render_template, send_file, jsonify, redirect, request, stream_with_context
-from fastapi import FastAPI, Request, Response
+from fastapi import FastAPI, Request, Response, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, HTMLResponse, FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -20,7 +20,6 @@ from src.sqlite import SQLite
 from src.xlsx import Xlsx
 from src.schedule import Schedule
 from src.filter import Filter, Monitor
-
 
 if '--debug' in sys.argv:
     level = logging.DEBUG
@@ -61,10 +60,19 @@ http2_client_obj = http2_client()
 bcz = BCZ(config, http2_client_obj)
 xlsx = Xlsx(config)
 sqlite = SQLite(config)
-filter = Filter(strategy, bcz, sqlite, config)
+filter_module = Filter(strategy, bcz, sqlite, config)
 monitor = None
 processing = False
 logger = logging.getLogger(__name__)
+
+# 设置WebSocket广播回调函数
+def set_websocket_broadcast():
+    async def broadcast(message):
+        await manager.broadcast(message)
+    filter_module.set_websocket_broadcast(broadcast)
+
+# 初始化WebSocket广播回调
+set_websocket_broadcast()
 
 if not config.main_token:
     print('未配置授权令牌，请在[config.json]文件中填入正确main_token后重启，程序会在5秒后自动退出')
@@ -189,7 +197,7 @@ def monitor_status():
         for name, schedule in monitor.schedule_list.items():
             status['schedule'][name] = schedule.status
         status['monitor'] = monitor.get()
-    status['filter'] = filter.logger_field
+    status['filter'] = filter_module.logger_field
     return restful(200, '', status)
     
         
@@ -230,8 +238,8 @@ def recheck_strategy_verdict(request: Request, item: dict):
         return restful(400, '调用方法异常Σ(っ °Д °;)っ')
     strategy_dict = strategy.get(strategy_id)
     # 从GROUP表获取sharekey
-    filter.log(f'获取中...<br>unique_id={unique_id}, group_id={group_id}, strategy_id={strategy_id}', '全局')
-    filter.log_dispatch('全局')
+    filter_module.log(f'获取中...<br>unique_id={unique_id}, group_id={group_id}, strategy_id={strategy_id}', '全局')
+    filter_module.log_dispatch('全局')
     
     conn = sqlite.connect()
 
@@ -256,11 +264,11 @@ def recheck_strategy_verdict(request: Request, item: dict):
     operation = ''
     late_daka_time = sqlite.queryGroupLateDakaTime(group_id)
     for index, sub_strat_dict in enumerate(strategy_dict["subItems"]):                
-        result = filter.check(
+        result = filter_module.check(
             personal_dict_temp,
                 rank_dict['this_week'].get(unique_id, None),
                     rank_dict['last_week'].get(unique_id, None),
-                        sub_strat_dict, '全局', late_daka_time, conn, config.main_token)
+                        sub_strat_dict, '全局', 'global', late_daka_time, conn, config.main_token)
         logger.debug(f'sub_strat_dict={sub_strat_dict} result={result}')
         log_condition = int(sub_strat_dict['logCondition'])
         sub_strat_name = sub_strat_dict['name']
@@ -273,7 +281,7 @@ def recheck_strategy_verdict(request: Request, item: dict):
             # 符合该子条目
             if log_condition == 1 or log_condition == 0:
                 operation += f'符合{sub_strat_name}<br>'
-                filter.log(f'符合{sub_strat_name}', '全局')
+                filter_module.log(f'符合{sub_strat_name}', '全局')
             verdict = index
             result_code = 1 if sub_strat_dict['operation'] == 'accept' else 2
             white_list =  sqlite.queryWhitelist(group_id)
@@ -285,16 +293,16 @@ def recheck_strategy_verdict(request: Request, item: dict):
         else:
             if log_condition == 2 or log_condition == 0: 
                 operation += f'不符合{sub_strat_name}<br>'
-                filter.log(f'不符合{sub_strat_name}', '全局')
+                filter_module.log(f'不符合{sub_strat_name}', '全局')
     if not result_code:
-        filter.log('[error]没有符合的子条目，默认拒绝，请检查策略', '全局')
-        filter.log_dispatch('全局')
+        filter_module.log('[error]没有符合的子条目，默认拒绝，请检查策略', '全局')
+        filter_module.log_dispatch('全局')
         return restful("[error]没有符合的子条目，默认接受，请检查策略")
     reason = ''
     for key, value in reason_dict.items():
         reason += f'{key}: {value}<br>'
-    filter.log(f'审核结果: {operation}<br>{reason}', '全局')
-    filter.log_dispatch('全局')
+    filter_module.log(f'审核结果: {operation}<br>{reason}', '全局')
+    filter_module.log_dispatch('全局')
     return restful(200, f'审核结果: {operation}<br>{reason}')
 
 @app.post('/copy_strategy')
@@ -396,7 +404,7 @@ def start_filter(request: Request, item: dict):
         if auth_token == '':
             return restful(404, '请设置班长AUTH_TOKEN')
 
-        filter.start(auth_token, strategy_id_list, share_key, group_id, scheduled_hour, scheduled_minute)
+        filter_module.start(auth_token, strategy_id_list, share_key, group_id, scheduled_hour, scheduled_minute)
         return restful(200, '筛选成功启动! ヾ(≧▽≦*)o')
     except Exception as e:
         return restful(500, f'筛选启动失败：{e}')
@@ -406,14 +414,14 @@ def stop_filter(request: Request, item: dict):
     '''停止筛选'''
     group_id = int(item.get('group_id'))
     share_key = sqlite.queryGroupShareKey(str(group_id))
-    filter.stop(share_key)
+    filter_module.stop(share_key)
     return restful(200, '筛选已停止!')
 
 @app.post('/query_filter_state')
 def query_filter(request: Request, item: dict):
     '''获取筛选运行状态'''
     group_id = item.get('group_id')
-    return restful(200, '', filter.getState(sqlite.queryGroupShareKey((group_id))))
+    return restful(200, '', filter_module.getState(sqlite.queryGroupShareKey((group_id))))
     
 
 
@@ -576,7 +584,7 @@ def get_error(file_name:str=''):
 @app.get('/stop_all')
 def stop_all():
     '''紧急停止'''
-    filter.stop()
+    filter_module.stop()
     return restful(200, '所有筛选已停止!')
 
 @app.get('/combo')
@@ -626,10 +634,41 @@ def restful(code: int, msg: str = '', data: dict = {}) -> Response:
 
 
 
-# 处理SSE连接
+# 处理WebSocket连接
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+
+    async def send_personal_message(self, message: str, websocket: WebSocket):
+        await websocket.send_text(message)
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            await connection.send_text(message)
+
+manager = ConnectionManager()
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await manager.send_personal_message(f"You sent: {data}", websocket)
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
+
+# 处理SSE连接（保留以兼容旧代码）
 @app.get("/message")
 async def sse_message(request: Request) -> StreamingResponse:
-    return StreamingResponse(filter.generator(request, DEBUG), media_type='text/event-stream')
+    return StreamingResponse(filter_module.generator(request, DEBUG), media_type='text/event-stream')
 
 
 # 如果用的bot可以集成到project里面，就不用接口。
@@ -673,7 +712,7 @@ if __name__ == '__main__':
     if '--slice' in sys.argv:
         slice_log(in_app = False)
     if '--auto' in sys.argv:
-        monitor = Monitor(filter, sqlite)
+        monitor = Monitor(filter_module, sqlite)
     if '--debug' in sys.argv:
         app.debug = True
         uvicorn.run(app, host=config.host, port=config.port, timeout_keep_alive=5, log_level='debug')

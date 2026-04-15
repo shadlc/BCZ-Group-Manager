@@ -57,6 +57,9 @@ class Filter:
         self.tidal_token = {}
         self.poster_token = {}
         
+        # WebSocket消息发送回调函数
+        self.websocket_broadcast = None
+        
 
         try:
             with open("tidal_token.json", "r", encoding="utf-8") as f:
@@ -219,7 +222,7 @@ class Filter:
         last_week_daka_days = len(last_week_info)
         return last_week_total_days - last_week_daka_days, this_week_total_days - this_week_daka_days
     
-    def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, group_name:str, late_daka_time:str, conn: sqlite3.Connection, authorized_token: str) -> dict:
+    def check(self, member_dict: dict, this_week_info: list, last_week_info: list ,substrategy_dict :dict, group_name:str, share_key: str, late_daka_time:str, conn: sqlite3.Connection, authorized_token: str) -> dict:
         '''member_dict【班内主页】检出成员信息，返回是否符合本条件'''
         # 返回格式：dict['result'] = 0/1 dict['reason'] = '原因'
         # self.log (f'正在验证id = {member_dict["id"]} with {substrategy_dict["name"]} in {member_dict["group_name"]}')
@@ -387,6 +390,13 @@ class Filter:
             time.sleep(1.2)
             personal_dict = self.sqlite.getPersonalInfo(uniqueId, conn, user_info = user_info, group_info = group_info)
             personal_dict["modified_nickname"] = 0 if user_info["name"] == member_dict["group_nickname"] else 1
+            
+            # 发送获取到对象信息事件
+            self.send_websocket_event('object_info', {
+                'shareKey': share_key,
+                'uniqueId': uniqueId,
+                'info': personal_dict
+            })
         else:
             user_info = []
             group_info = []
@@ -496,7 +506,7 @@ class Filter:
         if self.logger_message.get(group_name, None) is None:
             return
 
-        time_str = datetime.datetime.now().strftime('%m-%d %H:%M:%S,%f ') 
+        time_str = datetime.datetime.now().strftime('%m-%d %H:%M:%S,%f ')
         logger_message = self.logger_message[group_name]
         # if to_file:
         #     br_to_endl_str = logger_message.replace('<br>', '\n')
@@ -521,9 +531,40 @@ class Filter:
         with self.clients_message_lock:
             for client_id, queue in self.clients_message.items():
                 queue.append(f'[{time_str}][{group_name}]{logger_message}')
+        # 通过WebSocket发送消息
+        ws_message = json.dumps({
+            'type': 'log',
+            'group_name': group_name,
+            'message': logger_message,
+            'time': time_str
+        })
+        self.send_websocket_message(ws_message)
         self.logger_message.pop(group_name, None)
         
         
+    def set_websocket_broadcast(self, broadcast_func):
+        '''设置WebSocket广播回调函数'''
+        self.websocket_broadcast = broadcast_func
+    
+    def send_websocket_message(self, message):
+        '''通过WebSocket发送消息'''
+        if self.websocket_broadcast:
+            try:
+                import asyncio
+                asyncio.run(self.websocket_broadcast(message))
+            except Exception as e:
+                self.log(f"WebSocket消息发送失败: {e}", '全局')
+                self.log_dispatch('全局')
+    
+    def send_websocket_event(self, event_type, data):
+        '''发送WebSocket事件'''
+        event = {
+            'type': event_type,
+            'data': data,
+            'timestamp': self.time_stamp()
+        }
+        self.send_websocket_message(json.dumps(event))
+    
     def generator(self, request: Request, DEBUG: bool):
         '''每个客户端分发一个，会自动创建消息队列，断开后回收'''
         client_id = str(uuid.uuid4())
@@ -610,6 +651,10 @@ class Filter:
     def stop_flag(self, share_key):
         '''检查是否需要停止当前小班的筛选(内部和外部中断)'''
         return share_key not in self.activate_groups or self.activate_groups[share_key].get('stop', True)
+    
+    def getState(self, share_key: str):
+        '''deprecated'''
+        return True
 
     def run(self, authorized_token: str,strategy_index_list: list, share_key: str, group_id: str, scheduled_hour: int = None, scheduled_minute: int = None, poster: str = '', poster_session: int = 999999, tidal_index: int = 999999) -> None:
         '''每个小班启动筛选的时候创建线程运行本函数'''
@@ -792,6 +837,13 @@ class Filter:
         self.log(f"加载策略{strategy_name}中...", group_name)
         self.log(f'剩余{len(strategy_index_list)}个任务', group_name)
         self.log_dispatch(group_name, True)
+        
+        # 发送筛选器组启动事件
+        self.send_websocket_event('filter_start', {
+            'shareKey': share_key,
+            'filter_group': strategy_dict,
+            'next_filter_index': 0
+        })
         self.my_group_dict = {} # 小组成员信息
         self.my_rank_dict = {} # 排名榜
 
@@ -941,7 +993,7 @@ class Filter:
                                     personal_dict_temp,
                                     member_dict_temp["week_daka_info"]['this_week'].get(uniqueId, None),
                                         member_dict_temp["week_daka_info"]['last_week'].get(uniqueId, None),
-                                        sub_strat_dict, group_name, late_daka_time, conn, authorized_token)
+                                        sub_strat_dict, group_name, share_key, late_daka_time, conn, authorized_token)
                                 log_condition = int(sub_strat_dict['logCondition'])
                                 sub_strat_name = sub_strat_dict['name']
                                 
@@ -966,6 +1018,20 @@ class Filter:
                                         elif "不打卡" in sub_strat_name:
                                             result_code = 3 # 踢出优先级最高
                                     verdict_dict_tosave[uniqueId] = (index, f'{operation}{result_code}', reason)
+                        
+                                    # 发送筛选器判断事件
+                                    status_map = {
+                                        1: '普通接受',
+                                        -1: '白名单接受',
+                                        2: '普通移除',
+                                        3: '优先移除'
+                                    }
+                                    self.send_websocket_event('filter_verdict', {
+                                        'shareKey': share_key,
+                                        'uniqueId': uniqueId,
+                                        'used_cache': verdict is not None,
+                                        'status': status_map.get(result_code, '未知')
+                                    })
                                     break
                                 else:
                                     if log_condition == 2 or log_condition == 0:
@@ -1019,6 +1085,13 @@ class Filter:
                             if inserted == 0:
                                 # 未找到合适位置，直接加入末尾，最后
                                 kick_list.append({"memberId":memberId,"uniqueId":uniqueId,"verdict":verdict,"important":important,"name":personal_dict_temp["nickname"]})
+                        
+                        # 发送对象被加入准备移除队列事件
+                        self.send_websocket_event('object_add_remove_queue', {
+                            'timestamp': self.time_stamp(),
+                            'shareKey': share_key,
+                            'uniqueId': uniqueId
+                        })
                         first = 0
                         for key, value in reason.items():
                             if first == 0:
@@ -1085,6 +1158,12 @@ class Filter:
                                 has = 1
                                 self.log('本轮踢出：', group_name)
                             self.log(f"[不打卡鸽]{this_verdict_dict['name']}[{uniqueId}]", group_name)  # 问题结束标记
+                            
+                            # 发送对象被移除事件
+                            self.send_websocket_event('object_removed', {
+                                'shareKey': share_key,
+                                'uniqueId': uniqueId
+                            })
                         else:
                             new_kick_list.append(this_verdict_dict) # 加入待踢出列表
 
@@ -1107,6 +1186,12 @@ class Filter:
                                 has = 1
                                 self.log('本轮踢出：', group_name)
                             self.log(f"{this_verdict_dict['name']}[{uniqueId}]", group_name)
+                            
+                            # 发送对象被移除事件
+                            self.send_websocket_event('object_removed', {
+                                'shareKey': share_key,
+                                'uniqueId': uniqueId
+                            })
                         else:
                             new_kick_list.append(this_verdict_dict) # 加入待踢出列表
                 kick_list = new_kick_list
@@ -1165,6 +1250,12 @@ class Filter:
                             total_quit_count += 1 # 已经接受但退出的成员数
                         self.log(f'[id:{uniqueId}]', group_name)
                         quit_list.append(uniqueId)
+                        
+                        # 发送对象主动退出事件
+                        self.send_websocket_event('object_quit', {
+                            'shareKey': share_key,
+                            'uniqueId': uniqueId
+                        })
                     else:
                         new_member_list.append(uniqueId)
                 member_list = new_member_list
@@ -1187,11 +1278,21 @@ class Filter:
                     if self.bcz.joinPosterQueue(poster_session, poster, group_id, group_name, self.poster_token):
                         self.log(f"🌟 开始预约海报令牌", group_name)
                         self.log_dispatch(group_name, True)
+                        # 发送筛选器状态切换事件
+                        self.send_websocket_event('filter_status_change', {
+                            'type': 'poster',
+                            'status': True
+                        })
                         # 如果False，则为已在队列中
                 elif delay < 20 or group_count_limit - member_cnt <= Filter.user_poster_min_vacancy: # 人数不足3人，则不使用海报令牌
                     if self.bcz.quitPosterQueue(group_id):
                         self.log(f"🌟 停止发海报", group_name)
                         self.log_dispatch(group_name, True)
+                        # 发送筛选器状态切换事件
+                        self.send_websocket_event('filter_status_change', {
+                            'type': 'poster',
+                            'status': False
+                        })
 
                 self.bcz.joinTidalToken(share_key, group_name, tidal_index, group_id, group_count_limit - member_cnt, self.tidal_token, preserve_rank, tidal_level_vacancy = Filter.tidal_level_vacancy)
 
@@ -1226,6 +1327,20 @@ class Filter:
                     
                 self.logger_field[group_name]['used_tidal_token'] = used_tidal_token
                 self.logger_field[group_name]['poster_count'] = self.bcz.getPosterLog(group_id)
+                
+                # 发送筛选进度条变更信号
+                self.send_websocket_event('filter_progress', {
+                    'current_round': check_count,
+                    'count_limit': group_count_limit, # 总人数上限
+                    'processed_count': accepted_count + len(remove_list_uniqueId) + len(kick_list) + pending_count,
+                    'total_count': member_cnt,
+                    'tidal_token_stats': {
+                        'today': len(today_tidal_token),
+                        'used': len(used_tidal_token),
+                        'stay': len(stay_tidal_token)
+                    },
+                    'accepted_count': total_accepted_count - total_quit_count
+                })
 
                 # 【保存数据】到共享空间
                 with self.lock:
@@ -1299,7 +1414,14 @@ class Filter:
                         self.log(f"{strategy_dict['name']} 中途条件满足 {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，下一个(99997s)", group_name)
                         self.log_dispatch(group_name, True)
                         break
-                time.sleep(max(0, delay + random.randint(-10, 10) / 10)) # 随机延迟，避免多个线程同时执行
+                # 发送下一轮筛选前睡眠事件
+                sleep_time = max(0, delay + random.randint(-10, 10) / 10)
+                self.send_websocket_event('filter_sleep', {
+                    'shareKey': share_key,
+                    'sleep_time': sleep_time,
+                    'sleep_start_timestamp': self.time_stamp()
+                })
+                time.sleep(sleep_time) # 随机延迟，避免多个线程同时执行
         
             except Exception as e:
                 # 无人值守，等待10s后重试
@@ -1323,6 +1445,11 @@ class Filter:
             stop_filter(group_name, group_id, share_key)
             self.log(f"❄️ \033[1;33m{strategy_name}筛选已中止\033[0m (99998s)", group_name)
             self.log_dispatch(group_name, True)
+            
+            # 发送筛选器组被强行停止事件
+            self.send_websocket_event('filter_stop', {
+                'shareKey': share_key
+            })
         else:
             self.log(f'❄️ \033[1;36m{strategy_name}筛选结束！\033[0m', group_name)
             if self.bcz.quitPosterQueue(group_id):
@@ -1423,11 +1550,11 @@ class Monitor:
             tidal_index = group.get('tidal_index', 12)
             share_key = self.sqlite.queryGroupShareKey(group_id)
             if share_key == '':
-                raise Exception('请先添加该小班 到观察列表')
+                share_key = input(f'请输入小班{group_id}的shareKey：（仅本次有效，请添加到关注小班来解决问题）')
             strategy_plan = group['strategies']
             auth_token = self.sqlite.queryGroupAuthToken(group_id)
             if auth_token == '':
-                raise Exception('请设置班长AUTH_TOKEN')
+                auth_token = input(f'请输入小班{group_id}的班长的access_token：（仅本次有效，请输入数据库来解决问题）')
             name = self.sqlite.queryGroupName(group_id)
             self.deactivate(share_key)
 

@@ -287,6 +287,28 @@
               <input type="text" placeholder="筛选用户" onkeyup="memberFilter(event)" />
             </div>
             <div class="details-container"></div>
+            <!-- 进度条区域 -->
+            <div class="progress-container">
+              <div class="progress-bar-wrapper">
+                <span class="progress-label">累计接受人数/班级人数上限</span>
+                <div class="progress-bar">
+                  <div id="total-progress-bar" class="progress-fill"></div>
+                </div>
+              </div>
+              <div class="progress-bar-wrapper">
+                <span class="progress-label">当前筛选已处理对象数/总对象数</span>
+                <div class="progress-bar">
+                  <div id="current-progress-bar" class="progress-fill"></div>
+                </div>
+              </div>
+            </div>
+            <!-- 操作区 -->
+            <div class="operation-area">
+              <button class="btn" onclick="emergencyCancelRemove()">紧急取消移除</button>
+              <button class="btn" onclick="undoRemoveAndAddWhitelist()">撤销移除并添加白名单</button>
+            </div>
+            <!-- 信息展示区 -->
+            <div id="objects-info-container" class="objects-container"></div>
           </div>
           <span class="loading-text">
             <div class="loader">
@@ -452,6 +474,8 @@
     window.onload = function () {
       initCloud(30);
       groupPage();
+      bindScrollToTopBtn(document.querySelector("main"));
+      return;
       // 建立到/test的sse连接
       const source = new EventSource('/message');
       source.onmessage = function (event) {
@@ -468,7 +492,6 @@
         const card_message = messageObject['name'] + messageObject['message'];
         $newCard(card_message)
       };
-      bindScrollToTopBtn(document.querySelector("main"));
     }
     function button_switch(button_id){
       document.getElementById("group_button").classList.remove("active");

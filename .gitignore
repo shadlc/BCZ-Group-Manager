@@ -16,3 +16,4 @@ archives
 *.log
 /src/automata
 *.exe
+/src/filter_deprecated
