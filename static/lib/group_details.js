@@ -505,7 +505,6 @@ let group_id = '';
     }
     let ws = null;
     let objectInfos = {};
-    let totalProcessedCount = 0;
     
     function initWebSocket() {
       // 关闭已存在的连接
@@ -596,9 +595,6 @@ let group_id = '';
     
     function updateProgressBars(data) {
       console.log(data);
-      // 累计处理数量
-      totalProcessedCount += data.processed_count;
-      
       // 更新总进度条（累计接受人数/班级人数上限）
       const totalProgressBar = document.getElementById('total-progress-bar');
       const countLimit = data.count_limit; // 班级人数上限
@@ -608,9 +604,9 @@ let group_id = '';
       
       // 更新二级进度条（累计已处理对象数/总对象数）
       const secondaryProgressBar = document.getElementById('current-progress-bar');
-      const secondaryProgress = (totalProcessedCount / data.total_count) * 100;
+      const secondaryProgress = (data.processed_count / data.total_count) * 100;
       secondaryProgressBar.style.width = secondaryProgress + '%';
-      secondaryProgressBar.textContent = `已处理${totalProcessedCount}/当前人数${data.total_count}`;
+      secondaryProgressBar.textContent = `已处理${data.processed_count}/当前人数${data.total_count}`;
     }
     
     function updateObjectInfo(shareKey, uniqueId, info) {

@@ -408,7 +408,7 @@ class BCZ:
                 user['join_groups_share_keys'].append(info['share_key'])
                 user['join_groups_days'].append(info['join_days'])
                 user['join_groups_names'].append(info['name'])
-                if str(info['id']) in self.tidal_tracker and info['join_days'] < 3:
+                if str(info['id']) in self.tidal_tracker and info['join_days'] < 2:
                     user['current_tidal_group_count'] = user.get('current_tidal_group_count', 0) + 1
         
         TIME_DELTA = 3
@@ -488,7 +488,7 @@ class BCZ:
                             continue # 不是潮汐小班 或 加入时间超过2天(不是潮汐令牌) 或 潮汐小班信息未给出
                         vacancy = self.tidal_token_queue[group_id]['tidal_vacancy']
                         preserve_rank = self.tidal_token_queue[group_id]['preserve_rank']
-                        if group_id in self.tidal_tracker and (vacancy < tidal_level_vacancy and not preserve_rank): # 保持人数在group_count_limit - tidal_level_vacancy
+                        if group_id in self.tidal_tracker and (vacancy < tidal_level_vacancy and not preserve_rank or current_tidal_group_count > tidal_group_limit): # 保持人数在group_count_limit - tidal_level_vacancy(如果班级加入上限限制了则要退出)
                             update_tidal_token_class_list(user)
                             if group_id not in user['join_groups']:
                                 continue

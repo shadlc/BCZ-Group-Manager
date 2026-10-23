@@ -17,3 +17,4 @@ archives
 /src/automata
 *.exe
 /src/filter_deprecated
+/graph

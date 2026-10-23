@@ -392,8 +392,7 @@ class Filter:
             personal_dict["modified_nickname"] = 0 if user_info["name"] == member_dict["group_nickname"] else 1
             
             # 发送获取到对象信息事件
-            self.send_websocket_event('object_info', {
-                'shareKey': share_key,
+            self.send_websocket_event('object_info', share_key, {
                 'uniqueId': uniqueId,
                 'info': personal_dict
             })
@@ -556,10 +555,11 @@ class Filter:
                 self.log(f"WebSocket消息发送失败: {e}", '全局')
                 self.log_dispatch('全局')
     
-    def send_websocket_event(self, event_type, data):
+    def send_websocket_event(self, event_type, share_key, data):
         '''发送WebSocket事件'''
         event = {
             'type': event_type,
+            'share_key': share_key,
             'data': data,
             'timestamp': self.time_stamp()
         }
@@ -839,8 +839,7 @@ class Filter:
         self.log_dispatch(group_name, True)
         
         # 发送筛选器组启动事件
-        self.send_websocket_event('filter_start', {
-            'shareKey': share_key,
+        self.send_websocket_event('filter_start', share_key, {
             'filter_group': strategy_dict,
             'next_filter_index': 0
         })
@@ -905,6 +904,15 @@ class Filter:
                 member_dict_temp["week_daka_info"] = self.bcz.getGroupDakaHistory(share_key, parsed=True, token=authorized_token) # 本周和上周打卡信息，结构：{12345678:["05-23","05-25",...],...}
                 self.log(f'开始第{check_count+1}次检测，预计({min(30, ((len(member_dict_temp["members"])-old_members_count))*2)}s)', group_name)
                 self.log_dispatch(group_name, True)
+                self.send_websocket_event('filter_progress', share_key, {
+                    'filter_group': strategy_dict,
+                    # 'next_filter_index': strategy_index_list.index(strategy_index) if strategy_index_list else -1,
+                    'member_count': member_dict_temp['member_count'],
+                    'member_list': member_list,
+                    'current_white_list': current_white_list,
+                    'total_newbies_count': total_newbies_count,
+
+                })
                 # 由于member_dict_temp获取的是observed_group的信息，所以不需要保存到数据库
                 # 需要处理：数据库的主键问题，到时要写联合主键（又踩坑）
                 
@@ -1026,8 +1034,7 @@ class Filter:
                                         2: '普通移除',
                                         3: '优先移除'
                                     }
-                                    self.send_websocket_event('filter_verdict', {
-                                        'shareKey': share_key,
+                                    self.send_websocket_event('filter_verdict', share_key, {
                                         'uniqueId': uniqueId,
                                         'used_cache': verdict is not None,
                                         'status': status_map.get(result_code, '未知')
@@ -1087,9 +1094,7 @@ class Filter:
                                 kick_list.append({"memberId":memberId,"uniqueId":uniqueId,"verdict":verdict,"important":important,"name":personal_dict_temp["nickname"]})
                         
                         # 发送对象被加入准备移除队列事件
-                        self.send_websocket_event('object_add_remove_queue', {
-                            'timestamp': self.time_stamp(),
-                            'shareKey': share_key,
+                        self.send_websocket_event('object_add_remove_queue', share_key, {
                             'uniqueId': uniqueId
                         })
                         first = 0
@@ -1160,8 +1165,7 @@ class Filter:
                             self.log(f"[不打卡鸽]{this_verdict_dict['name']}[{uniqueId}]", group_name)  # 问题结束标记
                             
                             # 发送对象被移除事件
-                            self.send_websocket_event('object_removed', {
-                                'shareKey': share_key,
+                            self.send_websocket_event('object_removed', share_key, {
                                 'uniqueId': uniqueId
                             })
                         else:
@@ -1188,8 +1192,7 @@ class Filter:
                             self.log(f"{this_verdict_dict['name']}[{uniqueId}]", group_name)
                             
                             # 发送对象被移除事件
-                            self.send_websocket_event('object_removed', {
-                                'shareKey': share_key,
+                            self.send_websocket_event('object_removed', share_key, {
                                 'uniqueId': uniqueId
                             })
                         else:
@@ -1252,8 +1255,7 @@ class Filter:
                         quit_list.append(uniqueId)
                         
                         # 发送对象主动退出事件
-                        self.send_websocket_event('object_quit', {
-                            'shareKey': share_key,
+                        self.send_websocket_event('object_quit', share_key, {
                             'uniqueId': uniqueId
                         })
                     else:
@@ -1279,7 +1281,7 @@ class Filter:
                         self.log(f"🌟 开始预约海报令牌", group_name)
                         self.log_dispatch(group_name, True)
                         # 发送筛选器状态切换事件
-                        self.send_websocket_event('filter_status_change', {
+                        self.send_websocket_event('filter_status_change', share_key, {
                             'type': 'poster',
                             'status': True
                         })
@@ -1329,7 +1331,7 @@ class Filter:
                 self.logger_field[group_name]['poster_count'] = self.bcz.getPosterLog(group_id)
                 
                 # 发送筛选进度条变更信号
-                self.send_websocket_event('filter_progress', {
+                self.send_websocket_event('filter_progress', share_key, {
                     'current_round': check_count,
                     'count_limit': group_count_limit, # 总人数上限
                     'processed_count': accepted_count + len(remove_list_uniqueId) + len(kick_list) + pending_count,
@@ -1416,7 +1418,7 @@ class Filter:
                         break
                 # 发送下一轮筛选前睡眠事件
                 sleep_time = max(0, delay + random.randint(-10, 10) / 10)
-                self.send_websocket_event('filter_sleep', {
+                self.send_websocket_event('filter_sleep', share_key, {
                     'shareKey': share_key,
                     'sleep_time': sleep_time,
                     'sleep_start_timestamp': self.time_stamp()
@@ -1434,7 +1436,7 @@ class Filter:
                 # with open(f'errors/{group_name}_{datetime.datetime.now().strftime("%Y-%m-%d_%H_%M_%S")}.txt', 'w', encoding='utf-8') as f:
                 #     f.write(f"NAME: {group_name}\nTIME: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\nERROR: {e}\n\n")
                 #     f.write(traceback_str)
-                self.log(f"\033[1;31m有点问题呐...等待10s后重试(10s)\033[0m", group_name)
+                self.log(f"\033[1;31m有点问题呐...等待10s后重试(10s)\033[1;33m{traceback_str}\033[0m", group_name)
                 self.log_dispatch(group_name, True)
                 time.sleep(10.5)
                 pass
@@ -1447,7 +1449,7 @@ class Filter:
             self.log_dispatch(group_name, True)
             
             # 发送筛选器组被强行停止事件
-            self.send_websocket_event('filter_stop', {
+            self.send_websocket_event('filter_stop', share_key, {
                 'shareKey': share_key
             })
         else:
